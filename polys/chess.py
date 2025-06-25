@@ -1,6 +1,6 @@
 import numpy as np
-import polystate as ps
-import polylayout as pl
+from . import polystate as ps
+from . import polylayout as pl
 
 
 def bimodal_skewed(a, size=1):

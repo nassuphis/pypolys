@@ -2,9 +2,9 @@ import numpy as np
 import math
 import cmath
 from scipy.special import sph_harm
-import polystate as ps
-import letters
-import zfrm
+from . import polystate as ps
+from . import letters
+from . import zfrm
 
 def poly_giga_1(t1, t2):
     n = 25

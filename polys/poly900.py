@@ -1,10 +1,12 @@
-import polystate as ps
+from . import polystate as ps
 import math
 import cmath
 import numpy as np
 from scipy.special import sph_harm
-import letters
-import zfrm
+from . import letters
+from . import zfrm
+from . import polychess as pc
+from . import xfrm
 
 pi = math.pi
 
@@ -2439,29 +2441,7 @@ def path(t1,t2):
     pcf2 = pad_vector(cf2, max_length)
     return pcf1 * andy + pcf2 * ( 1 - andy )
 
-import solve
-import zfrm
-import polyflow as pf
 
-sbs_zfrm = None
-
-def sidebyside(t1,t2):
-    global sbs_zfrm
-    poly1 = ps.poly.get("poly1") or "none"
-    if poly1=="none": return np.zeros(25, dtype=complex)
-    poly2 = ps.poly.get("poly2") or "none"
-    if poly2=="none": return np.zeros(25, dtype=complex)
-    sbs_zfrm_str = ps.poly.get("sbs_zfrm") or "none"
-    if sbs_zfrm is None:
-        sbs_zfrm = ps.get_function_vector(zfrm,sbs_zfrm_str)
-    rts1=solve.polyroot(pf.zfrm(globals().get(poly1)(t1,t2),sbs_zfrm))*0.1
-    rts2=solve.polyroot(pf.zfrm(globals().get(poly2)(t1,t2),sbs_zfrm))*0.1
-    ro = ps.poly.get("ro") or 0
-    io = ps.poly.get("io") or 0
-    a = ro+1j*io
-    rts = np.concatenate((rts1,a+rts2))
-    cf = np.poly(rts)
-    return cf.astype(np.complex128)
 
 ############################################
 # side-by-side transform
@@ -2509,9 +2489,6 @@ def poly_chess(t1,t2):
     coeffs = np.poly(curve+np.cos(np.random.uniform(-w, w)))
     return np.array(coeffs+90*np.arange(len(coeffs))+np.poly(curve)*200,dtype=complex)
 
-import polychess as pc
-import xfrm
-import zfrm
 
 def polar_interpolation(x, y, a, geometric_modulus=False):
     r1, theta1 = np.abs(x), np.angle(x)
@@ -3018,7 +2995,7 @@ rloc_zigzag = """
  TTS
 """
 
-import polylayout as pl
+from . import polylayout as pl
 sX, sY, tX, tY = pl.layout2coord(rloc6)
 shape_fun = circle
 
