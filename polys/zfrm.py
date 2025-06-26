@@ -3,7 +3,7 @@
 ################################################
 from . import polystate as ps
 import numpy as np
-from . import solve
+
 
 def rot45(cf):
   rts = np.roots(cf)

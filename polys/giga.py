@@ -1,10 +1,11 @@
 import numpy as np
-import math
 import cmath
 from scipy.special import sph_harm
 from . import polystate as ps
-from . import letters
-from . import zfrm
+
+#
+# "giga" family of polynomials
+#
 
 def poly_giga_1(t1, t2):
     n = 25
@@ -516,12 +517,12 @@ def poly_giga_31(t1, t2):
         n = 100
         cf = np.zeros(n, dtype=complex)
         cf[0:3] = [-100j, 0, 0]
-        pr1 = safe_polyroot([t1, t2, t1, 1])
+        pr1 = np.solve(np.flip([t1, t2, t1, 1]))
         if len(pr1) == 3:
             cf[n//2-2:n//2+1] = 100 * pr1
         else:
             cf[n//2-2:n//2+1] = 100
-        pr2 = safe_polyroot([t2, t1, t2, 10j])
+        pr2 = np.solve(np.flip([t2, t1, t2, 10j]))
         if len(pr2) == 3:
             cf[n-3:n] = 100 * pr2
         else:
@@ -812,8 +813,8 @@ def poly_giga_46(t1, t2):
 def poly_giga_47(t1, t2):
     try:
         cf = np.zeros(30, dtype=complex)
-        cf[0:4] = pr([t1**3 - t2**2, 100 * t1, -50 * t2, 10j])
-        cf[9:12] = pr([1, t1**2 - 1j * t2, -100])
+        cf[0:4] = np.solve(np.flip([t1**3 - t2**2, 100 * t1, -50 * t2, 10j]))
+        cf[9:12] = np.solve(np.flip([1, t1**2 - 1j * t2, -100]))
         cf[14] = 50 * t1**3 - 20 * t2
         cf[24] = 200 * np.sin(t1.real + t2.imag) + 1j * np.cos(t1.imag - t2.real)
         cf[29] = np.exp(1j * t1) + t2**3
@@ -828,8 +829,8 @@ def poly_giga_47(t1, t2):
 def poly_giga_48(t1, t2):
     try:
         cf = np.zeros(40, dtype=complex)
-        cf[0:4] = pr([np.sin(t1) + np.cos(t2), 100 * t1**2, -50 * t2, 10j])
-        cf[9:12] = pr([np.cos(t1.real) + np.sin(t2.imag), -1, t1**3 - t2**2])
+        cf[0:4] = np.solve(np.flip([np.sin(t1) + np.cos(t2), 100 * t1**2, -50 * t2, 10j]))
+        cf[9:12] = np.solve(np.flip([np.cos(t1.real) + np.sin(t2.imag), -1, t1**3 - t2**2]))
         cf[19] = 50 * (t1**2 - t2**3)
         cf[29] = np.exp(1j * t1) + t2**2
         cf[34] = 200 * np.sin(t1.real + t2.imag) + 50 * np.cos((t1 - t2).imag)
@@ -845,9 +846,9 @@ def poly_giga_48(t1, t2):
 def poly_giga_49(t1, t2):
     try:
         cf = np.zeros(30, dtype=complex)
-        unstable_roots = pr([t1**4 - t2**3, 1j * t1 - t2, 50 * np.sin(t1 + t2), -100])
+        unstable_roots = np.solve(([t1**4 - t2**3, 1j * t1 - t2, 50 * np.sin(t1 + t2), -100]))
         cf[0:4] = unstable_roots
-        cf[7:10] = pr([unstable_roots[0]**2, -unstable_roots[1], 1])
+        cf[7:10] = np.flip(([unstable_roots[0]**2, -unstable_roots[1], 1]))
         cf[14] = 100j * (t1**2 + t2**3)
         cf[24] = 200 * np.sin(t1.real + t2.imag) + 50 * np.cos((t1 - t2).imag)
         cf[29] = np.exp(1j * t1**3) + t2**3
