@@ -32,10 +32,10 @@ poly = { # define the poly
     'name'        : 'poly', # dict name          
     'n'           : None,
     'degree'      : None,
-    'xfrm'        : 'none',
-    'poly'        : 'poly_giga_1',
-    'zfrm'        : 'none',
-    'solve'       : 'solve',
+    'xfrm'        : None,
+    'poly'        : None,
+    'zfrm'        : None,
+    'solve'       : None,
     'args.seti'   : None,
     'args.setf'   : None,
     'args.setl'   : None,
@@ -140,7 +140,7 @@ png = {
     'name'     : 'png', # dict name 
     'png'      : None,  # add, subtract, blurr, rotate
     'rotate'   : 0,
-    'args.png' : ''
+    'args.png' : None
 }
 
 def check_png():
@@ -186,7 +186,7 @@ def state2dict():
             'view': view, 
             'png' : png,
         }
-    config['view']['view'] = f"{config['view']['view']}"
+    config['view']['view'] = f"{config['view']['view']}".replace(' ','')
     return config
 
 
@@ -222,7 +222,7 @@ def state2cli():
     add_arg('--margin',view['margin'])
     add_arg('--res',view['res'])
     add_arg('--samples',job['samples'])
-    add_arg('--view',view['view'])
+    add_arg('--view',view['subview'])
     add_arg('--seti',poly['args.seti'])
     add_arg('--setf',poly['args.setf'])
     add_arg('--setl',poly['args.setl'])
@@ -246,29 +246,47 @@ def state2cli():
 #######################################
 
 def dict2state(config):
-    poly.update(config.get('poly') or {})
-    data.update(config.get('data') or {})
-    job.update(config.get('job') or {})
-    view.update(config.get('view') or {})
-    png.update(config.get('png') or {})
+    if isinstance(config.get('poly'),dict):
+        poly.update(config.get('poly'))
+    if isinstance(config.get('data'),dict):
+        data.update(config.get('data') or {})
+    if isinstance(config.get('job'),dict):
+        job.update(config.get('job') or {})
+    if isinstance(config.get('view'),dict):
+        view.update(config.get('view') or {})
+    if isinstance(config.get('png'),dict):
+        png.update(config.get('png') or {})
     check_state()
     
-
     flow['xfrm']  = pu.get_function_vector(registry.xfun, poly.get('xfrm'))
     flow['poly']  = registry.pfun.get(poly['poly'])
     flow['zfrm']  = pu.get_function_vector(registry.zfun, poly.get('zfrm'))
     flow['solve'] = pu.get_function(registry.sfun, poly.get('solve'))
 
     job['chunk'] = int(job['roots']) // (poly.get('degree') or 10) // (job.get('procs') or 16)
+
+    poly.update(pu.seti(poly["args.seti"]))
+    poly.update(pu.setf(poly["args.setf"]))
+    poly.update(pu.sets(poly["args.sets"]))
+    poly.update(pu.setl(poly["args.setl"]))
+
     n = poly.get("n") or 10
     poly["cf_start"]=pu.cvec2json(np.poly(pu.random_coeff(n)))
     poly["cf_end"]=pu.cvec2json(np.poly(pu.random_coeff(n)))
     
+    if isinstance(view.get("view"),str):
+        view['view']=ast.literal_eval(view['view'])
+
+    if poly.get('args.levels') is not None: 
+        poly['levels']= sorted(map(float, poly['args.levels'].split(',')))
+
+    if job.get("args.roots") is not None: 
+        job['roots']  = job['args.roots'] * 1_000_000
+
     return
 
 def json2state(js):
     config = json.loads(js)
-    config['view']['view']=ast.literal_eval(config['view']['view'])
     dict2state(config)
     return
 
@@ -313,39 +331,16 @@ def cli2state(cli):
     pu.ns2dict_required2(args,view,"view","subview")
     pu.ns2dict_required(args,png,"rotate")
     pu.ns2dict_optional(args,png,"png")
+    pu.ns2dict_optional2(args,png,"png","args.png")
     pu.ns2dict_required(args,job,"procs")
     
-
     pu.ns2dict_optional2(args,poly,"seti","args.seti")
-    poly.update(pu.seti(poly["args.seti"]))
     pu.ns2dict_optional2(args,poly,"setf","args.setf")
-    poly.update(pu.setf(poly["args.setf"]))
     pu.ns2dict_optional2(args,poly,"sets","args.sets")
-    poly.update(pu.sets(poly["args.sets"]))
     pu.ns2dict_optional2(args,poly,"setl","args.setl")
-    poly.update(pu.setl(poly["args.setl"]))
     pu.ns2dict_optional2(args,poly,"levels","args.levels")
-    if poly['args.levels'] is not None: 
-        poly['levels']= sorted(map(float, poly['args.levels'].split(',')))
+    pu.ns2dict_optional2(args,job,"roots","args.roots")
     
-    
-
-
-    poly['args.png']=args.png
-
-    if args.png is not None: 
-        png['png'] = args.png
-
-    if args.rotate is not None: 
-        png['rotate'] = args.rotate
-    
-
-    if args.roots is not None: 
-        job['roots']  = args.roots * 1_000_000
-
-    if args.procs is not None: 
-        job['procs'] = args.procs
-
 
     dict2state({})
     return 

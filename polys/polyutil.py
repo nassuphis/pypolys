@@ -33,15 +33,13 @@ def json2cvec(s: str) -> np.ndarray:
 #######################################
 def get_function(dict,fn):
     if fn is None:
-        print(f"'None' function key")
+        print(f"get_function: 'None' fn")
         return None
     if fn not in dict:
-        print(f"State: '{fn}' not in dictionary.")
-        sys.exit(1)
+        raise KeyError(f"get_function: '{fn}' not in dict")
     value = dict[fn]
     if not callable(value):
-        print(f"State: dictionary value '{fn}' is not callable.")
-        sys.exit(1)
+        raise KeyError(f"get_function: dictionary value '{fn}' is not callable.")
     return value
 
 #######################################
@@ -57,12 +55,10 @@ def get_function_vector(dictionary, functions):
 
     for name in function_names:
         if name not in dictionary:
-            print(f"State: '{name}' not in dictionary.")
-            sys.exit(1)
+            raise KeyError(f"State: '{name}' not in dictionary.")
         value = dictionary[name]
         if not callable(value):
-            print(f"State: dictionary value '{name}' is not callable.")
-            sys.exit(1)
+            raise ValueError(f"State: dictionary value '{name}' is not callable.")
         selected_functions.append(value)
 
     return selected_functions
@@ -148,8 +144,7 @@ def ns2dict_optional(ns,dict,key):
 def ns2dict_required(ns,dict,key):
     ns2dict_optional(ns,dict,key)
     if dict.get(key) is None:
-        print(f"{key} not in dict")
-        sys.exit(1)
+        raise KeyError(f"{key} not in dict")
 
 def ns2dict_optional2(ns,dict,nkey,dkey):
     if getattr(ns,nkey) is not None: 
@@ -158,5 +153,4 @@ def ns2dict_optional2(ns,dict,nkey,dkey):
 def ns2dict_required2(ns,dict,nkey,dkey):
     ns2dict_optional2(ns,dict,nkey,dkey)
     if dict[dkey] is None:
-        print(f"{dkey} not in dict")
-        sys.exit(1)
+        raise KeyError(f"{dkey} not in dict")
