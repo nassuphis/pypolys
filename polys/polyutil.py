@@ -33,7 +33,7 @@ def json2cvec(s: str) -> np.ndarray:
 #######################################
 def get_function(dict,fn):
     if fn is None:
-        print(f"get_function: 'None' fn")
+        print(f"get_function: fn is None")
         return None
     if fn not in dict:
         raise KeyError(f"get_function: '{fn}' not in dict")
@@ -55,10 +55,10 @@ def get_function_vector(dictionary, functions):
 
     for name in function_names:
         if name not in dictionary:
-            raise KeyError(f"State: '{name}' not in dictionary.")
+            raise KeyError(f"get_function_vector: '{name}' not in dict")
         value = dictionary[name]
         if not callable(value):
-            raise ValueError(f"State: dictionary value '{name}' is not callable.")
+            raise ValueError(f"get_function_vector: dict value '{name}' not callable")
         selected_functions.append(value)
 
     return selected_functions

@@ -259,16 +259,16 @@ def dict2state(config):
     check_state()
     
     flow['xfrm']  = pu.get_function_vector(registry.xfun, poly.get('xfrm'))
-    flow['poly']  = registry.pfun.get(poly['poly'])
+    flow['poly']  = pu.get_function(registry.pfun,poly.get('poly'))
     flow['zfrm']  = pu.get_function_vector(registry.zfun, poly.get('zfrm'))
     flow['solve'] = pu.get_function(registry.sfun, poly.get('solve'))
 
     job['chunk'] = int(job['roots']) // (poly.get('degree') or 10) // (job.get('procs') or 16)
 
-    poly.update(pu.seti(poly["args.seti"]))
-    poly.update(pu.setf(poly["args.setf"]))
-    poly.update(pu.sets(poly["args.sets"]))
-    poly.update(pu.setl(poly["args.setl"]))
+    poly.update(pu.seti(poly.get("args.seti")))
+    poly.update(pu.setf(poly.get("args.setf")))
+    poly.update(pu.sets(poly.get("args.sets")))
+    poly.update(pu.setl(poly.get("args.setl")))
 
     n = poly.get("n") or 10
     poly["cf_start"]=pu.cvec2json(np.poly(pu.random_coeff(n)))
