@@ -12,6 +12,5 @@ if __name__ == "__main__":
     polys.polystate.json2state(js_config)
     x=polys.polystate.state2cli()
     polys.polystate.cli2state(x)
-    print(' '.join(sys.argv[1:]))
     polys.polystate.cli2state(' '.join(sys.argv[1:]))
     print(polys.polystate.state2json())

@@ -2,7 +2,6 @@
 
 import numpy as np
 import json
-import sys
 import re
 
 #######################################
@@ -139,7 +138,6 @@ def seti(arg):
 def ns2dict_optional(ns,dict,key):
     if getattr(ns,key) is not None: 
         dict[key] = getattr(ns,key)
-
 
 def ns2dict_required(ns,dict,key):
     ns2dict_optional(ns,dict,key)

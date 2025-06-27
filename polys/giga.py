@@ -316,6 +316,24 @@ def poly_giga_19(t1, t2):
     except Exception:
         return np.zeros(n, dtype=complex)
 
+def poly_giga_19_fixed1(t1, t2):
+    try:
+        res = 1000.0
+        t1=int(t1*res)/res
+        t2=int(t2*res)/res
+        cf = np.zeros(90, dtype=complex)
+        cf[0] = t1 - t2
+        for k in range(1, len(cf)):
+            v = np.sin((k+1) * cf[k-1]) + np.cos((k+1) * t1)
+            av = np.abs(v)
+            if np.isfinite(av) and av > 1e-10:
+                cf[k] = 1j * v / av
+            else:
+                cf[k]=t1+t2    
+        return cf.astype(np.complex128)
+    except:
+        return np.zeros(0, dtype=complex)
+    
 def poly_giga_20(t1, t2):
     try:
         cf = np.zeros(90, dtype=complex)

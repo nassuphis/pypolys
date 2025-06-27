@@ -291,6 +291,7 @@ def json2state(js):
     return
 
 def cli2state(cli):
+
     parser = argparse.ArgumentParser(description="root locus")
     parser.add_argument('stem',nargs="?",type=str, default=None, help="stem")
     parser.add_argument('-m','--mode', choices=["write","show","showinit","png"],default=None,help="mode")
@@ -341,7 +342,6 @@ def cli2state(cli):
     pu.ns2dict_optional2(args,poly,"levels","args.levels")
     pu.ns2dict_optional2(args,job,"roots","args.roots")
     
-
     dict2state({})
     return 
 
