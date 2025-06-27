@@ -55,18 +55,21 @@ if __name__ == "__main__":
     df0 = pd.concat(all_dfs, ignore_index=True)
     print(f"Data : {df0.shape}") 
     d = np.abs(df0['root'].values)
-    dq = np.quantile(d,0.99)
+    dq = 10 # min(np.quantile(d,0.99),2.0)
     print("Quantile")
-    df = df0[d < dq]
-    t = df['t1'] + 1j * df['t2']
-    v = df['root']-t
+    #df = df0[d < dq]
+    df=df0
+    t1 = df['t1'].values 
+    t2 = df['t2'].values 
+    t = df['t1'].values + 1j * df['t2'].values
+    v = df['root'].values
     df['phase'] = norm(np.angle(v))
     df['mod'] = norm(np.abs(v)) 
     df['hue'] = (((df['phase']*10)%1)*0.5 - 0.25) % 1
     df['sat'] = (((df['mod']*10)%1)*0.5 - 0.25) % 1
     print("Hue, Saturation")
 
-    px=10000
+    px=5000
     roots = px*(norm(df['root'].values.real)+1j*norm(df['root'].values.imag))
 
 
@@ -81,8 +84,11 @@ if __name__ == "__main__":
     sats = df['sat'].values.astype(float)
 
     colors = mcolors.hsv_to_rgb(np.column_stack([hues, sats, np.ones_like(hues)]))
-    x = np.clip(roots.imag.astype(int), 0, px-1)
-    y = np.clip(roots.real.astype(int), 0, px-1)
+    #x = np.clip(roots.imag.astype(int), 0, px-1)
+    #y = np.clip(roots.real.astype(int), 0, px-1)
+
+    x = np.clip((t1*px).astype(int), 0, px-1)
+    y = np.clip((t2*px).astype(int), 0, px-1)
 
     img = np.zeros((px, px, 3), dtype=np.uint8)
     img[y, x] = (colors * 255).astype(np.uint8)
