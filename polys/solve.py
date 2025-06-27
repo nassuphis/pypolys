@@ -12,3 +12,5 @@ def solve(cf):
   except:     
     return np.zeros(len(cf)-1, dtype=complex)
 
+def none(cf):
+  return cf

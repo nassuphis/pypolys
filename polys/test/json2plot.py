@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+# test/cli2json.py test123 -x unit_circle,coeff7 -p poly_362 -z rev -s solve  | test/json2plot.py 10000
+
 import polys
 import sys
 import numpy as np
@@ -19,24 +21,41 @@ def sample_chunk(args):
     #import polys  # (re-)import inside subprocess if needed
     polys.polystate.json2state(js_config)
     np.random.seed(worker_id) 
-    chunk = []
+    blocks = []
     for j in range(start, stop):
         if j % 1000 ==0 and worker_id==0:
-            print(f"{worker_id} : {round(100*(j-start)/(stop-start),2)}%")
+            print(f"{worker_id} : {round(100*(j-start)/(stop-start),2)}% {stop-start}")
         t1 = np.random.random()
         t2 = np.random.random()
         rts = polys.polystate.sample(t1, t2)
-        for r in rts:
-            chunk.append({'root': r, 't1': t1, 't2': t2})
-    return pd.DataFrame(chunk)
+        real = rts.real
+        imag = rts.imag
+        t1s = np.full_like(real, t1)
+        t2s = np.full_like(real, t2)
+        size = np.abs(rts)
+        rng = np.max(size)-np.min(size)
+        rngs = np.full_like(real,rng)
+        ngls = np.full_like(real,np.mean(np.angle(rts)))
+        row_block = np.column_stack([real, imag, t1s, t2s,rngs,ngls])
+        blocks.append(row_block)
+    
+    if blocks:
+        return np.vstack(blocks)
+    else:
+        return np.empty((0, 6))
 
 if __name__ == "__main__":
 
     if not sys.stdin.isatty():  # stdin is *not* from terminal → it's piped
         js_config = sys.stdin.read()
             
+    polys.polystate.json2state(js_config)
+
+    rts = polys.polystate.sample(0.5, 0.5)
+    print(rts)
+
     num_samples = int(sys.argv[1])
-    num_workers = multiprocessing.cpu_count() * 2
+    num_workers = multiprocessing.cpu_count()
     print(f"CPU count : {num_workers}")
     chunk_size = num_samples // num_workers
     chunks = []
@@ -45,57 +64,57 @@ if __name__ == "__main__":
         stop = (i+1) * chunk_size if i < num_workers-1 else num_samples
         chunks.append((start, stop,js_config,i))
 
-    all_data = []
+    all = []
 
     print("Start")
     with multiprocessing.Pool(num_workers) as pool:
-        all_dfs = pool.map(sample_chunk, chunks)
+        all = pool.map(sample_chunk, chunks)
     print("End")
 
-    df0 = pd.concat(all_dfs, ignore_index=True)
-    print(f"Data : {df0.shape}") 
-    d = np.abs(df0['root'].values)
-    dq = 10 # min(np.quantile(d,0.99),2.0)
-    print("Quantile")
-    #df = df0[d < dq]
-    df=df0
-    t1 = df['t1'].values 
-    t2 = df['t2'].values 
-    t = df['t1'].values + 1j * df['t2'].values
-    v = df['root'].values
-    df['phase'] = norm(np.angle(v))
-    df['mod'] = norm(np.abs(v)) 
-    df['hue'] = (((df['phase']*10)%1)*0.5 - 0.25) % 1
-    df['sat'] = (((df['mod']*10)%1)*0.5 - 0.25) % 1
-    print("Hue, Saturation")
+    m= np.vstack(all)
+    print(f"Data : {m.shape}") 
+    v1 = m[:,0]
+    v2 = m[:,1]
+    v = v1 + 1j * v2
+    d = np.abs(v)
+    t1 = m[:,2]
+    t2 = m[:,3] 
+    t = t1 + 1j * t2
+    rng = norm(m[:,4])
+    ngl = norm(m[:,5])
+    phase = norm(np.angle(v))
+    mod = norm(np.abs(v)) 
+    hue = (((rng*1.0)%1)*0.5 + 0.01) % 1
+    sat = (((ngl*10.0)%1)*0.99) % 1
 
     px=5000
-    roots = px*(norm(df['root'].values.real)+1j*norm(df['root'].values.imag))
+    roots = px*(norm(v1)+1j*norm(v2))
 
 
     print(f"roots.real: {np.min(roots.real)} - {np.max(roots.real)}")
     print(f"roots.imag: {np.min(roots.imag)} - {np.max(roots.imag)}")
-    print(f"t1: {np.min(df['t1'])} - {np.max(df['t1'])}")
-    print(f"t2: {np.min(df['t2'])} - {np.max(df['t2'])}")
-    print(f"phase: {np.min(df['phase'])} - {np.max(df['phase'])}")
-    print(f"hue: {np.min(df['hue'])} - {np.max(df['hue'])}")
+    print(f"t1: {np.min(t1)} - {np.max(t1)}")
+    print(f"t2: {np.min(t2)} - {np.max(t2)}")
+    print(f"phase: {np.min(phase)} - {np.max(phase)}")
+    print(f"mod: {np.min(mod)} - {np.max(mod)}")
+    print(f"rng: {np.min(rng)} - {np.max(rng)}")
+    print(f"ngl: {np.min(ngl)} - {np.max(ngl)}")
+    print(f"sat: {np.min(sat)} - {np.max(sat)}")
+    print(f"hue: {np.min(hue)} - {np.max(hue)}")
 
-    hues = df['hue'].values.astype(float)
-    sats = df['sat'].values.astype(float)
+    colors = mcolors.hsv_to_rgb(np.column_stack([hue, sat, np.ones_like(hue)]))
+    x = np.clip(roots.imag.astype(int), 0, px-1)
+    y = np.clip(roots.real.astype(int), 0, px-1)
 
-    colors = mcolors.hsv_to_rgb(np.column_stack([hues, sats, np.ones_like(hues)]))
-    #x = np.clip(roots.imag.astype(int), 0, px-1)
-    #y = np.clip(roots.real.astype(int), 0, px-1)
-
-    x = np.clip((t1*px).astype(int), 0, px-1)
-    y = np.clip((t2*px).astype(int), 0, px-1)
+    #x = np.clip((t1*px).astype(int), 0, px-1)
+    #y = np.clip((t2*px).astype(int), 0, px-1)
 
     img = np.zeros((px, px, 3), dtype=np.uint8)
     img[y, x] = (colors * 255).astype(np.uint8)
 
     im = Image.fromarray(img)
-    im_inv = ImageOps.invert(im)
-    im_inv.save('myplot.png')
+    #im_inv = ImageOps.invert(im)
+    im.save('myplot.png')
 
     
 

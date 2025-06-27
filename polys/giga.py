@@ -2737,7 +2737,55 @@ def poly_giga_136(t1, t2):
             size = len(locals().get("cf", []))
         return np.zeros(size, dtype=complex)
 
+# originally p7f
+def poly_giga_137(t1, t2):
+    try:
+        pi2  =  2 * np.pi
+        n    =  23
+        tt1  =  np.exp(1j * 2 * np.pi * t1)
+        ttt1 =  np.exp(1j * 2 * np.pi * tt1)
+        v  =  np.linspace(np.real(tt1), np.real(ttt1), n)
+        if t2 < 0.1:
+            f = 10 * t1 * np.exp(1j * np.sin(11 * pi2 * v))
+        elif 0.1 <= t2 < 0.2:
+            f =  100 * np.exp(1j * np.sin(17 * pi2 * v))
+        elif 0.2 <= t2 < 0.3:
+            f =  599 * np.exp(1j * np.cos(83 * pi2 * v))
+        elif 0.3 <= t2 < 0.4:
+            f =  443 * np.exp(1j * np.sin(179 * pi2 * v))
+        elif 0.4 <= t2 < 0.5:
+            f =  293 * np.exp(1j * np.sin(127 * pi2 * v))
+        elif 0.5 <= t2 < 0.6:
+            f =  541 * np.exp(1j * np.sin(103 * pi2 * v))
+        elif 0.6 <= t2 < 0.7:
+            f =  379 * np.exp(1j * np.sin(283 * pi2 * v))
+        elif 0.7 <= t2 < 0.8:
+            f =  233 * np.exp(1j * np.sin(3 * pi2 * v))
+        elif 0.8 <= t2 < 0.9:
+            f =  173 * np.exp(1j * np.sin(5 * pi2 * v))
+        else:
+            f =  257 * np.exp(1j * np.sin(23 * pi2 * v))
 
+        f[n-1] +=  211 * np.exp(1j * pi2 * (1/7) * t2 )
 
+        return f
+
+    except:
+        return np.zeros(23, dtype=complex)   
        
-
+#def p11b2_v5(t1, t2):
+def poly_giga_138(t1, t2):
+        try:
+            n  = 11
+            v1 = np.exp(1j*2*np.pi*np.linspace(t1, t2, n))
+            v2 = np.exp(1j*2*np.pi*np.linspace(t1+t2, t1*t2, n))
+            v = v1 + 1j * v2
+            denom =  t1 + t2 + 3 
+            if np.abs(denom)<1 :
+                denom = denom / abs(denom)
+            u  = n * np.power(v,1) / denom 
+            uc = np.exp(1j * np.pi * u)
+            cf = uc
+            return cf
+        except:
+            return np.zeros(0, dtype=complex)
