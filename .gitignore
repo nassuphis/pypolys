@@ -40,6 +40,8 @@ pip-delete-this-directory.txt
 htmlcov/
 .tox/
 .nox/
+polys/spll1_files/
+polys/spill2_files/
 .coverage
 .coverage.*
 .cache
@@ -51,7 +53,12 @@ coverage.xml
 .pytest_cache/
 cover/
 *.png
-
+*.tiff
+*.jpeg
+*.dzi
+*.npz
+*.mp4
+*.jpeg
 # Translations
 *.mo
 *.pot

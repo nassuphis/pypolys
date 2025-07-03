@@ -333,6 +333,21 @@ def poly_giga_19_fixed1(t1, t2):
         return cf.astype(np.complex128)
     except:
         return np.zeros(0, dtype=complex)
+
+def poly_giga_19_fixed2(t1, t2):
+    try:
+        cf = np.zeros(90, dtype=complex)
+        cf[0] = t1 - t2
+        for k in range(1, len(cf)):
+            v = np.sin((k+1) * cf[k-1]) + np.cos((k+1) * t1)
+            av = np.abs(v)
+            if np.isfinite(av) and av > 1e-10:
+                cf[k] = 1j * v / av
+            else:
+                cf[k]=t1+t2    
+        return cf.astype(np.complex128)
+    except:
+        return np.zeros(0, dtype=complex)
     
 def poly_giga_20(t1, t2):
     try:
@@ -2789,3 +2804,35 @@ def poly_giga_138(t1, t2):
             return cf
         except:
             return np.zeros(0, dtype=complex)
+        
+
+#def p11b3(t1, t2):
+def poly_giga_139(t1, t2):
+    try:
+        t = t1 + t2 # balls with holes
+        a = np.abs(t1+t2) / 2 # number between 0 and 1 
+        m = int( a * 251 ) % 37 # integer 0 - 10
+        v = (np.arange(11)+1) / (t+4)
+        p1 = int( 7 * a * len(v) ) % len(v) # pick a random spot
+        v[p1] = (p1+1)/(t + np.abs(t)*2 + 1 + m) # stick m in it
+        p2 = int( 619 * a * len(v) ) % len(v) # pick a random spot
+        v[p2] = (p2+1)/(t + np.abs(t)*2 + 1 + m//2) # stick m in it
+        cf = np.exp(1j * np.pi * v)
+        return cf.astype(np.complex128)
+    except:
+        return np.zeros(4, dtype=complex)
+    
+def p11b3(t1, t2):
+        try:
+            t = t1 + t2 # balls with holes
+            a = abs(t1+t2) / 2 # number between 0 and 1 
+            m = int( a * 251 ) % 37 # integer 0 - 10
+            v = (np.arange(11)+1) / (t+4)
+            p1 = int( 7 * a * len(v) ) % len(v) # pick a random spot
+            v[p1] = (p1+1)/(t + abs(t)*2 + 1 + m) # stick m in it
+            p2 = int( 619 * a * len(v) ) % len(v) # pick a random spot
+            v[p2] = (p2+1)/(t + abs(t)*2 + 1 + m//2) # stick m in it
+            cf = np.exp(1j * np.pi * v)
+            return cf
+        except:
+            return np.zeros(4, dtype=complex)

@@ -13,16 +13,18 @@ from . import polyutil as pu
 
 
 def sample(t0,t1):
-    xfrm  = flow['xfrm']
-    poly  = flow['poly']
-    zfrm  = flow['zfrm']
-    solve = flow['solve']
+    xfrmf  = flow['xfrm']
+    polyf  = flow['poly']
+    zfrmf  = flow['zfrm']
+    solvef = flow['solve']
     f1  = lambda acc, func: func(acc[0], acc[1]) 
-    tn  = functools.reduce(f1,xfrm,(t0,t1))
-    pcf = poly(tn[0], tn[1])
+    tn  = functools.reduce(f1,xfrmf,(t0,t1))
+    pcf = polyf(tn[0], tn[1])
     f2  = lambda acc, func: func(acc)
-    zcf = functools.reduce(f2, zfrm, pcf)
-    roots = solve(zcf)
+    zcf = functools.reduce(f2, zfrmf, pcf)
+    poly["cfr"] = zcf.real.tolist()
+    poly["cfi"] = zcf.imag.tolist()
+    roots = solvef(zcf)
     return roots
 
 #######################################
