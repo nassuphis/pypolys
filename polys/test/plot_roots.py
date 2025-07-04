@@ -128,22 +128,39 @@ if colorization_method==2:
 
 if colorization_method==3:
     # hue
-    rabs = np.abs(r)
-    rngl = np.angle(r)
-    r_sum=np.add.reduceat(r,starts)
+    z_all_sum = np.sum(z)
+    r_all_sum = np.sum(r)
+    rabs = np.abs(r-r_all_sum)
+    rngl = np.angle(r-r_all_sum)
+    zabs = np.abs(z-z_all_sum)
+    zngl = np.angle(z-z_all_sum)
     denomi=1/np.add.reduceat(np.ones(r.shape),starts)
+
+    
+    z_sum=np.add.reduceat(z,starts)-z_all_sum
+    z_mean=z_sum*denomi
+
+   
+    r_sum=np.add.reduceat(r,starts)-r_all_sum
+    r_mean=r_sum*denomi
+
     rabs_max = np.maximum.reduceat(rabs,starts)
     rabs_min = np.minimum.reduceat(rabs,starts)
-    rngl_sum=np.add.reduceat(rngl,starts)
-    rng1 = norm(rabs_max-rabs_min)
-    rng2 =  norm(np.add.reduceat(rngl,starts)*denomi)
+    rabs_rng = norm(rabs_max-rabs_min)
+    rabs_mean=np.add.reduceat(rabs,starts)*denomi
+    rngl_mean=np.add.reduceat(rngl,starts)*denomi
+    zabs_mean=np.add.reduceat(zabs,starts)*denomi
+    zngl_mean=np.add.reduceat(zngl,starts)*denomi
+    
     pH = np.zeros((height,width),dtype=np.float32)
-    pH[i,j] = norm(np.angle(r_sum))[gbi]*0.4
-    print(f"pH: ({np.min(pH[i,j])}-{np.max(pH[i,j])})")
+    hue = (norm(rngl_mean)*0.1+0.15)[gbi]
+    pH[i,j] = hue #hue % 1
+    print(f"pH: ({np.min(pH[i,j])}-{np.median(pH[i,j])}-{np.max(pH[i,j])})")
+
     pS = np.zeros((height,width),dtype=np.float32)
-    ngl=  norm(np.add.reduceat(rngl,starts)*denomi)
+    ngl=  norm(rngl_mean)
     #ngl = norm(np.maximum.reduceat(rngl,starts)-np.minimum.reduceat(rngl,starts))
-    pS[i,j]=(50*ngl[gbi])*1.0
+    pS[i,j]=1.0 #(50*ngl[gbi])*1.0
     print(f"pS: ({np.min(pS[i,j])}-{np.max(pS[i,j])})")
 
 H = np.zeros((height,width),dtype=np.float32)

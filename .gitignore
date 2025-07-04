@@ -59,6 +59,7 @@ cover/
 *.npz
 *.mp4
 *.jpeg
+*.v
 # Translations
 *.mo
 *.pot

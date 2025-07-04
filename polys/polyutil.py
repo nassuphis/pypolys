@@ -3,6 +3,7 @@
 import numpy as np
 import json
 import re
+import numexpr as ne
 
 #######################################
 # random coefficient
@@ -107,7 +108,7 @@ def setf(arg):
     for pair in pairs:
         key, value = pair.split('=')
         try:
-            state[key] = float(value)  # Convert values to floats
+            state[key] = ne.evaluate(value)  # Convert values to floats
         except ValueError:
             raise ValueError(f"Invalid value for {key}: {value} (must be a float)")
     return state
