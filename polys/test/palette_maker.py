@@ -8,7 +8,7 @@ import numexpr as ne
 import polys
 import polys.polystate
 import polys.polyutil
-from itertools import combinations
+import cv2
 
 type_choices = [
         "h",
@@ -100,10 +100,108 @@ def polyres_centroid():
     H[polyres["i"],polyres["j"]] = centroid[polyres['gbi']]  
     return H
 
-def polyres_centroid_dist():
-    H = np.zeros((polyres["height"],polyres["width"]),dtype=np.complex64)      
-    centroid=polys.polyutil.group_apply(polyres["r"],polyres["starts"],np.mean)       
-    H[polyres["i"],polyres["j"]] = polyres["r"] - centroid[polyres['gbi']]  
+def blurr(H, a):
+    sigma = float(a[0]) if len(a)>0 else 3.0
+    blurred = cv2.GaussianBlur(H.real.astype(np.float32), (0, 0), sigma)
+    return blurred
+
+def direction(F,a):
+    sigma = float(a[0]) if len(a)>0 else 3.0
+    ur = cv2.GaussianBlur(F.real.astype(np.float32), (0, 0), sigma)
+    vr = cv2.GaussianBlur(F.imag.astype(np.float32), (0, 0), sigma)
+
+    # Compute gradients for both components
+    Ix_u = cv2.Sobel(ur, cv2.CV_32F, 1, 0, ksize=3)
+    Iy_u = cv2.Sobel(ur, cv2.CV_32F, 0, 1, ksize=3)
+    Ix_v = cv2.Sobel(vr, cv2.CV_32F, 1, 0, ksize=3)
+    Iy_v = cv2.Sobel(vr, cv2.CV_32F, 0, 1, ksize=3)
+
+    # Combine: Jxx = ∂u/∂x² + ∂v/∂x² etc.
+    Jxx = cv2.GaussianBlur(Ix_u**2 + Ix_v**2, (0, 0), sigma)
+    Jyy = cv2.GaussianBlur(Iy_u**2 + Iy_v**2, (0, 0), sigma)
+    Jxy = cv2.GaussianBlur(Ix_u*Iy_u + Ix_v*Iy_v, (0, 0), sigma)
+
+    # Orientation
+    orientation = 0.5 * np.arctan2(2.0 * Jxy, Jxx - Jyy)
+    return (orientation + np.pi/2) / np.pi
+
+def polyres_centroid_dist_abs():
+    H = np.zeros((polyres["height"],polyres["width"]),dtype=np.float32)  
+    def dfun(x):
+        cnt = np.mean(x)
+        diff = x-cnt
+        mean_diff = np.mean(np.abs(diff))
+        return mean_diff.real
+    centroid=polys.polyutil.group_apply(polyres["r"],polyres["starts"],dfun)       
+    H[polyres["i"],polyres["j"]] = centroid[polyres['gbi']]  
+    return H
+
+def polyres_centroid_dist_abs_max():
+    H = np.zeros((polyres["height"],polyres["width"]),dtype=np.float32)  
+    def dfun(x):
+        cnt = np.mean(x)
+        diff = x-cnt
+        mean_diff = np.max(np.abs(diff))
+        return mean_diff.real
+    centroid=polys.polyutil.group_apply(polyres["r"],polyres["starts"],dfun)       
+    H[polyres["i"],polyres["j"]] = centroid[polyres['gbi']]  
+    return H
+
+def polyres_centroid_dist_abs_min():
+    H = np.zeros((polyres["height"],polyres["width"]),dtype=np.float32)  
+    def dfun(x):
+        cnt = np.mean(x)
+        diff = x-cnt
+        mean_diff = np.min(np.abs(diff))
+        return mean_diff.real
+    centroid=polys.polyutil.group_apply(polyres["r"],polyres["starts"],dfun)       
+    H[polyres["i"],polyres["j"]] = centroid[polyres['gbi']]  
+    return H
+
+def polyres_centroid_dist_angle():
+    H = np.zeros((polyres["height"],polyres["width"]),dtype=np.float32)  
+    def dfun(x):
+        cnt = np.mean(x)
+        diff = x-cnt
+        mean_diff = np.mean((np.angle(diff)/np.pi+1)/2)
+        return mean_diff.real
+    centroid=polys.polyutil.group_apply(polyres["r"],polyres["starts"],dfun)       
+    H[polyres["i"],polyres["j"]] = centroid[polyres['gbi']]  
+    return H
+
+def polyres_centroid_dist_angle_max():
+    H = np.zeros((polyres["height"],polyres["width"]),dtype=np.float32)  
+    def dfun(x):
+        cnt = np.mean(x)
+        diff = x-cnt
+        mean_diff = np.max((np.angle(diff)/np.pi+1)/2)
+        return mean_diff.real
+    centroid=polys.polyutil.group_apply(polyres["r"],polyres["starts"],dfun)       
+    H[polyres["i"],polyres["j"]] = centroid[polyres['gbi']]  
+    return H
+
+def polyres_centroid_dist_angle_min():
+    H = np.zeros((polyres["height"],polyres["width"]),dtype=np.float32)  
+    def dfun(x):
+        cnt = np.mean(x)
+        diff = x-cnt
+        mean_diff = np.min((np.angle(diff)/np.pi+1)/2)
+        return mean_diff.real
+    centroid=polys.polyutil.group_apply(polyres["r"],polyres["starts"],dfun)       
+    H[polyres["i"],polyres["j"]] = centroid[polyres['gbi']]  
+    return H
+
+def polyres_centroid_dist_angle_range():
+    H = np.zeros((polyres["height"],polyres["width"]),dtype=np.float32)  
+    def dfun(x):
+        cnt = np.mean(x)
+        diff = x-cnt
+        amin = np.min((np.angle(diff)/np.pi+1)/2)
+        amax = np.max((np.angle(diff)/np.pi+1)/2)
+        diff = amax - amin
+        return diff.real
+    centroid=polys.polyutil.group_apply(polyres["r"],polyres["starts"],dfun)       
+    H[polyres["i"],polyres["j"]] = centroid[polyres['gbi']]  
     return H
 
 def polyres_variance():
@@ -559,8 +657,16 @@ pfrm_functions = {
     "y": lambda x,a: 2*(norm(row_mat)-0.5),
     "z": lambda x,a: 2*(norm(col_mat)-0.5)+1j*2*(norm(row_mat)-0.5),
     "centroid": lambda x,a: polyres_centroid(),
+    "direction": lambda x,a: direction(x,a),
+    "blurr": lambda x,a: blurr(x,a),
     "variance": lambda x,a: polyres_variance(),
-    "centroid.dist": lambda x,a: polyres_centroid_dist(),
+    "centroid.dist.abs": lambda x,a: polyres_centroid_dist_abs(),
+    "centroid.dist.abs.max": lambda x,a: polyres_centroid_dist_abs_max(),
+    "centroid.dist.abs.min": lambda x,a: polyres_centroid_dist_abs_min(),
+    "centroid.dist.angle": lambda x,a: polyres_centroid_dist_angle(),
+    "centroid.dist.angle.max": lambda x,a: polyres_centroid_dist_angle_max(),
+    "centroid.dist.angle.min": lambda x,a: polyres_centroid_dist_angle_min(),
+    "centroid.dist.angle.range": lambda x,a: polyres_centroid_dist_angle_range(),
     "count": lambda x,a: polyres_count(),
     "mean": lambda x,a: polyres_mean(),
     "amean": lambda x,a: polyres_amean(),
@@ -589,8 +695,8 @@ pfrm_functions = {
     "plk": lambda x,a: np.sin(x) / np.cos(x),
     "zzg": lambda x,a: (x + 2) / (x - 2),
     "ltl": lambda x,a: (x - 2j) / (x + 2j),
-    "kth": lambda x,a: (1 + x) / (1 - x),
-    "jkw": lambda x,a: x + 1/x,
+    "kth": lambda x,a: np.where(abs(1-x)>1e-10,(1 + x) / (1 - x),0),
+    "jkw": lambda x,a: np.where(abs(x)>1e-10,x + 1/x,0),
     "bkr": lambda x,a: bkr(x),
     "ebkr": lambda x,a: ebkr(x),
     "coeff2": lambda x,a: (x.real + x.imag) + 1j * ( x.imag * x.real),
