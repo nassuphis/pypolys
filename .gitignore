@@ -60,6 +60,7 @@ cover/
 *.mp4
 *.jpeg
 *.v
+*.pdf
 # Translations
 *.mo
 *.pot

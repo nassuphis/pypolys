@@ -1,0 +1,232 @@
+\documentclass{article}
+\usepackage[portrait, headheight = 0cm, margin=0.25cm, top = 0.25cm]{geometry} 
+\usepackage{graphicx}
+\usepackage{tabularx}
+\usepackage{xcolor}
+
+
+\title{
+\vskip 8cm
+\Huge{Color}
+\vskip 1cm
+Palettes, Results
+\vskip 2cm
+}
+\author{Wigerich}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\newpage
+\section{parameter-based palette}
+\begin{center}
+\begin{tabular}{m{8cm}m{8cm}}
+\multicolumn{2}{c}{z,angle} \\
+\includegraphics[width=8cm, height=8cm]{color/palette2.png} &
+\includegraphics[width=8cm, height=8cm]{color/plot2.png}
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tabular}{m{8cm}m{8cm}}
+\multicolumn{2}{c}{z,abs} \\
+\includegraphics[width=8cm, height=8cm]{color/palette17.png} &
+\includegraphics[width=8cm, height=8cm]{color/plot17.png}
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tabular}{m{8cm}m{8cm}}
+\multicolumn{2}{c}{H=z,abs V=idx,cci\_0\_0\_0.2} \\
+\includegraphics[width=8cm, height=8cm]{color/palette18.png} &
+\includegraphics[width=8cm, height=8cm]{color/plot18.png}
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tabular}{m{8cm}m{8cm}}
+\multicolumn{2}{c}{H=z,wf\_10\_10\_cos(x)+1j*sin(y),re} \\
+\includegraphics[width=8cm, height=8cm]{color/palette19.png} &
+\includegraphics[width=8cm, height=8cm]{color/plot19.png}
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tabular}{m{8cm}m{8cm}}
+\multicolumn{2}{c}{H=z,wf\_10\_10\_cos(x)+1j*sin(y),abs} \\
+\includegraphics[width=8cm, height=8cm]{color/palette20.png} &
+\includegraphics[width=8cm, height=8cm]{color/plot20.png}
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tabular}{m{8cm}m{8cm}}
+\multicolumn{2}{c}{H=wf\_1\_1\_cos(x+y)**3+1j*sin(x-y)**3,abs} \\
+\includegraphics[width=8cm, height=8cm]{color/palette21.png} &
+\includegraphics[width=8cm, height=8cm]{color/plot21.png}
+\end{tabular}
+\end{center}
+
+\newpage
+\section{root-based palette: range of root moduli}
+\begin{center}
+\begin{tabular}{m{8cm}m{8cm}}
+\multicolumn{2}{c}{range,norm} \\
+\includegraphics[width=8cm, height=8cm]{color/palette13.png} &
+\includegraphics[width=8cm, height=8cm]{color/plot13.png}
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tabular}{m{8cm}m{8cm}}
+\multicolumn{2}{c}{range,rank} \\
+\includegraphics[width=8cm, height=8cm]{color/palette16.png} &
+\includegraphics[width=8cm, height=8cm]{color/plot16.png}
+\end{tabular}
+\end{center}
+
+\newpage
+\section{root-based palette: range of root phases}
+
+\begin{center}
+\begin{tabular}{m{8cm}m{8cm}}
+\multicolumn{2}{c}{arange,norm} \\
+\includegraphics[width=8cm, height=8cm]{color/palette14.png} &
+\includegraphics[width=8cm, height=8cm]{color/plot14.png}
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tabular}{m{8cm}m{8cm}}
+\multicolumn{2}{c}{arange,rank} \\
+\includegraphics[width=8cm, height=8cm]{color/palette15.png} &
+\includegraphics[width=8cm, height=8cm]{color/plot15.png}
+\end{tabular}
+\end{center}
+
+\newpage
+\section{root-based palette: centroid modulus, angle}
+
+\begin{center}
+\begin{tabular}{m{8cm}m{8cm}}
+\multicolumn{2}{c}{centroid,abs,rank} \\
+\includegraphics[width=8cm, height=8cm]{color/palette3.png} &
+\includegraphics[width=8cm, height=8cm]{color/plot3.png}
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tabular}{m{8cm}m{8cm}}
+\multicolumn{2}{c}{centroid,angle,rank} \\
+\includegraphics[width=8cm, height=8cm]{color/palette4.png} &
+\includegraphics[width=8cm, height=8cm]{color/plot4.png}
+\end{tabular}
+\end{center}
+
+\newpage
+\section{root-based palette: root minus centroid modulus, angle}
+
+\begin{center}
+\begin{tabular}{m{8cm}m{8cm}}
+\multicolumn{2}{c}{centroid.dist,angle,rank} \\
+\includegraphics[width=8cm, height=8cm]{color/palette5.png} &
+\includegraphics[width=8cm, height=8cm]{color/plot5.png}
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tabular}{m{8cm}m{8cm}}
+\multicolumn{2}{c}{centroid.dist,abs,rank} \\
+\includegraphics[width=8cm, height=8cm]{color/palette6.png} &
+\includegraphics[width=8cm, height=8cm]{color/plot6.png}
+\end{tabular}
+\end{center}
+
+\newpage
+\section{root-based palette: variance of root modulus}
+
+\begin{center}
+\begin{tabular}{m{8cm}m{8cm}}
+\multicolumn{2}{c}{variance,rank} \\
+\includegraphics[width=8cm, height=8cm]{color/palette7.png} &
+\includegraphics[width=8cm, height=8cm]{color/plot7.png}
+\end{tabular}
+\end{center}
+
+\newpage
+\section{root-based palette: root overlap score}
+
+\begin{center}
+\begin{tabular}{m{8cm}m{8cm}}
+\multicolumn{2}{c}{discriminant\_4,rank} \\
+\includegraphics[width=8cm, height=8cm]{color/palette8.png} &
+\includegraphics[width=8cm, height=8cm]{color/plot8.png}
+\end{tabular}
+\end{center}
+
+\newpage
+\section{root-based palette: change in values}
+
+\begin{center}
+\begin{tabular}{m{8cm}m{8cm}}
+\multicolumn{2}{c}{H=centroid,roll,angle,rank} \\
+\includegraphics[width=8cm, height=8cm]{color/palette22.png} &
+\includegraphics[width=8cm, height=8cm]{color/plot22.png}
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tabular}{m{8cm}m{8cm}}
+\multicolumn{2}{c}{H=centroid.dist,roll,angle,rank} \\
+\includegraphics[width=8cm, height=8cm]{color/palette24.png} &
+\includegraphics[width=8cm, height=8cm]{color/plot24.png}
+\end{tabular}
+\end{center}
+
+
+\begin{center}
+\begin{tabular}{m{8cm}m{8cm}}
+\multicolumn{2}{c}{H=centroid.dist,roll,abs,rank} \\
+\includegraphics[width=8cm, height=8cm]{color/palette23.png} &
+\includegraphics[width=8cm, height=8cm]{color/plot23.png}
+\end{tabular}
+\end{center}
+
+\newpage
+\section{image palette}
+
+\begin{center}
+\begin{tabular}{m{8cm}m{8cm}}
+\multicolumn{2}{c}{andros1} \\
+\includegraphics[width=8cm, height=8cm]{color/palette9.png} &
+\includegraphics[width=8cm, height=8cm]{color/plot9.png}
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tabular}{m{8cm}m{8cm}}
+\multicolumn{2}{c}{andros2} \\
+\includegraphics[width=8cm, height=8cm]{color/palette10.png} &
+\includegraphics[width=8cm, height=8cm]{color/plot10.png}
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tabular}{m{8cm}m{8cm}}
+\multicolumn{2}{c}{andros3} \\
+\includegraphics[width=8cm, height=8cm]{color/palette11.png} &
+\includegraphics[width=8cm, height=8cm]{color/plot11.png}
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tabular}{m{8cm}m{8cm}}
+\multicolumn{2}{c}{andros4} \\
+\includegraphics[width=8cm, height=8cm]{color/palette12.png} &
+\includegraphics[width=8cm, height=8cm]{color/plot12.png}
+\end{tabular}
+\end{center}
+
+\end{document}
+

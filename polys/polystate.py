@@ -277,7 +277,7 @@ def dict2state(config):
     poly["cf_end"]=pu.cvec2json(np.poly(pu.random_coeff(n)))
     
     if isinstance(view.get("view"),str):
-        view['view']=ast.literal_eval(view['view'])
+        view['view']=ast.literal_eval(view['subview'])
 
     if poly.get('args.levels') is not None: 
         poly['levels']= sorted(map(float, poly['args.levels'].split(',')))

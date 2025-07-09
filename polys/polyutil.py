@@ -153,3 +153,23 @@ def ns2dict_required2(ns,dict,nkey,dkey):
     ns2dict_optional2(ns,dict,nkey,dkey)
     if dict[dkey] is None:
         raise KeyError(f"{dkey} not in dict")
+
+
+#######################################
+# grouped function
+#######################################
+
+def group_apply(roots, starts, func):
+    # Assume starts = [0, a, b, ..., N] so we return len(starts) items
+    ends = np.append(starts[1:], len(roots))  # so last group ends at len(roots)
+    return np.array([
+        func(roots[starts[i]:ends[i]]) for i in range(len(starts))
+    ])
+
+def group_apply2( x, y, starts, func):
+    assert x.shape == y.shape
+    ends = np.append(starts[1:], len(x))  # so last group ends at len(roots)
+    return np.array([
+        func(x[starts[i]:ends[i]],y[starts[i]:ends[i]]) for i in range(len(starts))
+    ])
+

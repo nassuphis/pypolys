@@ -140,7 +140,6 @@ if colorization_method==3:
     z_sum=np.add.reduceat(z,starts)-z_all_sum
     z_mean=z_sum*denomi
 
-   
     r_sum=np.add.reduceat(r,starts)-r_all_sum
     r_mean=r_sum*denomi
 
