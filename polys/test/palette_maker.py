@@ -88,10 +88,8 @@ def load_polyres():
 def polyres_roots():
     return polyres["r"]
 
-def polyres_broadcast(x):
-    H = np.zeros((polyres["height"],polyres["width"]),dtype=np.complex64)
-    H[polyres["i"],polyres["j"]] = x[polyres['gbi']] 
-    return H
+
+
 
 
 def polyres_centroid():
@@ -342,7 +340,7 @@ def rank(H,a):
     bc = ne.evaluate(a[2]) if len(a)>2 else 256
     hist, bins = np.histogram(H.flatten(), bins=int(bc))
     cdf = np.cumsum(hist>0)
-    cdf =  (hi-lo) * cdf / cdf[-1] + lo # normalize to [0, 1]
+    cdf =  (hi-lo) * cdf / cdf[-1] + lo # normalize to [lo, hi]
     img_eq = np.interp(H.flatten(), bins[:-1], cdf)
     return img_eq.reshape(H.shape)
 
@@ -447,6 +445,10 @@ def wavefield(H,a):
     v = ne.evaluate(e,{"x":x,"y":y})
     return v
 
+def times(H,a):
+    fac = float(a[0]) if len(a)>0 else 1.0
+    return H*fac
+
 def wavefield3(H,a):
     afr = ne.evaluate(a[0]) if len(a)>0 else params["afr"]
     r = np.hypot(norm(H.real) - 0.5, norm(H.imag) - 0.5)
@@ -485,7 +487,7 @@ def subtract(x):
     return x-stack.pop()
 
 def mult(x):
-    return x+stack.pop()
+    return x*stack.pop()
 
 def multiply_and_clip_to_one(H,a):
     afr = ne.evaluate(a[0]) if len(a)>0 else params["afr"]
@@ -522,15 +524,41 @@ def ebkr(t):
     y_new = (y01 + shift) / 2
     return x_new + 1j * y_new
 
+def coeff2(z):
+   return z.real + z.imag + 1j*(z.real * z.imag)
+
+def coeff3(z):
+  top = np.divide(1, z.real + 2, out=np.zeros_like(z.real), where=(z.real + 2)!=0)
+  bot = np.divide(1, z.imag + 2, out=np.zeros_like(z.real), where=(z.imag + 2)!=0)
+  return top + 1j * bot
+
+def coeff3a(z):
+  top = np.divide(1, z.real + 1, out=np.zeros_like(z.real), where=(z.real + 1)!=0)
+  bot = np.divide(1, z.imag + 1, out=np.zeros_like(z.real), where=(z.imag + 1)!=0)
+  return top + 1j * bot
+
+def coeff4(z):
+  return np.cos(z.real) + 1j * np.sin(z.imag)
+
+def coeff5(z):
+  top = np.divide(1, z.real, out=np.zeros_like(z.real), where=(z.real)!=0)
+  bot = np.divide(1, z.imag, out=np.zeros_like(z.real), where=(z.imag)!=0)
+  return z.real + bot + 1j * ( z.imag + top )
+
+def coeff5a(z):
+  top = np.divide(1, z.real, out=np.zeros_like(z.real), where=(z.real)!=0)
+  bot = np.divide(1, z.imag, out=np.zeros_like(z).real, where=(z.imag)!=0)
+  return z.real + top + 1j * ( z.imag + bot )
+
 def coeff6(z):
   t1 = z.real
   t2 = z.imag
   num1 = t1**3 + 1j
   den1 = t1**3 - 1j
-  val1 = num1 / den1
+  val1 = np.where(abs(den1)>1e-10,num1,0) / np.where(abs(den1)>1e-10,den1,1)
   num2 = t2**3 + 1j
   den2 = t2**3 - 1j
-  val2 = num2 / den2
+  val2 = np.where(abs(den2)>1e-10,num2,0) / np.where(abs(den2)>1e-10,den2,1)
   return val1 + 1j *val2 
 
 def coeff7(z):
@@ -538,32 +566,32 @@ def coeff7(z):
   t2 = z.imag
   top1  = t1 + np.sin(t1)
   bot1  = t1 + np.cos(t1)
-  val1  = top1 / bot1
+  val1 = np.where(abs(bot1)>1e-10,top1,0) / np.where(abs(bot1)>1e-10,bot1,1)
   top2  = t2 + np.sin(t2)
   bot2  = t2 + np.cos(t2)
-  val2  = top2 / bot2
+  val2 = np.where(abs(bot2)>1e-10,top2,0) / np.where(abs(bot2)>1e-10,bot2,1)
   return val1 + 1j * val2
     
 def coeff8(z): 
-  t1 = z.real
-  t2 = z.imag
-  top1  = t1 + np.sin(t2)
-  bot1  = t2 + np.cos(t1)
-  val1  = top1 / bot1
-  top2  = t2 + np.sin(t1)
-  bot2  = t1 + np.cos(t2)
-  val2  = top2 / bot2
-  return val1 + 1j * val2
+    t1 = z.real
+    t2 = z.imag
+    top1  = t1 + np.sin(t2)
+    bot1  = t2 + np.cos(t1)
+    val1 = np.where(abs(bot1)>1e-10,top1,0) / np.where(abs(bot1)>1e-10,bot1,1)
+    top2  = t2 + np.sin(t1)
+    bot2  = t1 + np.cos(t2)
+    val2 = np.where(abs(bot2)>1e-10,top2,0) / np.where(abs(bot2)>1e-10,bot2,1)
+    return val1 + 1j * val2
 
 def coeff9(z):
     t1 = z.real
     t2 = z.imag
     top1  = t1*t1 + 1j * t2
     bot1  = t1*t1 - 1j * t2
-    val1  = top1 / bot1
+    val1 = np.where(abs(bot1)>1e-10,top1,0) / np.where(abs(bot1)>1e-10,bot1,1)
     top2  = t2*t2 + 1j * t1
     bot2  = t2*t2 - 1j * t1
-    val2  = top2 / bot2
+    val2 = np.where(abs(bot2)>1e-10,top2,0) / np.where(abs(bot2)>1e-10,bot2,1)
     return val1 + 1j * val2
 
 def coeff10(z):
@@ -571,11 +599,12 @@ def coeff10(z):
     t2 = z.imag
     top1  = t1**4 - t2
     bot1  = t1**4 + t2
-    val1  = top1 / bot1
+    val1 = np.where(abs(bot1)>1e-10,top1,0) / np.where(abs(bot1)>1e-10,bot1,1)
     top2  = t2**4 - t1
     bot2  = t2**4 + t1
-    val2  = top2 / bot2
+    val2 = np.where(abs(bot2)>1e-10,top2,0) / np.where(abs(bot2)>1e-10,bot2,1)
     return val1 + 1j * val2
+ 
 
 def coeff11(z):
     t1 = z.real
@@ -623,6 +652,11 @@ def showstats(x, a):
     print(f"{np.sum(np.abs(x) > 0)} / {x.shape[0] * x.shape[1]}")
     return x
 
+def ratio(x,y):
+    num = np.where(abs(y)>1e-10,x,0)
+    den = np.where(abs(y)>1e-10,y,1)
+    return num/den
+
 hfrm_pipeline = "clip"
 sfrm_pipeline = "one"
 vfrm_pipeline = "one"
@@ -631,12 +665,10 @@ row_mat, col_mat = np.indices(((res,res)))
 H = np.zeros((res,res),dtype=np.float32)
 S = np.ones((res,res),dtype=np.float32) 
 V = np.ones((res,res),dtype=np.float32) 
-pfrm_functions = {
-    "none": lambda x,a: x,
-    "present" : lambda x,a: polyres["has_result"],
+
+pfrm_constants = {
     "zero": lambda x,a: np.zeros(x.shape),
     "one": lambda x,a: np.ones(x.shape),
-    "value": lambda x,a: np.full_like(V,ne.evaluate(a[0]) if len(a)>0 else 1.0),
     "red":         lambda x,a: np.full_like(x, 0.00),
     "orange":      lambda x,a: np.full_like(x, 0.08),
     "yellow":      lambda x,a: np.full_like(x, 0.17),
@@ -649,13 +681,235 @@ pfrm_functions = {
     "violet":      lambda x,a: np.full_like(x, 0.75),
     "magenta":     lambda x,a: np.full_like(x, 0.83),
     "rose":        lambda x,a: np.full_like(x, 0.92),
-    "get": lambda x,a: np.full_like(x,params[a[0]] if len(a)>0 else 0),
+    "value":       lambda x,a: np.full_like(V,ne.evaluate(a[0]) if len(a)>0 else 0.0),
+}
+
+pfrm_inputs = {
     "rows": lambda x,a: row_mat,
     "cols": lambda x,a: col_mat,
     "idx": lambda x,a: col_mat + 1j * row_mat,
-    "x": lambda x,a: 2*(norm(col_mat)-0.5),
-    "y": lambda x,a: 2*(norm(row_mat)-0.5),
+    "j": lambda x,a: 2*(norm(col_mat)-0.5),
+    "i": lambda x,a: 2*(norm(row_mat)-0.5),
     "z": lambda x,a: 2*(norm(col_mat)-0.5)+1j*2*(norm(row_mat)-0.5),
+    "r": lambda x,a: polyres["r"],
+    "roots": lambda x,a: polyres["r"],
+}
+
+pfrm_transforms_conformal = {
+    "wbl": lambda x,a: ratio(x + 1j*np.sin(x),x + 1j*np.cos(x)),
+    "tws": lambda x,a: ratio( np.exp(x) - 1, np.exp(x) * 1j + 1),
+    "plk": lambda x,a: ratio(np.sin(1j+x),np.cos(1j+x)),
+    "zzg": lambda x,a: ratio(x + 2,x + 2),
+    "ltl": lambda x,a: ratio(x - 2j,x + 2j),
+    "kth": lambda x,a: ratio(1 + x,1j - x),
+    "jkw": lambda x,a: x+ratio(1,x),
+}
+
+pfrm_transforms_poly = {
+    "coeff2": lambda x,a: coeff2(x),
+    "coeff3": lambda x,a: coeff3(x),
+    "coeff3a": lambda x,a: coeff3a(x),
+    "coeff4": lambda x,a: coeff4(x),
+    "coeff5": lambda x,a: coeff5(x),
+    "coeff5a": lambda x,a: coeff5a(x),
+    "coeff6": lambda x,a: coeff6(x),
+    "coeff7": lambda x,a: coeff7(x),
+    "coeff8": lambda x,a: coeff8(x),
+    "coeff9": lambda x,a: coeff9(x),
+    "coeff10": lambda x,a: coeff10(x),
+    "coeff11": lambda x,a: coeff11(x),
+    "coeff12": lambda x,a: coeff12(x),
+}
+
+pfrm_clip = {
+    "clip": lambda x,a: hue_clip(x,a),
+    "cci": lambda x,a: in_circle(x,a),
+    "cco": lambda x,a: out_circle(x,a),
+    "csi": lambda x,a: in_square(x,a),
+    "cso": lambda x,a: out_square(x,a),
+    "css": lambda x,a: square_strip(x,a),
+    "ccs": lambda x,a: anulus(x,a),
+    "above": lambda x,a: above(x,a),
+    "below": lambda x,a: below(x,a),
+}
+
+pfrm_stack = {
+    "push": lambda x,a: push(x),
+    "pushv": lambda x,a: push(np.full_like(x,params[a[0]])),
+    "pop": lambda x,a: pop(),
+    "add": lambda x,a: add(x),
+    "subtract": lambda x,a: subtract(x),
+    "mult": lambda x,a: mult(x),
+}
+
+#######################################
+#
+# grouping
+#
+#######################################
+
+def polyres_pack(x):
+    if x.shape != polyres["i"].shape:
+        raise ValueError(f"polyres_pack: x.shape = {x.shape}, i.shape = {polyres['i'].shape}")
+    if x.shape != polyres["j"].shape:
+        raise ValueError(f"polyres_pack: x.shape = {x.shape}, j.shape = {polyres['j'].shape}")
+    H = np.zeros((polyres["height"],polyres["width"]),dtype=np.complex64)
+    H[polyres["i"],polyres["j"]] = x 
+    return H
+
+def polyres_ungroup(x):
+    if x.shape != polyres["starts"].shape:
+        raise ValueError(f"polyres_ungroup: x.shape = {x.shape}, starts.shape = {polyres['starts'].shape}")
+    H = np.zeros((polyres["height"],polyres["width"]),dtype=np.complex64)
+    H[polyres["i"],polyres["j"]] = x[polyres['gbi']] 
+    return H
+
+def principal_axis_lengths(x):
+    pts = np.column_stack((x.real, x.imag))
+    pts -= pts.mean(axis=0)
+    cov = np.cov(pts, rowvar=False)
+    evals, evecs = np.linalg.eigh(cov)  # always sorted ascending
+    minor, major = np.sqrt(evals)
+    angle = np.arctan2(evecs[1, 1], evecs[0, 1])  # angle of major axis in radians
+    return major, minor, angle
+
+def principal_major_vec(x):
+    major, minor, angle = principal_axis_lengths(x)
+    principal_major_vector = major * np.exp(1j * angle)
+    return principal_major_vector
+
+def principal_minor_vec(x):
+    major, minor, angle = principal_axis_lengths(x)
+    principal_minor_vector = minor * np.exp(1j * (angle+np.pi/2))
+    return principal_minor_vector
+
+def eccentricity(x):
+    major, minor, angle = principal_axis_lengths(x)
+    ecc = (1-ratio(minor,major)**2)**0.5
+    return ecc
+
+gfuns = {
+    "centroid": lambda x: np.mean(x),
+    "centroid.angle": lambda x: np.angle(np.mean(x)),
+    "centroid.abs": lambda x: np.abs(np.mean(x)),
+    "mean.abs": lambda x: np.mean(np.abs(x-np.mean(x))),
+    "max.abs": lambda x: np.max(np.abs(x-np.mean(x))),
+    "min.abs": lambda x: np.min(np.abs(x-np.mean(x))),
+    "range.abs": lambda x: np.ptp(np.abs(x-np.mean(x))),
+    "skew.abs": lambda x: np.mean((np.abs(x - np.mean(x)))**3),
+    "kurt.abs": lambda x: np.mean((np.abs(x - np.mean(x)))**4),
+    "mean.angle": lambda x: np.mean(np.angle(x-np.mean(x))),
+    "max.angle": lambda x: np.max(np.angle(x-np.mean(x))),
+    "min.angle": lambda x: np.min(np.angle(x-np.mean(x))),
+    "range.angle": lambda x: np.ptp(np.angle(x-np.mean(x))),
+    "skew.angle": lambda x: np.mean((np.angle(x - np.mean(x)))**3),
+    "kurt.angle": lambda x: np.mean((np.angle(x - np.mean(x)))**4),
+    "bbox": lambda x: np.ptp(x.real)*np.ptp(x.imag),
+    "principal.angle": lambda x: principal_axis_lengths(x)[2],
+    "principal.major.vec": lambda x: principal_major_vec(x),
+    "principal.minor.vec": lambda x: principal_minor_vec(x),
+    "principal.major.abs": lambda x: principal_axis_lengths(x)[0],
+    "principal.minor.abs": lambda x: principal_axis_lengths(x)[1],
+    "principal.angle": lambda x: principal_axis_lengths(x)[2],
+    "eccentricity": lambda x: eccentricity(x),
+}
+
+def polyres_group(x,a):
+    if x.shape != polyres["gbi"].shape:
+        raise ValueError(f"polyres_group: x.shape = {x.shape}, gbi.shape = {polyres['gbi'].shape}")
+    if len(a)<1:
+        return polys.polyutil.group_apply(x,polyres["starts"],np.mean) 
+    fname = a[0]
+    return polys.polyutil.group_apply(x,polyres["starts"],gfuns[fname]) 
+
+pfrm_cast = {
+    "pack" : lambda x,a: polyres_pack(x),
+    "ungroup": lambda x,a: polyres_ungroup(x),
+    "group": lambda x,a: polyres_group(x,a),
+}
+
+#######################################
+#
+# simple functions
+#
+#######################################
+
+pfrm_fun = {
+    "eval": lambda x,a: ne.evaluate(a[0],{"x":x.real,"y":x.imag}),
+    "abs": lambda x,a: np.abs(x),
+    "re": lambda x,a: x.real,
+    "im": lambda x,a: x.imag,
+    "re+im": lambda x,a: x.imag+x.real,
+    "re-im": lambda x,a: x.imag-x.real,
+    "re*im": lambda x,a: x.imag*x.real,
+    "re/im": lambda x,a: x.imag/x.real,
+    "sin": lambda x,a: np.sin(x),
+    "cos": lambda x,a: np.cos(x),
+    "exp": lambda x,a: np.exp(1j*2*np.pi*x),
+    "log": lambda x,a: np.log(x),
+    "1-x": lambda x,a: 1-x,
+    "1j*x": lambda x,a: 1j*x,
+    "trans": lambda x,a: np.transpose(x),
+    "uc": lambda x,a: x.real*np.exp(1j*2*np.pi*x.imag),
+    "rth": lambda x,a: x.imag*np.exp(1j*2*np.pi*x.real),
+    "pow": lambda x,a: x**(float(a[0]) if len(a)>0 else 2.0),
+    "times": lambda x,a:  x*float(a[0]) if len(a)>0 else 1.0,
+    "plus": lambda x,a:  x+float(a[0]) if len(a)>0 else 1.0,
+}
+
+#######################################
+#
+# debug
+#
+#######################################
+
+def showstats(x, a):
+    print(f"result x,y shape : {polyres['x'].shape}, {polyres['y'].shape}")
+    print(f"result i,j shape : {polyres['i'].shape}, {polyres['j'].shape}")
+    print(f"result z,r shape : {polyres['z'].shape}, {polyres['r'].shape}")
+    print(f"result r dtype {polyres['r'].dtype}")
+    print(f"result r min {np.min(np.abs(polyres['r']))} - max {np.max(np.abs(polyres['r']))}")
+    print(f"result z min {np.min(np.abs(polyres['z']))} - max {np.max(np.abs(polyres['z']))}")
+    print(f"result i min {np.min(np.abs(polyres['i']))} - max {np.max(np.abs(polyres['i']))}")
+    print(f"result j min {np.min(np.abs(polyres['j']))} - max {np.max(np.abs(polyres['j']))}")
+    print(f"result x min {np.min(np.abs(polyres['x']))} - max {np.max(np.abs(polyres['x']))}")
+    print(f"result y min {np.min(np.abs(polyres['y']))} - max {np.max(np.abs(polyres['y']))}")
+    print(f"input shape: {x.shape}")
+    print(f"input dtype: {x.dtype}")
+    print(f"input finite: {np.sum(np.isfinite(x))} ({np.round(100 * np.isfinite(x).sum() / x.size,2)}%)")
+    print(f"input nz: {np.sum(np.abs(x)>0)}  ({np.round(100 * np.sum(abs(x)>0).sum() / x.size,2)}%)")
+    print(f"input: min {np.min(x)} - max: {np.max(x)}")
+    print(f"input q01: {np.quantile(x,0.01)}")
+    print(f"input q25: {np.quantile(x,0.25)}")
+    print(f"input q50: {np.quantile(x,0.50)}")
+    print(f"input q75: {np.quantile(x,0.75)}")
+    print(f"input q99: {np.quantile(x,0.99)}")
+    nz = x[np.abs(x) > 0]
+    if nz.size == 0:
+        print("No non-zero values.")
+    else:
+        print(f"{np.min(nz)} - {np.median(nz)} - {np.max(nz)}")
+    print(f"{np.sum(np.abs(x) > 0)} / {x.shape[0] * x.shape[1]}")
+    return x
+
+pfrm_debug = {
+    "showstats" : lambda x,a : showstats(x,a),
+}
+
+#######################################
+#
+#
+#
+#######################################
+
+pfrm_other = {
+    "none": lambda x,a: x,
+    "present" : lambda x,a: polyres["has_result"],
+    
+   
+    
+    "get": lambda x,a: np.full_like(x,params[a[0]] if len(a)>0 else 0),
+    
     "centroid": lambda x,a: polyres_centroid(),
     "direction": lambda x,a: direction(x,a),
     "blurr": lambda x,a: blurr(x,a),
@@ -678,78 +932,45 @@ pfrm_functions = {
     "arange": lambda x,a: polyres_arange(),
     "discriminant": lambda x,a: polyres_discriminant(a),
     "mc": lambda x,a: multiply_and_clip_to_one(x,a),
+    "times": lambda x,a: times(x,a),
     "norm": lambda x,a: norm_scale(x,a),
     "heq": lambda x,a: heq(x,a),
     "rank": lambda x,a: rank(x,a),
     "map": lambda x,a: map(x,a),
-    "trans": lambda x,a: np.transpose(x),
-    "uc": lambda x,a: x.real*np.exp(1j*2*np.pi*x.imag),
-    "rth": lambda x,a: x.imag*np.exp(1j*2*np.pi*x.real),
-    "pow": lambda x,a: x**(ne.evaluate(a[0]) if len(a)>0 else params["exp"]),
-    "sin": lambda x,a: np.sin(x),
-    "cos": lambda x,a: np.cos(x),
-    "exp": lambda x,a: np.exp(1j*2*np.pi*x),
-    "log": lambda x,a: np.log(x),
-    "wbl": lambda x,a: (x + np.sin(x)) / (x + np.cos(x)),
-    "tws": lambda x,a: (np.exp(x) - 1) / (np.exp(x) + 1),
-    "plk": lambda x,a: np.sin(x) / np.cos(x),
-    "zzg": lambda x,a: (x + 2) / (x - 2),
-    "ltl": lambda x,a: (x - 2j) / (x + 2j),
-    "kth": lambda x,a: np.where(abs(1-x)>1e-10,(1 + x) / (1 - x),0),
-    "jkw": lambda x,a: np.where(abs(x)>1e-10,x + 1/x,0),
+    
+    
+    
+    
     "bkr": lambda x,a: bkr(x),
     "ebkr": lambda x,a: ebkr(x),
-    "coeff2": lambda x,a: (x.real + x.imag) + 1j * ( x.imag * x.real),
-    "coeff3": lambda x,a: 1/(x.real+arg(a,0,"xc"))+1j/((1/(x.imag+arg(a,1,"yc")))),
-    "coeff5": lambda x,a: (x.real + (1/x.imag)) + 1j * ( x.imag + (1/x.real)),
-    "coeff5a": lambda x,a: (x.real + (1/x.real)) + 1j * ( x.imag + (1/x.imag)),
-    "coeff6": lambda x,a: coeff6(x),
-    "coeff7": lambda x,a: coeff7(x),
-    "coeff8": lambda x,a: coeff8(x),
-    "coeff9": lambda x,a: coeff9(x),
-    "coeff10": lambda x,a: coeff10(x),
-    "coeff11": lambda x,a: coeff11(x),
-    "coeff12": lambda x,a: coeff12(x),
-    "phase": lambda x,a: (np.angle(x)*arg(a,0,"afr")/np.pi+1.0)/2,
-    "angle": lambda x,a: (arg(a,0,"afr")*np.angle(x)/np.pi+1.0)/2,
-    "abs": lambda x,a: np.abs(x),
-    "re": lambda x,a: x.real,
-    "im": lambda x,a: x.imag,
-    "re+im": lambda x,a: x.imag+x.real,
-    "re-im": lambda x,a: x.imag-x.real,
-    "re*im": lambda x,a: x.imag*x.real,
-    "re/im": lambda x,a: x.imag/x.real,
-    "eval": lambda z,a: ne.evaluate(a[0],{"x":z.real,"y":z.imag}),
-    "sum": lambda x,a: x.imag+x.real,
-    "clip": lambda x,a: hue_clip(x,a),
-    "cci": lambda x,a: in_circle(x,a),
-    "cco": lambda x,a: out_circle(x,a),
-    "csi": lambda x,a: in_square(x,a),
-    "cso": lambda x,a: out_square(x,a),
-    "css": lambda x,a: square_strip(x,a),
-    "ccs": lambda x,a: anulus(x,a),
-    "above": lambda x,a: above(x,a),
-    "below": lambda x,a: below(x,a),
+   
+    "phase": lambda x,a: arg(a,0,"afr")*(np.angle(x)/np.pi+1.0)/2,
+    "angle": lambda x,a: arg(a,0,"afr")*(np.angle(x)/np.pi+1.0)/2,
+    
     "nz": lambda x,a: nz(x,a),
     "wf": lambda x,a: wavefield(x,a),
     "wf3": lambda x,a: wavefield3(x,a),
     "nglf": lambda x,a: anglefield(x,a),
     "absf": lambda x,a: absfield(x,a),
-    "inv": lambda x,a: 1-x,
-    "push": lambda x,a: push(x),
-    "pushv": lambda x,a: push(np.full_like(x,params[a[0]])),
-    "pop": lambda x,a: pop(),
-    "add": lambda x,a: add(x),
-    "subtract": lambda x,a: subtract(x),
-    "mult": lambda x,a: mult(x),
-    "times1j": lambda x,a: 1j*x,
+   
     "roll": lambda x,a: xshiftdiff(x),
-    "showstats" : lambda x,a : showstats(x,a),
+   
     "H" : lambda x,a : H,
     "S" : lambda x,a : S,
     "V" : lambda x,a : V,
 }
   
+pfrm_functions = {}
+pfrm_functions.update(pfrm_constants)
+pfrm_functions.update(pfrm_inputs)
+pfrm_functions.update(pfrm_transforms_conformal)
+pfrm_functions.update(pfrm_transforms_poly)
+pfrm_functions.update(pfrm_clip)
+pfrm_functions.update(pfrm_stack)
+pfrm_functions.update(pfrm_cast)
+pfrm_functions.update(pfrm_fun)
+pfrm_functions.update(pfrm_debug)
+pfrm_functions.update(pfrm_other)
 
 def pfrm(H,pipeline):
 

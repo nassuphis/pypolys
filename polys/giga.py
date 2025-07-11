@@ -760,7 +760,6 @@ def poly_giga_41(t1, t2):
             size = len(locals().get("cf", []))
         return np.zeros(size, dtype=complex)
 
-
 def poly_giga_42(t1, t2):
     try:
         cf = np.zeros(50, dtype=complex)
@@ -770,11 +769,8 @@ def poly_giga_42(t1, t2):
         cf[24] = np.exp(1j * (t1 - t2)) + 10 * t1**2
         cf[44] = 200 * np.sin(t1 + t2) + 1j * np.cos(t1 - t2)
         return cf.astype(np.complex128)
-    except Exception:
-        size = locals().get("n")
-        if size is None:
-            size = len(locals().get("cf", []))
-        return np.zeros(size, dtype=complex)
+    except:
+        return np.zeros(50, dtype=complex)
 
 
 def poly_giga_43(t1, t2):
