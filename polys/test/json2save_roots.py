@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 # test/cli2json.py test123 -x unit_circle,coeff7 -p poly_362 -z rev -s solve  | test/json2plot.py 10000
-
+import mlx.core as mx
 import polys
 import polys.polystate as ps
 import sys
@@ -13,6 +13,54 @@ import os
 
 
 sq = 3.0
+
+#######################################
+#
+# mlx sort_unique
+#
+#######################################
+
+def mlx_which(x: mx.array,*,stream=mx.gpu):
+     if x.size == 0:
+        return mx.zeros((0,), dtype=mx.int32, stream=stream)
+     xb  = x.astype(mx.int32)
+     xb[0] = 0
+     ar = mx.arange(x.size, dtype=mx.int32, stream=stream)
+     xi = mx.cummax(ar * xb)
+     cum = mx.cumsum(xb, stream=stream)
+     maxi = cum[-1].item() + 1
+     idx = mx.zeros((maxi,), dtype=mx.int32, stream=stream)
+     idx[cum]=xi
+     if x[0]:
+        return idx
+     return idx[1:]
+
+def sort_unique_uint16x4_mlx(x: np.array,*,stream=mx.gpu): 
+    if  x.ndim != 2 or x.shape[1] != 4:
+        raise ValueError("expect (N,4) uint16 array")
+    x_u16 = x.view(np.uint16)
+    arr = mx.array(x_u16, dtype=mx.uint16)
+    a64  = arr.astype(mx.uint64)
+    keys = (a64[:, 0] << 48) | (a64[:, 1] << 32) | (a64[:, 2] << 16) |  a64[:, 3]
+    order       = mx.argsort(keys, axis=0, stream=stream)
+    rows_sorted = arr[order]
+    keys_sorted = keys[order]
+    first = mx.concatenate(
+        [mx.array([True], dtype=mx.bool_), keys_sorted[1:] != keys_sorted[:-1]],
+        axis=0
+    )
+    idx = mlx_which(first, stream=stream)
+    unique_rows = rows_sorted[idx]
+    mx.eval(unique_rows)
+    result = np.array(unique_rows)
+    return result
+
+#######################################
+#
+# utility functions
+#
+#######################################
+
 
 def make_shm(rows,cols,type):
     shm = SharedMemory(
@@ -93,7 +141,7 @@ def sample_chunk(args):
         if worker_id == 0:
             if show_msg>=write_ptr:
                 print(f"{worker_id} : {round(100*(write_ptr-start)/(end-start),1)}")
-                show_msg=write_ptr+(end-start)/100
+                show_msg=write_ptr+(end-start)/10
 
         if add_sample(0.0,0.0)<=0:
             break
@@ -145,6 +193,8 @@ if __name__ == "__main__":
     shm_result.close()
     shm_result.unlink()
 
+    #print("Sort_Unique: result_copy")
+    #result_copy=sort_unique_uint16x4_mlx(result_copy)
     print("Saving: myresult.npz")
     np.savez_compressed('myresult.npz', result_copy)
 

@@ -4,6 +4,7 @@ import numpy as np
 import json
 import re
 import numexpr as ne
+import functools
 
 #######################################
 # random coefficient
@@ -173,3 +174,29 @@ def group_apply2( x, y, starts, func):
         func(x[starts[i]:ends[i]],y[starts[i]:ends[i]]) for i in range(len(starts))
     ])
 
+#######################################
+#
+# pipeline composition
+#
+#######################################
+
+def compose_nest(*funcs):
+    if not funcs:
+        return lambda x: x  # Identity for empty pipeline
+    return functools.reduce(lambda f, g: lambda x: f(g(x)), reversed(funcs))
+
+def make_pipeline(txt,dict):
+    pipeline_steps = []
+    for step in txt.split(','):
+        parts = step.split('_')
+        op_name = parts[0]
+        op_args = parts[1:]
+        if op_name not in dict:
+            err = f"Unknown operation: {op_name}"
+            raise ValueError(err)
+        op_func = dict[op_name]
+        pipeline_steps.append((op_func, op_args))
+
+    bound_funcs = [functools.partial(op_func, a=op_args) for op_func, op_args in pipeline_steps]
+    pipeline = compose_nest(*bound_funcs)
+    return pipeline

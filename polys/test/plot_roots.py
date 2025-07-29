@@ -80,7 +80,7 @@ iminator = np.where(ipix,icount,1)
 
 
 # palete hue
-colorization_method=3
+colorization_method=2
 print(f"colorization: {colorization_method}")
 if colorization_method==1:
     # hue

@@ -39,7 +39,7 @@ palette_img =iio.imread("palette.png")
 palette = palette_img[..., :3].astype(np.uint8)
 
 res_z = np.load('myresult.npz')
-results = res_z['arr_0']
+results = (res_z['arr_0']).astype(np.uint16)
 i = results[:,0]
 j = results[:,1]
 x = results[:,2]

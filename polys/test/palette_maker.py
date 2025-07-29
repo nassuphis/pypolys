@@ -1,24 +1,62 @@
 #!/usr/bin/env python
-
+import mlx.core as mx
 import numpy as np
 import pyvips
 import argparse
 import functools
+from functools import partial, reduce
 import numexpr as ne
 import polys
 import polys.polystate
 import polys.polyutil
 import cv2
 from scipy import ndimage, spatial
+from scipy.stats import rankdata
 
-type_choices = [
-        "h",
-        "hs",
-        "abs",
-        "ngl",
-        "trigh",
-        "trighs",
-    ]
+#######################################
+#
+# pipeline composition
+#
+#######################################
+
+def compose_nest(*funcs):
+    if not funcs:
+        return lambda x: x  # Identity for empty pipeline
+    return functools.reduce(lambda f, g: lambda x: f(g(x)), reversed(funcs))
+
+def make_pipeline(txt,dict):
+    pipeline_steps = []
+    for step in txt.split(','):
+        parts = step.split('_')
+        op_name = parts[0]
+        op_args = parts[1:]
+        if op_name not in dict:
+            raise ValueError(f"Unknown operation: {op_name}")
+        op_func = dict[op_name]
+        pipeline_steps.append((op_func, op_args))
+
+    bound_funcs = [functools.partial(op_func, a=op_args) for op_func, op_args in pipeline_steps]
+    pipeline = compose_nest(*bound_funcs)
+    return pipeline
+
+#######################################
+#
+# state
+#
+#######################################
+
+result_fn = 'myresult.npz'
+results_pct = 10 # more than 1
+sort_unique = False
+use_mlx = False
+hfrm_pipeline = "clip"
+sfrm_pipeline = "one"
+vfrm_pipeline = "one"
+res = 1000
+row_mat, col_mat = np.indices(((res,res)))
+H = np.zeros((res,res),dtype=np.float32)
+S = np.ones((res,res),dtype=np.float32) 
+V = np.ones((res,res),dtype=np.float32) 
 
 params = {
     "rfr":50.0,
@@ -47,10 +85,92 @@ polyres = {
 
 }
 
-def load_polyres():
-    results_z = np.load('myresult.npz')
-    results = results_z['arr_0']
+#######################################
+#
+# mlx sort_unique
+#
+#######################################
 
+def mlx_which(x: mx.array,*,stream=mx.gpu):
+     if x.size == 0:
+        return mx.zeros((0,), dtype=mx.int32, stream=stream)
+     xb  = x.astype(mx.int32)
+     xb[0] = 0
+     ar = mx.arange(x.size, dtype=mx.int32, stream=stream)
+     xi = mx.cummax(ar * xb)
+     cum = mx.cumsum(xb, stream=stream)
+     maxi = cum[-1].item() + 1
+     idx = mx.zeros((maxi,), dtype=mx.int32, stream=stream)
+     idx[cum]=xi
+     if x[0]:
+        return idx
+     return idx[1:]
+
+def sort_unique_uint16x4_mlx(x: np.array,*,stream=mx.gpu): 
+    if  x.ndim != 2 or x.shape[1] != 4:
+        raise ValueError("expect (N,4) uint16 array")
+    x_u16 = x.view(np.uint16)
+    arr = mx.array(x_u16, dtype=mx.uint16)
+    a64  = arr.astype(mx.uint64)
+    keys = (a64[:, 0] << 48) | (a64[:, 1] << 32) | (a64[:, 2] << 16) |  a64[:, 3]
+    order       = mx.argsort(keys, axis=0, stream=stream)
+    rows_sorted = arr[order]
+    keys_sorted = keys[order]
+    first = mx.concatenate(
+        [mx.array([True], dtype=mx.bool_), keys_sorted[1:] != keys_sorted[:-1]],
+        axis=0
+    )
+    idx = mlx_which(first, stream=stream)
+    unique_rows = rows_sorted[idx]
+    mx.eval(unique_rows)
+    result = np.array(unique_rows)
+    return result
+
+#######################################
+#
+# utility functions
+#
+#######################################
+
+def sarg(a,i,v):
+    return a[i] if len(a)>i else v
+
+def iarg(a,i,v):
+    return int(a[i]) if len(a)>i else v
+
+def farg(a,i,v):
+    return float(a[i]) if len(a)>i else v
+
+def carg(a,i,v):
+    return complex(a[i]) if len(a)>i else v
+
+def ratio(x,y):
+    num = np.where(abs(y)>1e-10,x,0)
+    den = np.where(abs(y)>1e-10,y,1)
+    return num/den
+
+#######################################
+#
+# load data
+#
+#######################################
+
+def load_polyres():
+    results_z = np.load(result_fn)
+    results = (results_z['arr_0']).astype(np.uint16)
+    if results_pct<1:
+        end = int(results.shape[0]*results_pct)
+        print(f"size: {results.shape[0]:,}, loading: {end:,} {results.dtype}")
+        results=results[:end,:]
+    if sort_unique:
+        if use_mlx:
+            print("using MLX de-dupe")
+            results = sort_unique_uint16x4_mlx(results)
+        else:
+            print("using NumPy de-dupe")
+            results = np.unique(results,axis=0)
+        print(f"de-duped to size: {results.shape[0]:,}")
+    #results = results_z['arr_0']
     height = results[:,0].max()+1
     width = results[:,1].max()+1
     polyres["result_height"] = height
@@ -62,7 +182,7 @@ def load_polyres():
     results[:,0] = pi
     results[:,1] = pj
 
-    print(f"{height}->{np.max(pi)+1}")
+    print(f"{height:,}->{np.max(pi)+1:,}")
 
     idx = np.lexsort((results[:,1], results[:,0]))
     results=results[idx,:]
@@ -80,27 +200,21 @@ def load_polyres():
     polyres["z"] = 2*(norm(polyres["i"])-0.5) + 2j*(norm(polyres["j"])-0.5) # parameters
     polyres["r"] = 2*(norm(polyres["x"])-0.5) + 2j*(norm(polyres["y"])-0.5) # roots
     H = np.zeros((res,res),dtype=np.float32)
-    H[polyres["i"],polyres["j"]]=1.0
-    polyres["has_result"] = H
-    print(f"results: {results.shape}")
+    np.add.at(H, (polyres["i"], polyres["j"]), 1.0)
+    polyres["haves"] = H > 0.0
+    polyres["havemany"] = H > 1.5
+    print(f"results: {results.shape[0]:,} by {results.shape[1]:,}")
     print(f"results: x type {polyres["x"].dtype} y type {polyres["y"].dtype}")
     return
 
-def polyres_roots():
-    return polyres["r"]
-
-def polyres_fill_havenots(x):
-    """
-    Replace every False cell with the value of the nearest True cell.
-    """
+def polyres_fill_havenots(x,a):
     # indices of the nearest True cell for every position
-    mask = polyres["has_result"] > 0.0
+    mask_name = a[0] if len(a)>0 else "haves"
+    mask = polyres[mask_name]
     idx = ndimage.distance_transform_edt(~mask,return_distances=False,return_indices=True)
     filled = x.copy()
     filled[~mask] = x[tuple(idx[:, ~mask])]
     return filled
-
-
 
 def polyres_centroid():
     H = np.zeros((polyres["height"],polyres["width"]),dtype=np.complex64)      
@@ -317,9 +431,25 @@ def norm(x):
     else:
         return x.astype(np.float32)
         
+def norm_clip(x,a):
+    qlo = float(a[0]) if len(a)>0 else 0
+    qhi = float(a[1]) if len(a)>1 else 1
+    if qlo<0 or qhi<0:
+        xc=x
+    else:
+        vlo, vhi = np.quantile(x,[qlo,qhi])
+        xc = np.clip(x,vlo,vhi)
+    max_x = np.max(xc)
+    min_x = np.min(xc)
+    if max_x-min_x>0:
+        nx = ((x-min_x)/(max_x-min_x)).astype(np.float32)
+        return nx
+    else:
+        return x.astype(np.float32)
+            
 def norm_scale(x,a):
-    h0 = ne.evaluate(a[0]) if len(a)>0 else 0
-    h1 = ne.evaluate(a[1]) if len(a)>1 else 1
+    h0 = float(a[0]) if len(a)>0 else 0
+    h1 = float(a[1]) if len(a)>1 else 1
     max_x = np.max(x)
     min_x = np.min(x)
     if max_x-min_x>0:
@@ -329,181 +459,100 @@ def norm_scale(x,a):
     else:
         return x.astype(np.float32)
 
+def greater(H,a):
+    val = float(a[0]) if len(a)>0 else 0.0
+    dir = float(a[1]) if len(a)>1 else 1.0
+    return np.where(dir*(H-val)>0,1.0,0.0)
 
+def equals(H,a):
+    val = float(a[0]) if len(a)>0 else 1.0
+    return np.where(np.abs(H-val)<1e-10,1.0,0.0)
 
 def nz(H,a):
-    tval = ne.evaluate(a[0]) if len(a)>0 else 1.0
-    fval = ne.evaluate(a[1]) if len(a)>1 else 0.0
-    return np.where(np.abs(H)>0,tval,fval)
+    true_val = float(a[0]) if len(a)>0 else 1.0
+    false_val = float(a[1]) if len(a)>1 else 0.0
+    thresh_val = float(a[2]) if len(a)>2 else 0.0
+    return np.where(np.abs(H)>thresh_val,true_val,false_val)
 
-def has_result(H):
-    hr = polyres["has_result"]
-    return H[hr>0.0]
+def haves(H):
+    hr = polyres["haves"]
+    return H[hr]
           
 def rank(H,a):
-    lo = ne.evaluate(a[0]) if len(a)>0 else 0.0
-    hi = ne.evaluate(a[1]) if len(a)>1 else 1.0
-    bc = ne.evaluate(a[2]) if len(a)>2 else 256
-    hist, bins = np.histogram(H.flatten(), bins=int(bc))
+    lo = float(a[0]) if len(a)>0 else 0.0
+    hi = float(a[1]) if len(a)>1 else 1.0
+    bc = int(a[2]) if len(a)>2 else 256
+    hist, bins = np.histogram(H.flatten(), bins=bc)
     cdf = np.cumsum(hist>0)
     cdf =  (hi-lo) * cdf / cdf[-1] + lo # normalize to [lo, hi]
     img_eq = np.interp(H.flatten(), bins[:-1], cdf)
     return img_eq.reshape(H.shape)
 
-def rank_has_result(H,a):
+def rank_haves(H,a):
    
-    Hr = has_result(H)
+    Hr = haves(H)
     i,j = np.indices(H.shape)
 
     lo = float(a[0]) if len(a)>0 else 0.0
     hi = float(a[1]) if len(a)>1 else 1.0
-    bc = float(a[2]) if len(a)>2 else 256
+    bc = int(a[2]) if len(a)>2 else 256
 
-    hist, bins = np.histogram(Hr, bins=int(bc))
+    hist, bins = np.histogram(Hr, bins=bc)
     cdf = np.cumsum(hist>0) # rank based
     cdf =  (hi-lo) * cdf / cdf[-1] + lo # normalize to [lo, hi]
     img_eq = np.interp(Hr, bins[:-1], cdf)
 
     res = np.zeros(H.shape)
-    res[has_result(i),has_result(j)] = img_eq
+    res[haves(i),haves(j)] = img_eq
     return res
 
 
 def heq(H,a):
-    lo = ne.evaluate(a[0]) if len(a)>0 else 0.0
-    hi = ne.evaluate(a[1]) if len(a)>1 else 1.0
-    bc = ne.evaluate(a[2]) if len(a)>2 else 256
-    hist, bins = np.histogram(H.flatten(), bins=int(bc))
+    lo = float(a[0]) if len(a)>0 else 0.0
+    hi = float(a[1]) if len(a)>1 else 1.0
+    bc = int(a[2]) if len(a)>2 else 256
+    hist, bins = np.histogram(H.flatten(), bins=bc)
     cdf = hist.cumsum()
     cdf = (hi-lo)*cdf / cdf[-1]  + lo # normalize to [lo, hi]
     img_eq = np.interp(H.flatten(), bins[:-1], cdf)
     return img_eq.reshape(H.shape)
 
 
-def heq_has_result(H,a):
+def heq_haves(H,a):
 
-    lo = ne.evaluate(a[0]) if len(a)>0 else 0.0
+    lo = float(a[0]) if len(a)>0 else 0.0
     hi = ne.evaluate(a[1]) if len(a)>1 else 1.0
-    bc = ne.evaluate(a[2]) if len(a)>2 else 256
+    bc = int(a[2]) if len(a)>2 else 256
 
-    Hr = has_result(H)
+    Hr = haves(H)
     i,j = np.indices(H.shape)
 
-    hist, bins = np.histogram(Hr, bins=int(bc))
+    hist, bins = np.histogram(Hr, bins=bc)
     cdf = hist.cumsum()
     cdf = (hi-lo)*cdf / cdf[-1]  + lo # normalize to [lo, hi]
     img_eq = np.interp(Hr, bins[:-1], cdf)
 
     res = np.zeros(H.shape)
-    res[has_result(i),has_result(j)] = img_eq
+    res[haves(i),haves(j)] = img_eq
     return res
 
 def hue_clip(H,a):
-    h0 = ne.evaluate(a[0]) if len(a)>0 else params["h0"]
-    h1 = ne.evaluate(a[1]) if len(a)>1 else params["h1"]
+    h0 = float(a[0]) if len(a)>0 else 0
+    h1 = float(a[1]) if len(a)>1 else 0
     cH = norm(H)*(h1-h0)+h0
     return cH
 
-def in_circle(H,a):
-    y = (norm(H.imag) - 0.5)*2
-    x = (norm(H.real) - 0.5)*2
-    xc = ne.evaluate(a[0]) if len(a)>0 else params["xc"]
-    yc = ne.evaluate(a[1]) if len(a)>1 else params["yc"]
-    r = ne.evaluate(a[2]) if len(a)>2 else params["r"]
-    cc = (x-xc)**2+(y-yc)**2 - r
-    mask =  cc > 0
-    return np.where(mask,1,0)
 
-def out_circle(H,a):
-    y = (norm(H.imag) - 0.5)*2
-    x = (norm(H.real) - 0.5)*2
-    xc = ne.evaluate(a[0]) if len(a)>0 else params["xc"]
-    yc = ne.evaluate(a[1]) if len(a)>1 else params["yc"]
-    r = ne.evaluate(a[2]) if len(a)>2 else params["r"]
-    cc = (x-xc)**2+(y-yc)**2 - r
-    mask =  cc < 0
-    return np.where(mask,H,0)
-
-def in_square(H,a):
-    y = (norm(H.imag) - 0.5)*2
-    x = (norm(H.real) - 0.5)*2
-    xc = ne.evaluate(a[0]) if len(a)>0 else params["xc"]
-    yc = ne.evaluate(a[1]) if len(a)>1 else params["yc"]
-    r = ne.evaluate(a[2]) if len(a)>2 else params["r"]
-    xm = abs(x-xc) < r
-    ym = abs(y-yc) < r
-    mask =  ym & xm
-    return np.where(mask,H,0)
-
-def out_square(H,a):
-    y = (norm(row_mat) - 0.5)*2
-    x = (norm(col_mat) - 0.5)*2
-    xc = ne.evaluate(a[0]) if len(a)>0 else params["xc"]
-    yc = ne.evaluate(a[1]) if len(a)>1 else params["yc"]
-    r = ne.evaluate(a[2]) if len(a)>2 else params["r"]
-    xm = abs(x-xc) > r
-    ym = abs(y-yc) > r
-    mask =  ym | xm
-    return np.where(mask,H,0)
-
-
-def square_strip(H,a):
-    y = (norm(row_mat) - 0.5) * 2
-    x = (norm(col_mat) - 0.5) * 2
-    sml = ne.evaluate(a[0]) if len(a)>0 else 0.4
-    lrg = ne.evaluate(a[1]) if len(a)>1 else 0.5
-    sml_square = (abs(x) > sml) | (abs(y) > sml) 
-    large_square = (abs(x) < lrg) & (abs(y) < lrg) 
-    mask = large_square & sml_square
-    return np.where(mask,H,0)
-
-def anulus(H,a):
-    y = (norm(row_mat) - 0.5) * 2
-    x = (norm(col_mat) - 0.5) * 2
-    sml = ne.evaluate(a[0]) if len(a)>0 else 0.4
-    lrg = ne.evaluate(a[1]) if len(a)>1 else 0.5
-    sml_circle = x*x+y*y > sml*sml
-    large_circle = x*x+y*y < lrg*lrg
-    mask = large_circle & sml_circle
-    return np.where(mask,H,0)
-
-def above(H,a):
-    x = (norm(col_mat) - 0.5)
-    xc = ne.evaluate(a[0]) if len(a)>0 else params["xc"]
-    mask = x > xc
-    return np.where(mask,H,0)
-
-def below(H,a):
-    x = (norm(col_mat) - 0.5)
-    xc = ne.evaluate(a[0]) if len(a)>0 else params["xc"]
-    mask = x < xc
-    return np.where(mask,H,0)
-
-def left(H,a):
-    y = (norm(row_mat) - 0.5)
-    yc = ne.evaluate(a[0]) if len(a)>0 else params["yc"]
-    mask = y < yc
-    return np.where(mask,H,0)
-
-def right(H,a):
-    y = (norm(row_mat) - 0.5)
-    yc = ne.evaluate(a[0]) if len(a)>0 else params["yc"]
-    mask = y > yc
-    return np.where(mask,H,0)
 
 def wavefield(H,a):
-    x = 2 * np.pi * norm(H.real) * arg(a,1,"cfr")
-    y = 2 * np.pi * norm(H.imag) * arg(a,0,"rfr")
+    x = 2 * np.pi * norm(H.real) * (float(a[0]) if len(a)>0 else 0)
+    y = 2 * np.pi * norm(H.imag) * (float(a[1]) if len(a)>1 else 0)
     e = a[2] if len(a)>2 else "cos(x)+1j*sin(y)"
     v = ne.evaluate(e,{"x":x,"y":y})
     return v
 
-def times(H,a):
-    fac = float(a[0]) if len(a)>0 else 1.0
-    return H*fac
-
 def wavefield3(H,a):
-    afr = ne.evaluate(a[0]) if len(a)>0 else params["afr"]
+    afr = float(a[0]) if len(a)>0 else 10
     r = np.hypot(norm(H.real) - 0.5, norm(H.imag) - 0.5)
     v = np.sin(2 * np.pi * afr * r)
     return v
@@ -511,13 +560,13 @@ def wavefield3(H,a):
 def anglefield(H,a):
     x = (norm(H.real) - 0.5) * 2
     y = (norm(H.imag) - 0.5) * 2
-    afr = ne.evaluate(a[0]) if len(a)>0 else params["afr"]
+    afr = float(a[0]) if len(a)>0 else 10
     e = a[1] if len(a)>1 else "x+1j*y"
     v = ne.evaluate(e,{"x":x,"y":y})
     return ( afr * norm(v) ) % 1
 
 def absfield(H,a):
-    afr = ne.evaluate(a[0]) if len(a)>0 else params["afr"]
+    afr = float(a[0]) if len(a)>0 else 10
     v0 = np.angle(row_mat + 1j * col_mat)
     return afr*norm(v0)
 
@@ -526,7 +575,7 @@ def xshiftdiff(H):
 
 
 def multiply_and_clip_to_one(H,a):
-    afr = ne.evaluate(a[0]) if len(a)>0 else params["afr"]
+    afr = float(a[0]) if len(a)>0 else 10
     return (afr*H)%1
 
 def map(H,a):
@@ -538,14 +587,18 @@ def map(H,a):
     pH[:] = mv
     return pH
 
-def bkr(t):
+def bkr(t,a):
+    times = int(a[0]) if len(a)>0 else int(1)
     x = np.real(t)
     y = np.imag(t)
-    x_fold = x % 1  # fractional part of x
-    y_fold = y % 1  # fractional part of y
-    x_new = (2 * x_fold) % 1
-    shift = np.floor(2 * x_fold)
-    y_new = (y_fold + shift) / 2
+    for _ in range(times):
+        x_fold = x % 1  # fractional part of x
+        y_fold = y % 1  # fractional part of y
+        x_new = (2 * x_fold) % 1
+        shift = np.floor(2 * x_fold)
+        y_new = (y_fold + shift) / 2
+        x = x_new
+        y = y_new
     return x_new + 1j * y_new
 
 def ebkr(t):
@@ -559,6 +612,74 @@ def ebkr(t):
     shift = np.floor(2 * x01)
     y_new = (y01 + shift) / 2
     return x_new + 1j * y_new
+
+
+
+#######################################
+#
+# generate constants
+#
+#######################################
+
+pfrm_constants = {
+    "zero": lambda x,a: np.zeros(x.shape),
+    "one": lambda x,a: np.ones(x.shape),
+    "red":         lambda x,a: np.full_like(x, 0.00),
+    "orange":      lambda x,a: np.full_like(x, 0.08),
+    "yellow":      lambda x,a: np.full_like(x, 0.17),
+    "chartreuse":  lambda x,a: np.full_like(x, 0.25),
+    "green":       lambda x,a: np.full_like(x, 0.33),
+    "spring":      lambda x,a: np.full_like(x, 0.42),
+    "cyan":        lambda x,a: np.full_like(x, 0.50),
+    "azure":       lambda x,a: np.full_like(x, 0.58),
+    "blue":        lambda x,a: np.full_like(x, 0.67),
+    "violet":      lambda x,a: np.full_like(x, 0.75),
+    "magenta":     lambda x,a: np.full_like(x, 0.83),
+    "rose":        lambda x,a: np.full_like(x, 0.92),
+    "value":       lambda x,a: np.full_like(V,float(a[0]) if len(a)>0 else 0.0),
+}
+
+#######################################
+#
+# input values
+#
+#######################################
+
+pfrm_inputs = {
+    "rows": lambda x,a: row_mat,
+    "cols": lambda x,a: col_mat,
+    "idx": lambda x,a: col_mat + 1j * row_mat,
+    "j": lambda x,a: 2*(norm(col_mat)-0.5),
+    "i": lambda x,a: 2*(norm(row_mat)-0.5),
+    "z": lambda x,a: 2*(norm(col_mat)-0.5)+1j*2*(norm(row_mat)-0.5),
+    "r": lambda x,a: polyres["r"],
+    "roots": lambda x,a: polyres["r"],
+    "H" : lambda x,a : H,
+    "S" : lambda x,a : S,
+    "V" : lambda x,a : V,
+}
+
+#######################################
+#
+# transforms
+#
+#######################################
+
+pfrm_transforms_conformal = {
+    "wbl": lambda x,a: ratio( x + 1j*np.sin(x), x + 1j*np.cos(x) ),
+    "tws": lambda x,a: ratio( np.exp(x) + carg(a,0,-1), np.exp(x) * 1j + carg(a,1,1) ),
+    "plk": lambda x,a: ratio( np.sin(1j+x), np.cos(1j+x) ),
+    "zzg": lambda x,a: ratio( x +  carg(a,0,2), x + carg(a,1,-2) ),
+    "ltl": lambda x,a: ratio( x + carg(a,0,- 2j), x + carg(a,0,2j)),
+    "kth": lambda x,a: ratio(1 + x,1j - x),
+    "jkw": lambda x,a: x+ratio(1,x),
+}
+
+#######################################
+#
+# poly transforms
+#
+#######################################
 
 def coeff2(z):
    return z.real + z.imag + 1j*(z.real * z.imag)
@@ -656,62 +777,6 @@ def coeff12(z):
     val2 = 2*t2**4 - 3*t1**3 + 4*t2**2 - 5*t1
     return val1 + 1j * val2
 
-def arg(a,i,v):
-    return ne.evaluate(a[i]) if len(a)>i else params[v]
-
-def ratio(x,y):
-    num = np.where(abs(y)>1e-10,x,0)
-    den = np.where(abs(y)>1e-10,y,1)
-    return num/den
-
-hfrm_pipeline = "clip"
-sfrm_pipeline = "one"
-vfrm_pipeline = "one"
-res = 1000
-row_mat, col_mat = np.indices(((res,res)))
-H = np.zeros((res,res),dtype=np.float32)
-S = np.ones((res,res),dtype=np.float32) 
-V = np.ones((res,res),dtype=np.float32) 
-
-pfrm_constants = {
-    "zero": lambda x,a: np.zeros(x.shape),
-    "one": lambda x,a: np.ones(x.shape),
-    "red":         lambda x,a: np.full_like(x, 0.00),
-    "orange":      lambda x,a: np.full_like(x, 0.08),
-    "yellow":      lambda x,a: np.full_like(x, 0.17),
-    "chartreuse":  lambda x,a: np.full_like(x, 0.25),
-    "green":       lambda x,a: np.full_like(x, 0.33),
-    "spring":      lambda x,a: np.full_like(x, 0.42),
-    "cyan":        lambda x,a: np.full_like(x, 0.50),
-    "azure":       lambda x,a: np.full_like(x, 0.58),
-    "blue":        lambda x,a: np.full_like(x, 0.67),
-    "violet":      lambda x,a: np.full_like(x, 0.75),
-    "magenta":     lambda x,a: np.full_like(x, 0.83),
-    "rose":        lambda x,a: np.full_like(x, 0.92),
-    "value":       lambda x,a: np.full_like(V,ne.evaluate(a[0]) if len(a)>0 else 0.0),
-}
-
-pfrm_inputs = {
-    "rows": lambda x,a: row_mat,
-    "cols": lambda x,a: col_mat,
-    "idx": lambda x,a: col_mat + 1j * row_mat,
-    "j": lambda x,a: 2*(norm(col_mat)-0.5),
-    "i": lambda x,a: 2*(norm(row_mat)-0.5),
-    "z": lambda x,a: 2*(norm(col_mat)-0.5)+1j*2*(norm(row_mat)-0.5),
-    "r": lambda x,a: polyres["r"],
-    "roots": lambda x,a: polyres["r"],
-}
-
-pfrm_transforms_conformal = {
-    "wbl": lambda x,a: ratio(x + 1j*np.sin(x),x + 1j*np.cos(x)),
-    "tws": lambda x,a: ratio( np.exp(x) - 1, np.exp(x) * 1j + 1),
-    "plk": lambda x,a: ratio(np.sin(1j+x),np.cos(1j+x)),
-    "zzg": lambda x,a: ratio(x + 2,x + 2),
-    "ltl": lambda x,a: ratio(x - 2j,x + 2j),
-    "kth": lambda x,a: ratio(1 + x,1j - x),
-    "jkw": lambda x,a: x+ratio(1,x),
-}
-
 pfrm_transforms_poly = {
     "coeff2": lambda x,a: coeff2(x),
     "coeff3": lambda x,a: coeff3(x),
@@ -728,8 +793,111 @@ pfrm_transforms_poly = {
     "coeff12": lambda x,a: coeff12(x),
 }
 
+#######################################
+#
+# clip values
+#
+#######################################
+
+def above(H,a):
+    x = (norm(col_mat) - 0.5)
+    xc = float(a[0]) if len(a)>0 else 0
+    mask = x > xc
+    return np.where(mask,H,0)
+
+def below(H,a):
+    x = (norm(col_mat) - 0.5)
+    xc = float(a[0]) if len(a)>0 else 0
+    mask = x < xc
+    return np.where(mask,H,0)
+
+def left(H,a):
+    y = (norm(row_mat) - 0.5)
+    yc = float(a[0]) if len(a)>0 else 0
+    mask = y < yc
+    return np.where(mask,H,0)
+
+def right(H,a):
+    y = (norm(row_mat) - 0.5)
+    yc = float(a[0]) if len(a)>0 else 0
+    mask = y > yc
+    return np.where(mask,H,0)
+
+def in_circle(H,a):
+    y = (norm(H.imag) - 0.5)*2
+    x = (norm(H.real) - 0.5)*2
+    xc = float(a[0]) if len(a)>0 else 0
+    yc = float(a[1]) if len(a)>1 else 0
+    r = float(a[2]) if len(a)>2 else 0.25
+    cc = (x-xc)**2+(y-yc)**2 - r
+    mask =  cc > 0
+    return np.where(mask,1,0)
+
+def out_circle(H,a):
+    y = (norm(H.imag) - 0.5)*2
+    x = (norm(H.real) - 0.5)*2
+    xc = float(a[0]) if len(a)>0 else 0
+    yc = float(a[1]) if len(a)>1 else 0
+    r = float(a[2]) if len(a)>2 else  0.25
+    cc = (x-xc)**2+(y-yc)**2 - r
+    mask =  cc < 0
+    return np.where(mask,H,0)
+
+def in_square(H,a):
+    y = (norm(H.imag) - 0.5)*2
+    x = (norm(H.real) - 0.5)*2
+    xc = float(a[0]) if len(a)>0 else 0
+    yc = float(a[1]) if len(a)>1 else 0
+    r = ne.evaluate(a[2]) if len(a)>2 else 0.25
+    xm = abs(x-xc) < r
+    ym = abs(y-yc) < r
+    mask =  ym & xm
+    return np.where(mask,H,0)
+
+def out_square(H,a):
+    y = (norm(row_mat) - 0.5)*2
+    x = (norm(col_mat) - 0.5)*2
+    xc = float(a[0]) if len(a)>0 else 0
+    yc = float(a[1]) if len(a)>1 else 0
+    r = float(a[2]) if len(a)>2 else 0.25
+    xm = abs(x-xc) > r
+    ym = abs(y-yc) > r
+    mask =  ym | xm
+    return np.where(mask,H,0)
+
+def square_strip(H,a):
+    y = (norm(row_mat) - 0.5) * 2
+    x = (norm(col_mat) - 0.5) * 2
+    sml = float(a[0]) if len(a)>0 else 0.4
+    lrg = float(a[1]) if len(a)>1 else 0.5
+    sml_square = (abs(x) > sml) | (abs(y) > sml) 
+    large_square = (abs(x) < lrg) & (abs(y) < lrg) 
+    mask = large_square & sml_square
+    return np.where(mask,H,0)
+
+def anulus(H,a):
+    y = (norm(row_mat) - 0.5) * 2
+    x = (norm(col_mat) - 0.5) * 2
+    sml = float(a[0]) if len(a)>0 else 0.4
+    lrg = float(a[1]) if len(a)>1 else 0.5
+    sml_circle = x*x+y*y > sml*sml
+    large_circle = x*x+y*y < lrg*lrg
+    mask = large_circle & sml_circle
+    return np.where(mask,H,0)
+
+def rescale(H,a):
+    h0 = float(a[0]) if len(a)>0 else 0
+    h1 = float(a[1]) if len(a)>1 else 1
+    max_H = np.max(H)
+    min_H = np.min(H)
+    if max_x-min_x>0:
+        nH = ((H-min_H)/(max_H-min_H)).astype(np.float32)   
+        cH = nH*(h1-h0)+h0
+        return cH
+    return H.astype(np.float32)
+
 pfrm_clip = {
-    "clip": lambda x,a: hue_clip(x,a),
+    "rescale": lambda x,a: rescale(x,a),
     "cci": lambda x,a: in_circle(x,a),
     "cco": lambda x,a: out_circle(x,a),
     "csi": lambda x,a: in_square(x,a),
@@ -747,20 +915,24 @@ pfrm_clip = {
 #######################################
 stack = []
 
-def push(x):
-    stack.append(x)
-    return x
 
 stack_pop_funs = {
     "add": lambda x: x+stack.pop(),
     "avg": lambda x: (x+stack.pop())/2,
+    "add.rank": lambda x: rank(np.abs(x+stack.pop()),[]),
     "max": lambda x: np.maximum(x,stack.pop()),
     "min": lambda x: np.minimum(x,stack.pop()),
     "sub": lambda x: x-stack.pop(),
     "mul": lambda x: x*stack.pop(),
+    "mul.rank": lambda x: rank(np.abs(x*stack.pop()),[]),
     "div": lambda x: ratio(x,stack.pop()),
+    "div.rank": lambda x: rank(np.abs(ratio(x,stack.pop())),[]),
     "swp": lambda x: (stack.pop(),stack.append(x))[0],
 }
+
+def push_op(x,a):
+    stack.append(x)
+    return x
 
 def pop_op(x,a):
     if len(a)<1:
@@ -769,62 +941,28 @@ def pop_op(x,a):
     return stack_pop_funs[sname](x) 
 
 pfrm_stack = {
-    "push": lambda x,a: push(x),
+    "push": lambda x,a: push_op(x,a),
     "pop": lambda x,a: pop_op(x,a),
 }
 
 #######################################
 #
-# grouping
+# root group functions
 #
 #######################################
 
-def polyres_pack(x):
-    if x.shape != polyres["i"].shape:
-        raise ValueError(f"polyres_pack: x.shape = {x.shape}, i.shape = {polyres['i'].shape}")
-    if x.shape != polyres["j"].shape:
-        raise ValueError(f"polyres_pack: x.shape = {x.shape}, j.shape = {polyres['j'].shape}")
-    H = np.zeros((polyres["height"],polyres["width"]),dtype=np.complex64)
-    H[polyres["i"],polyres["j"]] = x 
-    return H
-
-def polyres_ungroup(x):
-    if x.shape != polyres["starts"].shape:
-        raise ValueError(f"polyres_ungroup: x.shape = {x.shape}, starts.shape = {polyres['starts'].shape}")
-    H = np.zeros((polyres["height"],polyres["width"]),dtype=np.complex64)
-    H[polyres["i"],polyres["j"]] = x[polyres['gbi']] 
-    return H
-
 
 def principal_axis_lengths(x):
-    """
-    x: complex-valued array-like (each point = x.real + i*x.imag)
-
-    Returns
-    -------
-    major, minor : float
-        1-σ semi-axis lengths (sqrt(eigenvalues), always major ≥ minor)
-    angle : float
-        orientation of the major axis in radians, measured from +x toward +y
-        in the interval (-π/2, π/2].
-    """
     pts = np.column_stack((x.real, x.imag)).astype(float)
-    # centre the cloud
     pts -= pts.mean(axis=0, keepdims=True)
-    # 2×2 covariance
     cov = np.cov(pts, rowvar=False)
-    # eigen-decomposition
     evals, evecs = np.linalg.eigh(cov)
-    # sort so that evals[0] is the *largest* (major axis)
     order = evals.argsort()[::-1]
     evals = evals[order]
     evecs = evecs[:, order]
-    # force a deterministic direction for the major axis vector
     if evecs[0, 0] < 0:
         evecs *= -1
-    # semi-axis lengths (1-σ)
     major, minor = np.sqrt(evals)
-    # orientation of the major axis
     angle = np.arctan2(evecs[1, 0], evecs[0, 0])
     return major, minor, angle
 
@@ -856,6 +994,7 @@ def eccentricity(x):
     return ecc
 
 gfuns = {
+    "count" : lambda x: x.shape[0],
     "centroid": lambda x: np.mean(x),
     "centroid.angle": lambda x: np.angle(np.mean(x)),
     "centroid.abs": lambda x: np.abs(np.mean(x)),
@@ -872,6 +1011,10 @@ gfuns = {
     "skew.angle": lambda x: np.mean((np.angle(x - np.mean(x)))**3),
     "kurt.angle": lambda x: np.mean((np.angle(x - np.mean(x)))**4),
     "bbox": lambda x: np.ptp(x.real)*np.ptp(x.imag),
+    "bbox.ar": lambda x: np.ptp(x.real) / np.ptp(x.imag) if np.ptp(x.imag) != 0 else 0,
+    "cor.re.im": lambda x: np.corrcoef(x.real, x.imag)[0, 1],
+    "scor.re.im": lambda x: np.corrcoef(np.sign(x.real), np.sign(x.imag))[0, 1],
+    "cor.mod.phi": lambda x: np.corrcoef(np.abs(x), np.angle(x))[0, 1],
     "principal.angle": lambda x: principal_axis_lengths(x)[2],
     "principal.major.vec": lambda x: principal_major_vec(x),
     "principal.minor.vec": lambda x: principal_minor_vec(x),
@@ -880,6 +1023,22 @@ gfuns = {
     "principal.angle": lambda x: principal_axis_lengths(x)[2],
     "eccentricity": lambda x: eccentricity(x),
 }
+
+def polyres_pack(x):
+    if x.shape != polyres["i"].shape:
+        raise ValueError(f"polyres_pack: x.shape = {x.shape}, i.shape = {polyres['i'].shape}")
+    if x.shape != polyres["j"].shape:
+        raise ValueError(f"polyres_pack: x.shape = {x.shape}, j.shape = {polyres['j'].shape}")
+    H = np.zeros((polyres["height"],polyres["width"]),dtype=np.complex64)
+    H[polyres["i"],polyres["j"]] = x 
+    return H
+
+def polyres_ungroup(x):
+    if x.shape != polyres["starts"].shape:
+        raise ValueError(f"polyres_ungroup: x.shape = {x.shape}, starts.shape = {polyres['starts'].shape}")
+    H = np.zeros((polyres["height"],polyres["width"]),dtype=np.complex64)
+    H[polyres["i"],polyres["j"]] = x[polyres['gbi']] 
+    return H
 
 def polyres_group(x,a):
     if x.shape != polyres["gbi"].shape:
@@ -903,6 +1062,8 @@ pfrm_cast = {
 
 pfrm_fun = {
     "eval": lambda x,a: ne.evaluate(a[0],{"x":x.real,"y":x.imag}),
+    "phase": lambda x,a: farg(a,0,1) * (np.angle(x)/np.pi+1.0) /2,
+    "angle": lambda x,a: farg(a,0,1) * (np.angle(x)/np.pi+1.0) /2,
     "abs": lambda x,a: np.abs(x),
     "re": lambda x,a: x.real,
     "im": lambda x,a: x.imag,
@@ -919,9 +1080,9 @@ pfrm_fun = {
     "trans": lambda x,a: np.transpose(x),
     "uc": lambda x,a: x.real*np.exp(1j*2*np.pi*x.imag),
     "rth": lambda x,a: x.imag*np.exp(1j*2*np.pi*x.real),
-    "pow": lambda x,a: x**(float(a[0]) if len(a)>0 else 2.0),
-    "times": lambda x,a:  x*float(a[0]) if len(a)>0 else 1.0,
-    "plus": lambda x,a:  x+float(a[0]) if len(a)>0 else 1.0,
+    "pow": lambda x,a: x**farg(a,0,2.0),
+    "times": lambda x,a:  x*farg(a,0,1.0),
+    "plus": lambda x,a:  x+farg(a,0,1.0),
 }
 
 #######################################
@@ -930,78 +1091,72 @@ pfrm_fun = {
 #
 #######################################
 
-def showstats(x, a):
-    print(f"result x,y shape : {polyres['x'].shape}, {polyres['y'].shape}")
-    print(f"result i,j shape : {polyres['i'].shape}, {polyres['j'].shape}")
-    print(f"result z,r shape : {polyres['z'].shape}, {polyres['r'].shape}")
-    print(f"result r dtype {polyres['r'].dtype}")
-    print(f"result r min {np.min(np.abs(polyres['r']))} - max {np.max(np.abs(polyres['r']))}")
-    print(f"result z min {np.min(np.abs(polyres['z']))} - max {np.max(np.abs(polyres['z']))}")
-    print(f"result i min {np.min(np.abs(polyres['i']))} - max {np.max(np.abs(polyres['i']))}")
-    print(f"result j min {np.min(np.abs(polyres['j']))} - max {np.max(np.abs(polyres['j']))}")
-    print(f"result x min {np.min(np.abs(polyres['x']))} - max {np.max(np.abs(polyres['x']))}")
-    print(f"result y min {np.min(np.abs(polyres['y']))} - max {np.max(np.abs(polyres['y']))}")
-    print(f"input shape: {x.shape}")
-    print(f"input dtype: {x.dtype}")
-    print(f"input finite: {np.sum(np.isfinite(x))} ({np.round(100 * np.isfinite(x).sum() / x.size,2)}%)")
-    print(f"input nz: {np.sum(np.abs(x)>0)}  ({np.round(100 * np.sum(abs(x)>0).sum() / x.size,2)}%)")
-    print(f"input: min {np.min(x)} - max: {np.max(x)}")
-    print(f"input q01: {np.quantile(x,0.01)}")
-    print(f"input q25: {np.quantile(x,0.25)}")
-    print(f"input q50: {np.quantile(x,0.50)}")
-    print(f"input q75: {np.quantile(x,0.75)}")
-    print(f"input q99: {np.quantile(x,0.99)}")
-    nz = x[np.abs(x) > 0]
-    if nz.size == 0:
-        print("No non-zero values.")
-    else:
-        print(f"{np.min(nz)} - {np.median(nz)} - {np.max(nz)}")
-    print(f"{np.sum(np.abs(x) > 0)} / {x.shape[0] * x.shape[1]}")
-    return x
-
 dfuns = {
-    "abs.mean" : lambda x: np.mean(np.abs(x)),
-    "abs.min" : lambda x: np.min(np.abs(x)),
-    "abs.max" : lambda x: np.max(np.abs(x)),
-    "abs.range" : lambda x: np.ptp(np.abs(x)),
-    "has.result.range" : lambda x: np.ptp(np.abs(has_result(x))),
-    "has.result.min" : lambda x: np.min(np.abs(has_result(x))),
-    "has.result.max" : lambda x: np.max(np.abs(has_result(x))),
-    "has.result.mean" : lambda x: np.mean(np.abs(has_result(x))),
-    "has.result.median" : lambda x: np.median(np.abs(has_result(x))),
-    "has.result.q05" : lambda x: np.quantile(np.abs(has_result(x)),0.05),
-    "has.result.q25" : lambda x: np.quantile(np.abs(has_result(x)),0.25),
-    "has.result.q75" : lambda x: np.quantile(np.abs(has_result(x)),0.75),
-    "has.result.q95" : lambda x: np.quantile(np.abs(has_result(x)),0.95),
+    "cnt" : lambda x: x.shape[0],
+    "rng" : lambda x: np.ptp(np.abs(x)),
+    "min" : lambda x: np.min(np.abs(x)),
+    "max" : lambda x: np.max(np.abs(x)),
+    "avg" : lambda x: np.mean(np.abs(x)),
+    "med" : lambda x: np.median(np.abs(x)),
+    "q05" : lambda x: np.quantile(np.abs(x),0.05),
+    "q25" : lambda x: np.quantile(np.abs(x),0.25),
+    "q75" : lambda x: np.quantile(np.abs(x),0.75),
+    "q95" : lambda x: np.quantile(np.abs(x),0.95),
+    "shp" : lambda x: x.shape,
+    "typ" : lambda x: x.dtype,
+    "nz"  : lambda x: np.sum(np.abs(x)>0),
+    "fnt" : lambda x: np.sum(np.isfinite(x)>0),
+    "z.shp" : lambda x: polyres['z'].shape,
+    "z.typ" : lambda x: polyres['z'].dtype,
+    "z.rng" : lambda x: np.ptp(polyres['z']),
+    "z.max" : lambda x: np.max(polyres['z']),
+    "r.shp" : lambda x: polyres['r'].shape,
+    "r.typ" : lambda x: polyres['r'].dtype,
+    "r.rng" : lambda x: np.ptp(polyres['r']),
+    "r.max" : lambda x: np.max(polyres['r']),
+    "i.shp" : lambda x: polyres['i'].shape,
+    "i.typ" : lambda x: polyres['i'].dtype,
+    "i.rng" : lambda x: np.ptp(polyres['i']),
+    "i.max" : lambda x: np.max(polyres['i']),
+    "j.shp" : lambda x: polyres['j'].shape,
+    "j.typ" : lambda x: polyres['j'].dtype,
+    "j.rng" : lambda x: np.ptp(polyres['j']),
+    "j.max" : lambda x: np.max(polyres['j']),
+    "x.shp" : lambda x: polyres['x'].shape,
+    "x.typ" : lambda x: polyres['x'].dtype,
+    "x.rng" : lambda x: np.ptp(polyres['x']),
+    "x.max" : lambda x: np.max(polyres['x']),
+    "y.shp" : lambda x: polyres['y'].shape,
+    "y.typ" : lambda x: polyres['y'].dtype,
+    "y.rng" : lambda x: np.ptp(polyres['y']),
+    "y.max" : lambda x: np.max(polyres['y']),
 }
+
 def debug(x,a):
     if len(a)<1:
         print(f"mean: {np.mean(x)}")
         return polys.polyutil.group_apply(x,polyres["starts"],np.mean) 
-    dname = a[0]
-    print(f"{dname} : {dfuns[dname](x)}")
+    for i in range(len(a)):
+        dname = a[i]
+        print(f"{dname} : {dfuns[dname](x)}")
     return x
 
 pfrm_debug = {
-    "showstats" : lambda x,a : showstats(x,a),
     "dbg" : lambda x,a : debug(x,a),
 }
 
+
 #######################################
 #
-#
+# legacy
 #
 #######################################
 
 pfrm_other = {
     "none": lambda x,a: x,
-    "has.result" : lambda x,a: polyres["has_result"],
-    "fill" : lambda x,a: polyres_fill_havenots(x),
-    
-   
-    
+    "has.result" : lambda x,a: polyres["haves"],
+    "fill" : lambda x,a: polyres_fill_havenots(x,a),
     "get": lambda x,a: np.full_like(x,params[a[0]] if len(a)>0 else 0),
-    
     "centroid": lambda x,a: polyres_centroid(),
     "direction": lambda x,a: direction(x,a),
     "blurr": lambda x,a: blurr(x,a),
@@ -1024,36 +1179,39 @@ pfrm_other = {
     "arange": lambda x,a: polyres_arange(),
     "discriminant": lambda x,a: polyres_discriminant(a),
     "mc": lambda x,a: multiply_and_clip_to_one(x,a),
-    "times": lambda x,a: times(x,a),
     "norm": lambda x,a: norm_scale(x,a),
+    "norm.clip": lambda x,a: norm_clip(x,a),
     "heq": lambda x,a: heq(x,a),
-    "heq.has.result": lambda x,a: heq_has_result(x,a),
+    "heq.haves": lambda x,a: heq_haves(x,a),
     "rank": lambda x,a: rank(x,a),
-    "rank.has.result": lambda x,a: rank_has_result(x,a),
+    "vrank": lambda x,a: norm(rankdata(x,method='average')),
+    "rank.haves": lambda x,a: rank_haves(x,a),
     "map": lambda x,a: map(x,a),
     
     
-    
-    
-    "bkr": lambda x,a: bkr(x),
+    "bkr": lambda x,a: bkr(x,a),
     "ebkr": lambda x,a: ebkr(x),
    
-    "phase": lambda x,a: arg(a,0,"afr")*(np.angle(x)/np.pi+1.0)/2,
-    "angle": lambda x,a: arg(a,0,"afr")*(np.angle(x)/np.pi+1.0)/2,
+    
     
     "nz": lambda x,a: nz(x,a),
+    "equals": lambda x,a: equals(x,a),
+    "greater": lambda x,a: greater(x,a),
     "wf": lambda x,a: wavefield(x,a),
     "wf3": lambda x,a: wavefield3(x,a),
     "nglf": lambda x,a: anglefield(x,a),
     "absf": lambda x,a: absfield(x,a),
    
     "roll": lambda x,a: xshiftdiff(x),
-   
-    "H" : lambda x,a : H,
-    "S" : lambda x,a : S,
-    "V" : lambda x,a : V,
+
 }
   
+#######################################
+#
+# pipeline parser
+#
+#######################################
+
 pfrm_functions = {}
 pfrm_functions.update(pfrm_constants)
 pfrm_functions.update(pfrm_inputs)
@@ -1066,35 +1224,21 @@ pfrm_functions.update(pfrm_fun)
 pfrm_functions.update(pfrm_debug)
 pfrm_functions.update(pfrm_other)
 
+
+
 def pfrm(H,pipeline):
-
-    pfuns = []
-    pargs = []
-    if pipeline is None: 
-        return H
-    if pipeline.strip()=='': 
-        return H
-    calls = [name.strip() for name in pipeline.split(',')]
-
-    for call in calls:
-        call_parts = call.split("_")
-        name = call_parts[0]
-        args = call_parts[1:]
-        if name not in pfrm_functions:
-            raise KeyError(f"pfrm: '{name}' not in pfrm_functions")
-        value = pfrm_functions[name]
-        if not callable(value):
-            raise ValueError(f"pfrm: pfrm_functions value '{name}' not callable")
-        pfuns.append(value)
-        pargs.append(args)
-        print(f"{args}")
-    
-    tH  = functools.reduce(lambda acc, i: pfuns[i](acc,pargs[i]),range(len(pfuns)),H)
+    tH = polys.polyutil.make_pipeline(pipeline,pfrm_functions)(H)
     return tH
 
 
+#######################################
+#
+# RGB conversion
+#
+#######################################
 
-def hsv_to_rgb_numpy(hsv):
+def hsv_to_rgb_numpy(HSV):
+    hsv=np.abs(HSV) # no complex values
     # hsv: (..., 3) array, H in [0,1], S in [0,1], V in [0,1]
     h, s, v = hsv[..., 0], hsv[..., 1], hsv[..., 2]
     i = (h * 6).astype(int)
@@ -1124,13 +1268,21 @@ def save2rgb(hsv,fn):
     )            
     im.write_to_file(fn)
 
+#######################################
+#
+# CLI
+#
+#######################################
+
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="palette maker")
     parser.add_argument('outfile',nargs="?",type=str, default="palette.png", help="outfile")
     parser.add_argument('--verbose',action='store_true',help="verbose")
-    parser.add_argument('--type', choices=type_choices,default="none",help="mode")
     parser.add_argument('-r','--res', type=int, default=1000, help="resolution")
+    parser.add_argument('-d','--data', type=float, default=10, help="size")
+    parser.add_argument('-s','--sort_uniq', action="store_true", help="sort_unique")
+    parser.add_argument('-m','--mlx', action="store_true", help="use mlx")
     parser.add_argument('-p','--par', type=str, default=None, help="parameters")
     parser.add_argument('-H','--hfrm', type=str, default="clip", help="hue functions")
     parser.add_argument('-S','--sfrm', type=str, default="none", help="sat functions")
@@ -1148,6 +1300,9 @@ if __name__ == "__main__":
     S = np.ones((res,res),dtype=np.float32) 
     V = np.ones((res,res),dtype=np.float32) 
     #
+    results_pct = args.data
+    sort_unique = args.sort_uniq
+    use_mlx = args.mlx
     load_polyres()
 
     params.update(polys.polystate.pu.setf(args.par))

@@ -61,6 +61,10 @@ cover/
 *.jpeg
 *.v
 *.pdf
+*.aux
+*.out
+*.toc
+test.tex
 # Translations
 *.mo
 *.pot

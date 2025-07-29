@@ -1,0 +1,1658 @@
+\documentclass{article}
+\usepackage[portrait, headheight = 0cm, margin=0.25cm, top = 0.25cm]{geometry} 
+\usepackage{graphicx}
+\usepackage[dvipsnames,table]{xcolor}
+\usepackage{amsmath}
+\usepackage{pdfpages}
+\usepackage[export]{adjustbox} 
+\usepackage{booktabs}
+\usepackage{hyperref}
+
+<<,cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+require(glue)
+require(qpdf)
+nglue<-function(
+  ...,
+  .sep = "",
+  .envir = parent.frame(), 
+  .open = "{", 
+  .close = "}", 
+  .na = "NA", 
+  .transformer = identity_transformer
+){
+  as.character(glue(
+    ...,
+    .sep=.sep,
+    .envir=.envir,
+    .open="@[",
+    .close="]@",
+    .na="NA",
+    .transformer = .transformer
+  ))
+}
+
+make_full_directory<-function(x){
+  os_type<-.Platform$OS.type
+  if(os_type=="windows")return(paste0(gsub("\\\\","/",normalizePath(getwd())),"/",x))
+  paste0(normalizePath(getwd()),"\\",x)
+}
+
+make_pdf_page<-function(
+    fn,
+    pages=1,
+    height="10cm",
+    width="10cm",
+    minipage=TRUE,
+    valign="B"
+){
+   fname<-gsub("\\","/",tempfile(pattern = "pdf",tmpdir=make_full_directory("figure"),fileext=".pdf"),fixed=TRUE)
+   pdf_subset(fn, pages = pages, output = fname)
+   latex<-nglue(
+    if(minipage){"\\begin{minipage}[t][@[height]@][t]{@[width]@}\n"}else(""),
+    "\\includegraphics[height=@[height]@,width=@[width]@,valign=@[valign]@]{@[fname]@}\n",
+    if(minipage){"\\end{minipage}\n"}else{""},
+    .sep="\n",
+    height=height,
+    width=width,
+    fname=fname
+  )
+  latex
+}
+@
+
+
+<<setup, include=FALSE>>=
+library(reticulate)
+use_virtualenv("/Users/nicknassuphis/pypolys/.venv", required = TRUE)
+@
+
+
+\title{
+\vskip 2cm
+{\bf\Huge Polynomial Solvers}
+\vskip 1cm
+{\bf\Huge Speed \& Stability Benchmarks}
+\vskip 1cm
+\begin{center}
+\includegraphics[width=15cm, height=15cm]{myplot_oldplot.png}
+\end{center}
+\vskip 1cm
+}
+\author{Wigerich}
+
+\begin{document}
+\maketitle
+
+\newpage
+\tableofcontents
+
+\newpage
+\section{Initialize}
+
+<<py-version, engine='python'>>=
+import sys, os, numpy as np, mlx.mps as mps, argparse, timeit
+import pandas as pd
+from numba import njit, prange
+from mpmath import mp 
+import re
+@
+
+\newpage
+\section{Bounds on roots}
+
+<<, engine='python',size="tiny",echo=FALSE,results='hide'>>=
+from math import sqrt, cos, pi
+
+root_bounds = {}
+
+def register_bound(name):
+    def decorator(func):
+        root_bounds[name] = func
+        return func
+    return decorator
+
+@register_bound("actual")
+def bound_actual(coeffs):
+    return np.max(np.abs(np.roots(coeffs)))
+
+def normalize_poly(coeffs):
+    coeffs = np.asarray(coeffs, dtype=np.complex128)
+    if coeffs[0] == 0:
+        raise ValueError("Leading coefficient cannot be zero.")
+    return coeffs / coeffs[0]
+
+def fibonacci(n):
+    a, b = 0, 1
+    for _ in range(n):
+        a, b = b, a + b
+    return a
+@
+
+<<, engine='python',size="tiny",echo=FALSE,results='hide'>>=
+def evaluate_bounds(coeffs):
+    coeffs = normalize_poly(coeffs)
+    results = {}
+    for name, fn in root_bounds.items():
+        try:
+            val = fn(coeffs)
+        except Exception as e:
+            val = float('nan')
+        results[name] = val
+    return results
+@
+
+\subsection{A1 to A12 Bounds}
+
+\begin{center}
+\begin{tabular}{c}
+\begin{tabular}{m{6cm}m{10cm}m{3cm}}
+\toprule
+Implementation & Definition & {\tt np.ones(10)} \\
+\midrule
+\begin{minipage}[m]{6cm}
+<<, engine='python',size="tiny">>=
+@register_bound("A1_Guggenheimer_1978")
+def bound_A1(coeffs):
+    n = len(coeffs) - 1
+    return 2 * max(abs(coeffs[n - i])**(1 / i) for i in range(1, n + 1))
+@ 
+\end{minipage}
+& 
+\begin{minipage}[m]{10cm} $\zeta \leq 2 \max_{i=1,\ldots,n} |c_{n-i}|^{1/i}$ \end{minipage}
+&
+\begin{minipage}[m]{3cm}
+<<, engine='python',echo=FALSE,size="tiny",results="asis">>=
+v = root_bounds["A1_Guggenheimer_1978"](np.ones(10))
+print(f"{v:.1f}")
+@ 
+\end{minipage}
+\\
+\begin{minipage}[m]{6cm}
+<<, engine='python',size="tiny">>=
+@register_bound("A2_Deutsch_1981")
+def bound_A2(coeffs):
+    n = len(coeffs)
+    bounds = []
+    for k in range(n - 1):
+        part1 = sum(abs(coeffs[i]) for i in range(k + 1))
+        part2 = [1 + abs(coeffs[i]) for i in range(k + 1, n - 1)]
+        bounds.append(max([1, part1] + part2))
+    return min(bounds)
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm} 
+\begin{math}
+\zeta \leq \max\left[1, |c_0| + |c_1| + \ldots + |c_k|, 1 + |c_{k+1}|, \ldots, 1 + |c_{n-1}|\right]  
+\newline
+\text{for each } k = 0, 1, \ldots, n-1 
+\end{math}
+\end{minipage}
+&
+\begin{minipage}[m]{3cm}
+<<, engine='python',echo=FALSE,size="tiny",results="asis">>=
+v = root_bounds["A2_Deutsch_1981"](np.ones(10))
+print(f"{v:.1f}")
+@ 
+\end{minipage}
+\\
+\begin{minipage}[m]{6cm}
+<<, engine='python',size="tiny">>=
+@register_bound("A3_Reich_Losser_1971")
+def bound_A3(coeffs):
+    n = len(coeffs)
+    Q = max(abs(coeffs[k]) for k in range(n - 1))**(1 / n)
+    return sum(Q**i for i in range(1, n))
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm} 
+\begin{math}
+\text{Let } Q = \left[\max_{k=0,\ldots,n-1} |c_k|\right]^{1/n} 
+\newline
+\text{ then } \zeta \leq Q + Q^2 + \ldots + Q^{n-1}  
+\end{math}
+\end{minipage}
+&
+\begin{minipage}[m]{3cm}
+<<, engine='python',echo=FALSE,size="tiny",results="asis">>=
+v = root_bounds["A3_Reich_Losser_1971"](np.ones(10))
+print(f"{v:.1f}")
+@ 
+\end{minipage}
+\\
+\begin{minipage}[m]{6cm}
+<<, engine='python',size="tiny">>=
+@register_bound("A4_Reich_Losser_1971")
+def bound_A4(coeffs):
+    n = len(coeffs)
+    return max(
+        sqrt((1 + abs(coeffs[j])) * (1 + abs(coeffs[k])))
+        for j in range(n - 1) for k in range(n - 1) if j != k
+    )
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm} 
+\begin{math}
+\zeta \leq \max_{0 \leq j < k \leq n-1,\; j \neq k} \left[(1 + |c_k|)(1 + |c_j|)\right]^{1/2} 
+\end{math}
+\end{minipage}
+&
+\begin{minipage}[m]{3cm}
+<<, engine='python',echo=FALSE,size="tiny",results="asis">>=
+v = root_bounds["A4_Reich_Losser_1971"](np.ones(10))
+print(f"{v:.1f}")
+@ 
+\end{minipage}
+\\
+\begin{minipage}[m]{6cm}
+<<, engine='python',size="tiny">>=
+@register_bound("A5_Joyal_1967")
+def bound_A5(coeffs):
+    n = len(coeffs)
+    return 0.5 * (1 + sqrt(1 + 4 * max(
+        abs(coeffs[n - 2] * coeffs[k] - coeffs[k - 1] if k > 0 else 0)
+        for k in range(n - 1)
+    )))
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm} 
+\begin{math}
+\zeta \leq \frac{1}{2} \left[1 + \sqrt{1 + 4B'}\right] 
+\newline
+\text{where } B' = \max_{k=0}^{n-1} |c_{n-1} c_k - c_{k-1}|
+\newline
+(c_{-1} = 0) 
+\end{math}
+\end{minipage}
+&
+\begin{minipage}[m]{3cm}
+<<, engine='python',echo=FALSE,size="tiny",results="asis">>=
+v = root_bounds["A5_Joyal_1967"](np.ones(10))
+print(f"{v:.1f}")
+@ 
+\end{minipage}
+\\
+\begin{minipage}[m]{6cm}
+<<, engine='python',size="tiny">>=
+@register_bound("A6_Joyal_1967")
+def bound_A6(coeffs):
+    n = len(coeffs)
+    cn_1 = coeffs[n - 2] if n >= 2 else 0
+    return 1 + sqrt(max(
+        abs((1 - cn_1)*coeffs[k] + (coeffs[k - 1] if k > 0 else 0))
+        for k in range(n - 1)
+    ))
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm} 
+\begin{math}
+\zeta \leq 1 + \sqrt{B''} 
+\newline
+\text{where } B'' = \max_{k=0}^{n-1} |(1 - c_{n-1}) c_k + c_{k-1}| 
+\newline
+(c_{-1} = 0) 
+\end{math}
+\end{minipage}
+&
+\begin{minipage}[m]{3cm}
+<<, engine='python',echo=FALSE,size="tiny",results="asis">>=
+v = root_bounds["A6_Joyal_1967"](np.ones(10))
+print(f"{v:.1f}")
+@ 
+\end{minipage}
+\\
+\begin{minipage}[m]{6cm}
+<<, engine='python',size="tiny">>=
+@register_bound("A7_Deutsch_1970")
+def bound_A7(coeffs):
+    n = len(coeffs)
+    cn_1 = abs(coeffs[-2]) if n >= 2 else 0
+    M = max(abs(coeffs[i]) for i in range(n - 2)) if n >= 3 else 0
+    return 0.5 * (1 + cn_1 + cn_1**2 + 4*M)
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm} 
+\begin{math}
+\zeta \leq \frac{1}{2} \left[1 + |c_{n-1}| + \sqrt{(c_{n-1})^2 + 4M} \right] 
+\newline
+\text{where } M = \max_{i=0}^{n-2} |c_i| 
+\end{math}
+\end{minipage}
+&
+\begin{minipage}[m]{3cm}
+<<, engine='python',echo=FALSE,size="tiny",results="asis">>=
+v = root_bounds["A7_Deutsch_1970"](np.ones(10))
+print(f"{v:.1f}")
+@ 
+\end{minipage}
+\\
+\begin{minipage}[m]{6cm}
+<<, engine='python',size="tiny">>=
+@register_bound("A8_Deutsch_1970")
+def bound_A8(coeffs):
+    n = len(coeffs)
+    cn_1 = abs(coeffs[-2]) if n >= 2 else 0
+    return max([2] + [abs(coeffs[i]) + cn_1 for i in range(n - 2)])
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm} 
+$ \zeta \leq \max\left[2, |c_0| + |c_{n-1}|, |c_1| + |c_{n-1}|, \ldots, |c_{n-2}| + |c_{n-1}|\right]  $
+\end{minipage}
+&
+\begin{minipage}[m]{3cm}
+<<, engine='python',echo=FALSE,size="tiny",results="asis">>=
+v = root_bounds["A8_Deutsch_1970"](np.ones(10))
+print(f"{v:.1f}")
+@ 
+\end{minipage}
+\\
+\begin{minipage}[m]{6cm}
+<<, engine='python',size="tiny">>=
+@register_bound("A9_Deutsch_1970")
+def bound_A9(coeffs):
+    n = len(coeffs)
+    cn_1 = abs(coeffs[-2]) if n >= 2 else 0
+    M = max(abs(coeffs[i]) for i in range(n - 2)) if n >= 3 else 0
+    return 2 + M**2 + cn_1**2
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm} 
+$ \zeta \leq \sqrt{2 + M^2 + |c_{n-1}|^2} \quad \text{(M as in A7)} $
+\end{minipage}
+&
+\begin{minipage}[m]{3cm}
+<<, engine='python',echo=FALSE,size="tiny",results="asis">>=
+v = root_bounds["A9_Deutsch_1970"](np.ones(10))
+print(f"{v:.1f}")
+@ 
+\end{minipage}
+\\
+\begin{minipage}[m]{6cm}
+<<, engine='python',size="tiny">>=
+@register_bound("A10_Deutsch_1970")
+def bound_A10(coeffs):
+    n = len(coeffs)
+    cn_1 = abs(coeffs[-2]) if n >= 2 else 0
+    beta = max(abs(coeffs[i]) / abs(coeffs[i+1]) for i in range(1, n - 2)) if n >= 4 else 0
+    gamma = max(abs(coeffs[i]) / abs(coeffs[i+1]) for i in range(n - 2)) if n >= 3 else 0
+    return 0.5 * (beta + cn_1 + (cn_1 - beta)**2 + 4 * gamma * cn_1)
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm} 
+\begin{math}
+\zeta \leq \frac{1}{2} \left[ \beta' + |c_{n-1}| + \sqrt{(|c_{n-1}| - \beta')^2 + 4 \gamma' |c_{n-1}|} \right]
+\newline
+\beta' = \max_{i=1}^{n-2} \frac{|c_i|}{|c_{i+1}|}
+\newline
+\gamma' = \max_{i=0}^{n-2} \frac{|c_i|}{|c_{i+1}|}
+\end{math}
+\end{minipage}
+&
+\begin{minipage}[m]{3cm}
+<<, engine='python',echo=FALSE,size="tiny",results="asis">>=
+v = root_bounds["A10_Deutsch_1970"](np.ones(10))
+print(f"{v:.1f}")
+@ 
+\end{minipage}
+\\
+\begin{minipage}[m]{6cm}
+<<, engine='python',size="tiny">>=
+@register_bound("A11_Deutsch_1970")
+def bound_A11(coeffs):
+    n = len(coeffs)
+    cn_1 = abs(coeffs[-2]) if n >= 2 else 0
+    gamma = max(abs(coeffs[i]) / abs(coeffs[i+1]) for i in range(n - 2)) if n >= 3 else 0
+    return cn_1 + gamma
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm} 
+$ \zeta \leq |c_{n-1}| + \gamma' \quad \text{($\gamma'$ as above)} $
+\end{minipage} 
+&
+\begin{minipage}[m]{3cm}
+<<, engine='python',echo=FALSE,size="tiny",results="asis">>=
+v = root_bounds["A11_Deutsch_1970"](np.ones(10))
+print(f"{v:.1f}")
+@ 
+\end{minipage}
+\\ 
+\begin{minipage}[m]{6cm}
+<<, engine='python',size="tiny">>=
+@register_bound("A12_Deutsch_1970")
+def bound_A12(coeffs):
+    n = len(coeffs)
+    if n < 3:
+        raise ValueError("A12 requires at least degree 2 (length ≥ 3)")
+    cn1 = abs(coeffs[-1])
+    beta_prime = max(abs(coeffs[i]) / abs(coeffs[i + 1]) for i in range(1, n - 1))
+    gamma_prime = max(abs(coeffs[i]) / abs(coeffs[i + 1]) for i in range(n - 1))
+    return np.sqrt(2 * cn1**2 + beta_prime**2 + gamma_prime**2)
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm} 
+\begin{math}
+\zeta \leq \sqrt{2|c_{n-1}|^2 + (\beta')^2 + (\gamma')^2} \newline
+\quad \text{where} \newline
+\beta' = \max_{1 \leq i \leq n-2} \frac{|c_i|}{|c_{i+1}|}, \newline
+\gamma' = \max_{0 \leq i \leq n-2} \frac{|c_i|}{|c_{i+1}|}
+\end{math}
+\end{minipage} 
+&
+\begin{minipage}[m]{3cm}
+<<, engine='python',echo=FALSE,size="tiny",results="asis">>=
+v = root_bounds["A12_Deutsch_1970"](np.ones(10))
+print(f"{v:.1f}")
+@ 
+\end{minipage}
+\\
+\bottomrule
+\end{tabular}
+\end{tabular}
+\end{center}
+
+\newpage
+\subsection{A13 to A26 definition}
+
+\begin{center}
+\begin{tabular}{c}
+\begin{tabular}{m{6cm}m{10cm}m{3cm}}
+\toprule
+Implementation & Definition & {\tt np.ones(10)} \\
+\midrule
+% A13
+\begin{minipage}[m]{6cm}
+<<, engine='python',size="tiny">>=
+@register_bound("A13_Deutsch_1970")
+def bound_A13(coeffs):
+    n = len(coeffs)
+    cn1 = abs(coeffs[-1])
+    delta = max(abs(coeffs[i]) / cn1**(n - 2 - i) for i in range(n - 2))
+    return cn1 + delta**2
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm} 
+$\zeta \leq |c_{n-1}| + (\delta')^2$ \\
+\text{where } $\delta' = \max_{0 \leq i \leq n-2} \frac{|c_i|}{|c_{n-1}|^{n-2-i}}$
+\end{minipage}
+&
+\begin{minipage}[m]{3cm}
+<<, engine='python',echo=FALSE,size="tiny",results="asis">>=
+v = root_bounds["A13_Deutsch_1970"](np.ones(10))
+print(f"{v:.1f}")
+@ 
+\end{minipage}
+\\
+% A14
+\begin{minipage}[m]{6cm}
+<<, engine='python',size="tiny">>=
+@register_bound("A14_Deutsch_1970")
+def bound_A14(coeffs):
+    n = len(coeffs)
+    cn1 = abs(coeffs[-1])
+    delta = max(abs(coeffs[i]) / cn1**(n - 2 - i) for i in range(n - 2))
+    return cn1 + max(cn1, delta / cn1)
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm} 
+$\zeta \leq |c_{n-1}| + \max\left( |c_{n-1}|, \frac{\delta'}{|c_{n-1}|} \right)$ 
+\end{minipage}
+&
+\begin{minipage}[m]{3cm}
+<<, engine='python',echo=FALSE,size="tiny",results="asis">>=
+v = root_bounds["A14_Deutsch_1970"](np.ones(10))
+print(f"{v:.1f}")
+@ 
+\end{minipage}
+\\
+% A15
+\begin{minipage}[m]{6cm}
+<<, engine='python',size="tiny">>=
+@register_bound("A15_Deutsch_1970")
+def bound_A15(coeffs):
+    n = len(coeffs)
+    cn1 = abs(coeffs[-1])
+    delta = max(abs(coeffs[i]) / cn1**(n - 2 - i) for i in range(n - 2))
+    return (3 * cn1**2 + delta**2) / cn1**2
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm} 
+$\zeta \leq \frac{3|c_{n-1}|^2 + (\delta')^2}{|c_{n-1}|^2}$ \\
+\text{(with $\delta'$ as in A13)}
+\end{minipage}
+&
+\begin{minipage}[m]{3cm}
+<<, engine='python',echo=FALSE,size="tiny",results="asis">>=
+v = root_bounds["A15_Deutsch_1970"](np.ones(10))
+print(f"{v:.1f}")
+@ 
+\end{minipage}
+\\
+% A16
+\begin{minipage}[m]{6cm}
+<<, engine='python',size="tiny">>=
+@register_bound("A16_Deutsch_1970")
+def bound_A16(coeffs):
+    n = len(coeffs)
+    cn1 = abs(coeffs[-1])
+    N = max(abs(coeffs[i])**(1 / (n - i)) for i in range(n - 1))
+    return 0.5 * (N + cn1 + (cn1 - N)**2 + 4 * N**2)
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm} 
+$\zeta \leq \frac{1}{2} [N + |c_{n-1}| + (|c_{n-1}| - N)^2 + 4N^2]$ \\
+$N = \max_{0 \leq i \leq n-2} |c_i|^{1 / (n-i)}$
+\end{minipage}
+&
+\begin{minipage}[m]{3cm}
+<<, engine='python',echo=FALSE,size="tiny",results="asis">>=
+v = root_bounds["A16_Deutsch_1970"](np.ones(10))
+print(f"{v:.1f}")
+@ 
+\end{minipage}
+\\
+% A17
+\begin{minipage}[m]{6cm}
+<<, engine='python',size="tiny">>=
+@register_bound("A17_Deutsch_1970")
+def bound_A17(coeffs):
+    n = len(coeffs)
+    cn1 = abs(coeffs[-1])
+    N = max(abs(coeffs[i])**(1 / (n - i)) for i in range(n - 1))
+    return N + max(N, cn1)
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm} 
+$\zeta \leq N + \max[N, |c_{n-1}|]$ \\
+$N$ as defined in A16
+\end{minipage}
+&
+\begin{minipage}[m]{3cm}
+<<, engine='python',echo=FALSE,size="tiny",results="asis">>=
+v = root_bounds["A17_Deutsch_1970"](np.ones(10))
+print(f"{v:.1f}")
+@ 
+\end{minipage}
+\\
+% A18
+\begin{minipage}[m]{6cm}
+<<, engine='python',size="tiny">>=
+@register_bound("A18_Deutsch_1970")
+def bound_A18(coeffs):
+    n = len(coeffs)
+    cn1 = abs(coeffs[-1])
+    N = max(abs(coeffs[i])**(1 / (n - i)) for i in range(n - 1))
+    return 3 * N**2 + cn1**2
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm} 
+$\zeta \leq 3N^2 + |c_{n-1}|^2$ \\
+$N$ as defined in A16
+\end{minipage}
+&
+\begin{minipage}[m]{3cm}
+<<, engine='python',echo=FALSE,size="tiny",results="asis">>=
+v = root_bounds["A18_Deutsch_1970"](np.ones(10))
+print(f"{v:.1f}")
+@ 
+\end{minipage}
+\\
+% A19
+\begin{minipage}[m]{6cm}
+<<, engine='python',size="tiny">>=
+@register_bound("A19_Kakeya_1912")
+def bound_A19(coeffs):
+    n = len(coeffs)
+    coeffs = list(coeffs) + [1]  # assume c_n = 1
+    return max(abs(coeffs[i] / coeffs[i + 1]) for i in range(n))
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm} 
+$\zeta \leq \max_{0 \leq i \leq n-1} \frac{c_i}{c_{i+1}}$ \\
+(assuming $c_n = 1$)
+\end{minipage}
+&
+\begin{minipage}[m]{3cm}
+<<, engine='python',echo=FALSE,size="tiny",results="asis">>=
+v = root_bounds["A19_Kakeya_1912"](np.ones(10))
+print(f"{v:.1f}")
+@ 
+\end{minipage}
+\\
+% A20
+\begin{minipage}[m]{6cm}
+<<, engine='python',size="tiny">>=
+@register_bound("A20_Mignotte_1991")
+def bound_A20(coeffs):
+    return 1 + max([1] + [abs(c) for c in coeffs])
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm} 
+$\zeta \leq 1 + \max[1, |c_0|, |c_1|, \ldots, |c_{n-1}|]$
+\end{minipage}
+&
+\begin{minipage}[m]{3cm}
+<<, engine='python',echo=FALSE,size="tiny",results="asis">>=
+v = root_bounds["A20_Mignotte_1991"](np.ones(10))
+print(f"{v:.1f}")
+@ 
+\end{minipage}
+\\
+% A21
+\begin{minipage}[m]{6cm}
+<<, engine='python',size="tiny">>=
+@register_bound("A21_Mignotte_1991")
+def bound_A21(coeffs):
+    n = len(coeffs)
+    return n * max([1] + [abs(c) for c in coeffs]) + 1
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm} 
+$\zeta \leq n \cdot \max[1, |c_0|, |c_1|, \ldots, |c_{n-1}|] + 1$
+\end{minipage}
+&
+\begin{minipage}[m]{3cm}
+<<, engine='python',echo=FALSE,size="tiny",results="asis">>=
+v = root_bounds["A21_Mignotte_1991"](np.ones(10))
+print(f"{v:.1f}")
+@ 
+\end{minipage}
+\\
+% A22
+\begin{minipage}[m]{6cm}
+<<, engine='python',size="tiny">>=
+@register_bound("A22_Datt_Govil_1978")
+def bound_A22(coeffs):
+    n = len(coeffs)
+    M = max(abs(c) for c in coeffs)
+    return 1 + 1 / ((1 + M)**n * M)
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm} 
+$\zeta \leq 1 + \frac{1}{(1+M)^n M}$ \\
+$M = \max_{0 \leq i \leq n-1} |c_i|$
+\end{minipage}
+&
+\begin{minipage}[m]{3cm}
+<<, engine='python',echo=FALSE,size="tiny",results="asis">>=
+v = root_bounds["A22_Datt_Govil_1978"](np.ones(10))
+print(f"{v:.1f}")
+@ 
+\end{minipage}
+\\
+% A23
+\scalebox{0.7}{\begin{minipage}[m]{6cm}
+<<, engine='python',size="tiny">>=
+@register_bound("A23_Boese_Luther_1989")
+def bound_A23(coeffs):
+    n = len(coeffs)
+    if n == 0: return np.nan
+    M = max(abs(c) for c in coeffs)
+    if M == 0: return 0.0
+    try:
+        if M < 1 / n:
+            base = M * (1 - n * M)
+            exponent = 1 / (1 - (n * M)**(1/n))
+            if base <= 0 or not np.isfinite(exponent):
+                return np.nan
+            value = base**exponent
+        else:
+            term1 = (1 + M) * (1 - M / (1 + M)**(n + 1 - n * M))
+            term2 = 1 + 2 * (n * M - 1) / (n + 1)
+            value = min(term1, term2)
+        return value if value > 0 and np.isfinite(value) else np.nan
+    except Exception:
+        return np.nan
+@
+\end{minipage}}
+&
+\begin{minipage}[m]{10cm} 
+With $M = \max_{0 \leq i \leq n-1} |c_i|$: \\
+(i) If $M < \frac{1}{n}$, then \\ $\zeta \leq \left[ M (1 - nM) \right]^{\frac{1}{1 - (nM)^{1/n}}}$ \\
+(ii) If $M \geq \frac{1}{n}$, then \\ $\zeta \leq \min\left[ (1 + M)\left(1 - \frac{M}{(1 + M)^{n + 1 - nM}}\right), 1 + 2 \cdot \frac{nM - 1}{n + 1} \right]$
+\end{minipage}
+&
+\begin{minipage}[m]{3cm}
+<<, engine='python',echo=FALSE,size="tiny",results="asis">>=
+v = root_bounds["A23_Boese_Luther_1989"](np.ones(10))
+print(f"{v:.1f}")
+@ 
+\end{minipage}
+\\
+% A24
+\begin{minipage}[m]{6cm}
+<<, engine='python',size="tiny">>=
+from math import comb
+
+@register_bound("A24_Birkhoff_1914")
+def bound_A24(coeffs):
+    n = len(coeffs)
+    return max(
+        abs(coeffs[n - i])**(1 / i) * comb(n, i)**(1 / i)
+        for i in range(1, n)
+    )
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm} 
+\begin{math}
+\zeta \leq \max_{1 \leq i \leq n-1} \left( |c_{n-i}| \cdot \binom{n}{i} \right)^{1/i} 
+\end{math}
+\end{minipage}
+&
+\begin{minipage}[m]{3cm}
+<<, engine='python',echo=FALSE,size="tiny",results="asis">>=
+v = root_bounds["A24_Birkhoff_1914"](np.ones(10))
+print(f"{v:.1f}")
+@ 
+\end{minipage}
+\\
+% A25
+\begin{minipage}[m]{6cm}
+<<, engine='python',size="tiny">>=
+@register_bound("A25_Diaz_Barrero_2002")
+def bound_A25(coeffs):
+    n = len(coeffs)
+    return max(
+        (2 * n - 1) * abs(coeffs[n - k]) * comb(n + 1, 2) * k / (comb(n, k) * k)
+        for k in range(1, n + 1)
+    )
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm} 
+\begin{math}
+\zeta \leq \max_{1 \leq k \leq n} \newline
+\frac{(2n - 1) |c_{n-k}| \cdot \binom{n+1}{2}}{\binom{n}{k} \cdot k} 
+\end{math}
+\end{minipage}
+&
+\begin{minipage}[m]{3cm}
+<<, engine='python',echo=FALSE,size="tiny",results="asis">>=
+v = root_bounds["A25_Diaz_Barrero_2002"](np.ones(10))
+print(f"{v:.1f}")
+@ 
+\end{minipage}
+\\
+% A26
+\begin{minipage}[m]{6cm}
+<<, engine='python',size="tiny">>=
+@register_bound("A26_Diaz_Barrero_2002")
+def bound_A26(coeffs):
+    n = len(coeffs)
+    return max(
+        (fibonacci(3 * n) * abs(coeffs[n - k])) / (2 * k * fibonacci(k) * comb(n, k))
+        for k in range(1, n + 1)
+    )
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm} 
+\begin{math}
+\zeta \leq \max_{1 \leq k \leq n} \frac{F_{3n} |c_{n-k}|}{2k F_k \cdot \binom{n}{k}} \newline
+\text{where $F_k$ is the $k$-th Fibonacci number:} \newline
+F_0 = 0, F_1 = 1, F_n = F_{n-1} + F_{n-2}
+\end{math}
+\end{minipage}
+&
+\begin{minipage}[m]{3cm}
+<<, engine='python',echo=FALSE,size="tiny",results="asis">>=
+v = root_bounds["A26_Diaz_Barrero_2002"](np.ones(10))
+print(f"{v:.1f}")
+@ 
+\end{minipage}
+\\
+\bottomrule
+\end{tabular}
+\end{tabular}
+\end{center}
+
+
+\newpage
+\subsection{A27 to A31 definition}
+
+\begin{center}
+\begin{tabular}{c}
+\begin{tabular}{m{6cm}m{10cm}m{3cm}}
+\toprule
+Implementation & Definition & {\tt np.ones(10)} \\
+\midrule
+% A27
+\begin{minipage}[m]{6cm}
+<<, engine='python',size="tiny">>=
+@register_bound("A27_Riddell_1974")
+def bound_A27(coeffs):
+    n = len(coeffs)
+    coeffs = list(coeffs) + [1]  # assume c_n = 1
+    term1 = max(abs(coeffs[i] / coeffs[i + 1]) for i in range(n)) + abs(coeffs[n - 1])
+    term2 = abs(coeffs[0] / coeffs[1]) if n > 1 else 0
+    return max(term1, term2)
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm} 
+$\zeta \leq \max\left\{ \max_{0 \leq i \leq n-1} \left| \frac{c_i}{c_{i+1}} \right| + |c_{n-1}|, \left| \frac{c_0}{c_1} \right| \right\} \quad (c_n = 1)$
+\end{minipage}
+&
+\begin{minipage}[m]{3cm}
+<<, engine='python',echo=FALSE,size="tiny",results="asis">>=
+v = root_bounds["A27_Riddell_1974"](np.ones(10))
+print(f"{v:.1f}")
+@ 
+\end{minipage}
+\\
+% A28
+\begin{minipage}[m]{6cm}
+<<, engine='python',size="tiny">>=
+@register_bound("A28_Kojima_1917")
+def bound_A28(coeffs):
+    n = len(coeffs)
+    coeffs = list(coeffs) + [1]  # assume c_n = 1
+    bounds = [2 * abs(coeffs[-2])]  # 2 * |c_{n-1}/c_n|
+    for k in range(2, n):
+        val = (k + 1) / (k - 1) * abs(coeffs[-k] / coeffs[-k + 1])
+        bounds.append(val)
+    return max(bounds)
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm} 
+$\zeta \leq \max\left[ 2 \left| \frac{c_{n-1}}{c_n} \right|, \frac{k+1}{k-1} \left| \frac{c_{n-k}}{c_{n-k+1}} \right| \text{ for } k = 2, \ldots, n-1 \right]$
+\end{minipage}
+&
+\begin{minipage}[m]{3cm}
+<<, engine='python',echo=FALSE,size="tiny",results="asis">>=
+v = root_bounds["A28_Kojima_1917"](np.ones(10))
+print(f"{v:.1f}")
+@ 
+\end{minipage}
+\\
+% A29
+\begin{minipage}[m]{6cm}
+<<, engine='python',size="tiny">>=
+@register_bound("A29_Mignotte_1999")
+def bound_A29(coeffs):
+    n = len(coeffs)
+    term1 = max((n * abs(coeffs[n - i]))**(1 / i) for i in range(1, n + 1))
+    term2 = abs(coeffs[0])
+    term3 = (n - 1) * abs(coeffs[1]) if n > 1 else 0
+    return max(term1, term2, term3)
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm} 
+$\zeta \leq \max\left[ \max_{1 \leq i \leq n} (n |c_{n-i}|)^{1/i}, |c_0|, (n-1)|c_1| \right]$
+\end{minipage}
+&
+\begin{minipage}[m]{3cm}
+<<, engine='python',echo=FALSE,size="tiny",results="asis">>=
+v = root_bounds["A29_Mignotte_1999"](np.ones(10))
+print(f"{v:.1f}")
+@ 
+\end{minipage}
+\\
+% A30
+\begin{minipage}[m]{6cm}
+<<, engine='python',size="tiny">>=
+@register_bound("A30_Simuenovic_1991")
+def bound_A30(coeffs):
+    n = len(coeffs)
+    cn1 = abs(coeffs[-2]) if n >= 2 else 0
+    max_term = 0
+    for i in range(2, n + 1):
+        denom = sum(abs(coeffs[n - j]) for j in range(2, i + 1)) / (i - 1)
+        val = (cn1 + 1 + ((cn1 - 1)**2 + 4 * denom)**0.5)
+        max_term = max(max_term, val)
+    return max_term
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm} 
+If $M_2 = \max_{2 \leq i \leq n} \frac{|c_{n-2}| + \ldots + |c_{n-i}|}{i - 1}$, then \\ $\zeta \leq |c_{n-1}| + 1 + \sqrt{(|c_{n-1}| - 1)^2 + 4 M_2}$
+\end{minipage}
+&
+\begin{minipage}[m]{3cm}
+<<, engine='python',echo=FALSE,size="tiny",results="asis">>=
+v = root_bounds["A30_Simuenovic_1991"](np.ones(10))
+print(f"{v:.1f}")
+@ 
+\end{minipage}
+\\
+% A31
+\begin{minipage}[m]{6cm}
+<<, engine='python',size="tiny">>=
+@register_bound("A31_Mishra_1993")
+def bound_A31(coeffs):
+    nonzero = [abs(c) for c in coeffs if c != 0]
+    if not nonzero:
+        return 0
+    return min(nonzero) + max(nonzero)
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm} 
+$\zeta \leq \min_{c_i \neq 0} |c_i| + \max_{c_i \neq 0} |c_i|$
+\end{minipage}
+&
+\begin{minipage}[m]{3cm}
+<<, engine='python',echo=FALSE,size="tiny",results="asis">>=
+v = root_bounds["A31_Mishra_1993"](np.ones(10))
+print(f"{v:.1f}")
+@ 
+\end{minipage}
+\\
+\bottomrule
+\end{tabular}
+\end{tabular}
+\end{center}
+
+\newpage
+\subsection{B1 to B14 definition}
+
+\begin{center}
+\begin{tabular}{c}
+\begin{tabular}{m{6cm}m{10cm}m{3cm}}
+\toprule
+Implementation & Definition & {\tt np.ones(10)} \\
+\midrule
+% B1
+\begin{minipage}[m]{6cm}
+<<, engine='python',size="tiny">>=
+@register_bound("B1_Riddell_1974")
+def bound_B1(coeffs):
+    return max(1, max(abs(c) for c in coeffs))
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm}
+$\zeta \leq \max\left[1, \max_{0 \leq i < n} |c_i| \right]$
+\end{minipage} \\
+% B2
+\begin{minipage}[m]{6cm}
+<<, engine='python',size="tiny">>=
+@register_bound("B2_Walsh_1924")
+def bound_B2(coeffs):
+    n = len(coeffs)
+    return sum(abs(coeffs[i])**(1 / (n - i)) for i in range(n))
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm}
+$\zeta \leq \sum_{i=0}^{n-1} |c_i|^{1 / (n - i)}$
+\end{minipage} \\
+% B3
+\begin{minipage}[m]{6cm}
+<<, engine='python',size="tiny">>=
+@register_bound("B3_Walsh_1924")
+def bound_B3(coeffs):
+    n = len(coeffs)
+    return abs(coeffs[-2]) + sum(abs(coeffs[i]) / abs(coeffs[i + 1]) for i in range(n - 2))
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm}
+$\zeta \leq |c_{n-1}| + \sum_{i=0}^{n-2} \frac{|c_i|}{|c_{i+1}|}$
+\end{minipage} \\
+% B4
+\begin{minipage}[m]{6cm}
+<<, engine='python',size="tiny">>=
+@register_bound("B4_Williams_1922")
+def bound_B4(coeffs):
+    return 1 + sum(abs(c)**2 for c in coeffs)
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm}
+$\zeta \leq 1 + \sum_{i=0}^{n-1} |c_i|^2$
+\end{minipage} \\
+% B5
+\begin{minipage}[m]{6cm}
+<<, engine='python',size="tiny">>=
+@register_bound("B5_Williams_1922")
+def bound_B5(coeffs):
+    n = len(coeffs)
+    sum_sq_diff = sum((abs(coeffs[i] - coeffs[i + 1]))**2 for i in range(n - 2))
+    return 1 + (abs(coeffs[-2]) - 1)**2 + sum_sq_diff + abs(coeffs[0])**2
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm}
+$\zeta \leq 1 + (|c_{n-1}| - 1)^2 + \sum_{i=0}^{n-2} |c_i - c_{i+1}|^2 + |c_0|^2$
+\end{minipage} \\
+% B6
+\begin{minipage}[m]{6cm}
+<<, engine='python',size="tiny">>=
+@register_bound("B6_Kittaneh_1995")
+def bound_B6(coeffs):
+    alpha = sum(abs(c)**2 for c in coeffs)
+    c0_sq = abs(coeffs[0])**2 if coeffs else 0
+    return (alpha + 1 + ((alpha + 1)**2 - 4 * c0_sq)**0.5) / 2
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm}
+With $\alpha = \sum_{i=0}^{n-1} |c_i|^2$, \\
+$\zeta \leq \frac{\alpha + 1 + \sqrt{(\alpha + 1)^2 - 4|c_0|^2}}{2}$
+\end{minipage} \\
+% B7
+\begin{minipage}[m]{6cm}
+<<, engine='python',size="tiny">>=
+@register_bound("B7_Fujii_Kubo_1993")
+def bound_B7(coeffs):
+    from math import cos, pi
+    return cos(pi / (len(coeffs) + 1)) + (sum(abs(c)**2 for c in coeffs) + abs(coeffs[-2])) / 2
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm}
+$\zeta \leq \cos\left(\frac{\pi}{n + 1}\right) + \frac{\sum_{i=0}^{n-1} |c_i|^2 + |c_{n-1}|}{2}$
+\end{minipage} \\
+% B8
+\begin{minipage}[m]{6cm}
+<<, engine='python',size="tiny">>=
+@register_bound("B8_Rahman_1970")
+def bound_B8(coeffs):
+    n = len(coeffs)
+    M = sum(abs(coeffs[n - i])**(1 / i) for i in range(2, n + 1))
+    alpha = max(((M - 1) * abs(coeffs[n - i])**(1 / i))**((i - 1) / i) for i in range(2, n + 1)) if M else 0
+    return 0.5 * abs(coeffs[-2]) + alpha * M
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm}
+$\left|\zeta + \frac{1}{2} c_{n-1}\right| \leq \frac{1}{2} |c_{n-1}| + \alpha M$ \\
+$M = \sum_{i=2}^{n} |c_{n-i}|^{1/i}$, \\
+$\alpha = \max_{2 \leq i \leq n} \left[(M - 1)|c_{n-i}|^{1/i}\right]^{(i-1)/i}$
+\end{minipage} \\
+% B9
+\begin{minipage}[m]{6cm}
+<<, engine='python',size="tiny">>=
+@register_bound("B9_Alzer_1995")
+def bound_B9(coeffs):
+    n = len(coeffs)
+    alpha = 1 / max(abs(coeffs[n - i])**(1 / i) for i in range(2, n + 1))
+    return abs(coeffs[-2]) + sum(abs(coeffs[n - i]) * alpha**(i - 2) for i in range(2, n + 1))
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm}
+$\zeta \leq |c_{n-1}| + \sum_{i=2}^{n} |c_{n-i}| \alpha^{i-2}$ \\
+$\alpha = \frac{1}{\max_{2 \leq i \leq n} |c_{n-i}|^{1/i}}$
+\end{minipage} \\
+% B10
+\begin{minipage}[m]{6cm}
+<<, engine='python',size="tiny">>=
+@register_bound("B10_Guggenheimer_1978")
+def bound_B10(coeffs):
+    n = len(coeffs)
+    return abs(coeffs[-2]) + sum(abs(coeffs[n - i] / coeffs[n - 1]) for i in range(2, n + 1))
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm}
+$\zeta \leq |c_{n-1}| + \sum_{i=2}^{n} \left|\frac{c_{n-i}}{c_{n-1}}\right|$
+\end{minipage} \\
+% B11
+\begin{minipage}[m]{6cm}
+<<, engine='python',size="tiny">>=
+@register_bound("B11_Guggenheimer_1978")
+def bound_B11(coeffs):
+    n = len(coeffs)
+    return 1 + sum(i / i for i in range(1, n + 1))  # placeholder: bi not defined
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm}
+$\zeta \leq 1 + \sum_{i=1}^{n} \frac{b_i}{i}$ \quad \text{(exact form of $b_i$ not specified)}
+\end{minipage} \\
+% B12
+\begin{minipage}[m]{6cm}
+<<, engine='python',size="tiny">>=
+@register_bound("B12_Kuniyeda_1916")
+def bound_B12(coeffs):
+    import numpy as np
+    n = len(coeffs)
+    S = sum(abs(c)**2 for c in coeffs)
+    if S >= 1:
+        return np.nan  # not valid under the assumption
+    return (n**n / (n - 1)**(n - 1)) * S**(1 / (2 * n))
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm}
+Only if $\sum |c_i|^2 < 1$ \newline
+$\zeta \leq \frac{n^n}{(n-1)^{n-1}} \left( \sum_{i=0}^{n-1} |c_i|^2 \right)^{1 / (2n)}$
+\end{minipage}
+\\
+% B13
+\begin{minipage}[m]{6cm}
+<<, engine='python',size="tiny">>=
+@register_bound("B13_Parodi_1949")
+def bound_B13(coeffs):
+    n = len(coeffs)
+    cn_1 = abs(coeffs[-2]) if n >= 2 else 0
+    tail_sum = sum(abs(coeffs[j]) for j in range(n - 2))
+    return max(1, 0.5 * (cn_1 + cn_1**2 + 4 * tail_sum))
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm}
+$\zeta \leq \max\left[1, \frac{1}{2}\left(|c_{n-1}| + |c_{n-1}|^2 + 4 \sum_{j=0}^{n-2} |c_j|\right)\right]$
+\end{minipage}
+\\
+% B14
+\begin{minipage}[m]{6cm}
+<<, engine='python',size="tiny">>=
+@register_bound("B14_Mignotte_1999")
+def bound_B14(coeffs):
+    import numpy as np
+    total = sum(abs(c) for c in coeffs)
+    if total >= 1:
+        return np.nan
+    return total**(1 / len(coeffs))
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm}
+Only if $\sum |c_i| < 1$ \newline
+$\zeta \leq \left( \sum_{i=0}^{n-1} |c_i| \right)^{1/n}$
+\end{minipage}
+\\
+\bottomrule
+\end{tabular}
+\end{tabular}
+\end{center}
+
+
+
+\newpage
+\subsection{Bound tests}
+<<, engine='python',size="small",echo=FALSE,results='asis'>>=
+
+def latex_escape(s):
+    return re.sub(r'([_&#%${}\\])', r'\\\1', s)
+
+def normalize_bounds(bounds):
+    actual = bounds.get("actual", np.nan)
+    return {k: (v / actual if actual > 0 and np.isfinite(v) else np.nan)
+            for k, v in bounds.items()}
+
+# Generate 5 test polynomials
+test_polys = [
+    (np.arange(10) + 1j * np.flip(np.arange(10))).astype(np.complex128),
+    (np.linspace(1, 2, 10) + 1j * np.random.rand(10)).astype(np.complex128),
+    (np.random.rand(10) + 1j * np.random.rand(10)).astype(np.complex128),
+    (np.exp(-np.linspace(0, 5, 10)) + 1j * np.linspace(0, 1, 10)).astype(np.complex128),
+    (np.ones(10) + 1j * np.sin(np.linspace(0, np.pi, 10))).astype(np.complex128),
+]
+
+# Evaluate all bounds
+all_results = []
+for cf in test_polys:
+    bounds = evaluate_bounds(cf)
+    normalized = normalize_bounds(bounds)
+    all_results.append(normalized)
+
+# Build final DataFrame
+df = pd.DataFrame(all_results).T
+df.columns = [f"Test {i+1}" for i in range(len(test_polys))]
+df.index.name = "Bound"
+df.index = df.index.map(latex_escape)
+# Format as LaTeX
+latex_code = (
+    "\\begin{center}\n" +
+    df.to_latex(float_format="%.2f", escape=False) +
+    "\\end{center}"
+)
+print(latex_code)
+@
+
+
+\newpage
+\section{Weierstrass, Gauss-Seidel scheme}
+
+\begin{center}
+\begin{tabular}{c}
+\begin{tabular}{m{10cm}m{10cm}}
+\toprule
+Implementation & Test \\
+\midrule
+\begin{minipage}[m]{10cm}
+<<, engine='python',size="tiny">>=
+def weierstrass_gs(p_coeffs, x0, max_iter=100, tol=1e-12, verbose=False):
+    x = np.array(x0, dtype=np.complex128, copy=True)   # isolate from caller
+    n = x.size
+    ones = np.ones(n, dtype=np.complex128)
+    for k in range(max_iter):
+        x_old = x.copy()
+        for i in range(n):
+            diff = x[i] - x
+            diff[i] = 1.0                               
+            denom = diff.prod()
+            if denom == 0:                             
+                continue
+            numer = np.polyval(p_coeffs, x[i])
+            x[i] -= numer / denom                       
+        delta = np.abs(x - x_old).max()
+        if verbose:
+            print(f"iter {k:2d}: max |Δx| = {delta:.2e}")
+        if delta < tol:
+            break
+    return x, k
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm}
+<<, engine='python',size="tiny">>=
+r,n = weierstrass_gs([1,2,3,4],[0.1+0.5j,0.1-0.1j,0.1+1j])
+np.max(np.abs(np.polyval([1,2,3,4],r)))
+@
+\end{minipage}
+\\
+\bottomrule
+\end{tabular}
+\end{tabular}
+\end{center}
+
+\newpage
+\section{Weierstrass, Jacobi scheme}
+
+<<, engine='python'>>=
+def weierstrass_jcb(p_coeffs, x0, max_iter=100, tol=1e-12, verbose=False):
+    x = np.asarray(x0, dtype=np.complex128, copy=True)
+    n = x.size
+    diag_idx = np.diag_indices(n)
+    for k in range(max_iter):
+        x_old = x.copy()
+        diff = x[:, None] - x[None, :]
+        diff[diag_idx] = 1.0
+        denom = diff.prod(axis=1)
+        numer = np.polyval(p_coeffs, x)
+        nz = denom != 0
+        x[nz] -= numer[nz] / denom[nz]
+        delta = np.abs(x - x_old).max()
+        if verbose:
+            print(f"iter {k:2d}: max |Δx| = {delta:.2e}")
+        if delta < tol:
+            break
+    return x, k
+@
+
+\newpage
+\section{Weierstrass, Jacobi scheme with Over-Relaxation}
+
+<<, engine='python'>>=
+def weierstrass_jcb_sor(
+    p_coeffs, x0, *,
+    omega=0.5,      # 1.0 → plain Jacobi
+    max_iter=100, tol=1e-12,
+    verbose=False
+):
+    x = np.asarray(x0, dtype=np.complex128, copy=True)
+    n = x.size
+    diag = np.diag_indices(n)
+
+    for k in range(max_iter):
+        diff = x[:, None] - x[None, :]
+        diff[diag] = 1.0
+        denom = diff.prod(axis=1)
+        numer = np.polyval(p_coeffs, x)
+
+        dx = np.where(denom != 0, -numer / denom, 0.0)
+        x_new = x + omega * dx           # relaxation
+
+        if verbose:
+            print(f"iter {k:2d}: max |Δx| = {np.abs(dx).max():.2e}")
+
+        if np.abs(dx).max() < tol:
+            return x_new
+        x = x_new
+
+    return x, k
+@
+
+
+\newpage
+\section{Ehrlich Aberth}
+
+<<, engine='python'>>=
+def aberth(p_coeffs, x0, max_iter=100, tol=1e-12, verbose=False):
+    x = np.asarray(x0, dtype=np.complex128, copy=True)
+    n = len(x)
+    p_der = np.polyder(p_coeffs)
+    for k in range(max_iter):
+        x_old = x.copy()
+        pvals = np.polyval(p_coeffs, x)
+        pdervals = np.polyval(p_der, x)
+        N = np.zeros_like(x)
+        np.divide(pvals, pdervals, out=N, where=(pdervals != 0))
+        
+        # Compute sum_{j != i} 1/(x_i - x_j)
+        X = x[:, np.newaxis]
+        D = X - x[np.newaxis, :]
+        mask = np.eye(n, dtype=bool)
+        inv_D = np.zeros_like(D)
+        np.divide(1.0, D, out=inv_D, where=~mask)
+        sums = np.sum(inv_D, axis=1)
+        
+        denoms = 1.0 - N * sums
+        corrections = np.zeros_like(x)
+        np.divide(N, denoms, out=corrections, where=(denoms != 0))
+        x -= corrections
+        
+        delta = np.max(np.abs(x - x_old))
+        if verbose:
+            print(f"iter {k}, max Δx = {delta:.2e}")
+        if delta < tol:
+            break
+    return x, k
+@
+
+\newpage
+\section{Companion Matrix}
+
+<<, engine='python'>>=
+def companion_matrix(coeffs):
+    coeffs = np.atleast_1d(coeffs).astype(np.complex128)
+    n = coeffs.size - 1
+    coeffs = coeffs / coeffs[0]
+    C = np.zeros((n, n), dtype=np.complex128)
+    if n > 1:
+        C[:-1, 1:] = np.eye(n - 1)
+    C[-1, :] = -coeffs[:0:-1]
+    return C
+
+cf=np.arange(10)+1
+np.max(np.abs(np.sort(np.roots(cf))-np.sort(np.linalg.eigvals(companion_matrix(cf)))))
+
+timeit.timeit("np.roots(cf)", globals=globals(), number=100)
+timeit.timeit("np.linalg.eigvals(companion_matrix(cf))", globals=globals(), number=100)
+
+@
+
+\Sexpr{py$cf}
+
+\newpage
+\section{{\tt MPSolve}}
+\subsection{{\tt MPSolve} library}
+<<, engine='python',size="small">>=
+import ctypes, numpy as np, os, sys
+
+_mps_path = "/usr/local/lib/libmps.dylib"
+if not os.path.exists(_mps_path):
+    raise FileNotFoundError(f"MPSolve not found at {_mps_path}")
+_mps = ctypes.CDLL(_mps_path, mode=ctypes.RTLD_GLOBAL)
+
+class Cplx(ctypes.Structure):
+    _fields_ = [("real", ctypes.c_double),("imag", ctypes.c_double)]
+    def __complex__(self):
+        return complex(self.real, self.imag)
+
+_mps.mps_context_new.restype  = ctypes.c_void_p
+_mps.mps_context_free.argtypes= [ctypes.c_void_p]
+
+_mps.mps_context_set_input_prec .argtypes = [ctypes.c_void_p, ctypes.c_long]
+_mps.mps_context_set_output_prec.argtypes = [ctypes.c_void_p, ctypes.c_long]
+_mps.mps_context_set_output_goal.argtypes = [ctypes.c_void_p, ctypes.c_int]
+_mps.mps_context_select_algorithm.argtypes = [ctypes.c_void_p, ctypes.c_int]
+
+_mps.mps_monomial_poly_new.argtypes  = [ctypes.c_void_p, ctypes.c_int]
+_mps.mps_monomial_poly_new.restype   = ctypes.c_void_p
+_mps.mps_monomial_poly_set_coefficient_d.argtypes = (
+        ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int,
+        ctypes.c_double, ctypes.c_double)
+_mps.mps_polynomial_free.argtypes    = [ctypes.c_void_p, ctypes.c_void_p]
+
+_mps.mps_context_set_input_poly.argtypes  = [ctypes.c_void_p, ctypes.c_void_p]
+_mps.mps_context_get_degree.argtypes      = [ctypes.c_void_p]
+_mps.mps_context_get_degree.restype       = ctypes.c_int
+_mps.mps_mpsolve.argtypes                 = [ctypes.c_void_p]
+
+_mps.mps_context_get_roots_d.argtypes = [
+    ctypes.c_void_p,
+    ctypes.POINTER(ctypes.POINTER(Cplx)),          # Cplx **roots
+    ctypes.POINTER(ctypes.POINTER(ctypes.c_double))] # double **radii
+_mps.mps_context_get_roots_d.restype  = ctypes.c_int
+
+_mps.mps_monomial_poly_set_coefficient_s = _mps.mps_monomial_poly_set_coefficient_s
+_mps.mps_monomial_poly_set_coefficient_s.argtypes = (
+        ctypes.c_void_p,             # ctx
+        ctypes.c_void_p,             # poly
+        ctypes.c_int,                # exponent
+        ctypes.c_char_p, ctypes.c_char_p)  # real, imag  (ASCII strings)
+
+_mps.mps_monomial_poly_set_coefficient_s.restype  = None
+
+_mps.mps_context_get_roots_s = _mps.mps_context_get_roots_s
+_mps.mps_context_get_roots_s.argtypes = [
+        ctypes.c_void_p,
+        ctypes.POINTER(ctypes.POINTER(ctypes.c_char_p)),   # real**
+        ctypes.POINTER(ctypes.POINTER(ctypes.c_char_p)),   # imag**
+        ctypes.POINTER(ctypes.POINTER(ctypes.c_double))]   # radii**
+
+_mps.mps_context_get_roots_s.restype = ctypes.c_int
+
+MPS_OUTPUT_GOAL_APPROXIMATE = 1
+MPS_ALGORITHM_SECULAR_GA    = 1
+
+@ 
+
+
+\newpage
+\subsection{{\tt MPSolve} float solver}
+
+<<, engine='python',size="small">>=
+def mpsolve(coeffs: np.ndarray, precision: int = 100) -> np.ndarray:
+    """
+    Solve a complex polynomial with MPSolve and return its roots.
+    `coeffs` must be highest‑degree first (NumPy convention).
+    """
+    coeffs = np.asarray(coeffs, dtype=np.complex128)
+    degree = len(coeffs) - 1
+
+    # 3‑a.  Create and configure a context
+    ctx = _mps.mps_context_new()
+    _mps.mps_context_set_input_prec (ctx, precision)
+    _mps.mps_context_set_output_prec(ctx, precision)
+    _mps.mps_context_set_output_goal(ctx, MPS_OUTPUT_GOAL_APPROXIMATE)
+    _mps.mps_context_select_algorithm(ctx, MPS_ALGORITHM_SECULAR_GA)
+
+    # 3‑b.  Build polynomial   (MPS expects a₀ + a₁x + … + aₙxⁿ)
+    poly = _mps.mps_monomial_poly_new(ctx, degree)
+    for exp, c in enumerate(coeffs[::-1]):           # constant term first
+        _mps.mps_monomial_poly_set_coefficient_d(
+            ctx, poly, exp, c.real, c.imag)
+
+    _mps.mps_context_set_input_poly(ctx, poly)
+
+    # 3‑c.  Solve
+    _mps.mps_mpsolve(ctx)
+
+    # 3‑d.  Retrieve the roots  -----------------------------
+    n   = _mps.mps_context_get_degree(ctx)
+    if n != degree:          # sanity check
+        raise RuntimeError("Degree reported by MPSolve differs from input")
+
+    roots_ptr  = ctypes.POINTER(Cplx)()
+    radii_ptr  = ctypes.POINTER(ctypes.c_double)()   # must supply a pointer!
+    err = _mps.mps_context_get_roots_d(
+              ctx, ctypes.byref(roots_ptr), ctypes.byref(radii_ptr))
+    if err != 0 or not bool(roots_ptr):
+        raise RuntimeError("mps_context_get_roots_d failed")
+
+    roots = np.empty(n, dtype=np.complex128)
+    for i in range(n):
+        roots[i] = complex(roots_ptr[i])
+
+    # 3‑e.  Clean up
+    _mps.mps_polynomial_free(ctx, poly)
+    _mps.mps_context_free(ctx)
+
+    return roots
+
+@
+
+\newpage
+\subsection{{\tt MPSolve} multi-precision solver}
+<<, engine='python',size="small">>=
+from mpmath import mp 
+
+def _as_py(obj):
+    if isinstance(obj, np.generic):
+        return obj.item()           # unwrap numpy scalar
+    return obj
+
+def mpsolve_mp(coeffs, precision=256):
+    coeffs = list(coeffs)
+    degree = len(coeffs) - 1
+    mp.prec = precision
+
+    ctx = _mps.mps_context_new()
+    _mps.mps_context_set_input_prec(ctx,  precision)
+    _mps.mps_context_set_output_prec(ctx, precision)
+    _mps.mps_context_set_output_goal(ctx, MPS_OUTPUT_GOAL_APPROXIMATE)
+    _mps.mps_context_select_algorithm(ctx, MPS_ALGORITHM_SECULAR_GA)
+
+    poly = _mps.mps_monomial_poly_new(ctx, degree)
+    for exp, c in enumerate(reversed(coeffs)):          # a₀, a₁, …
+        c = mp.mpc(_as_py(c))                           # <- robust promotion
+        _mps.mps_monomial_poly_set_coefficient_s(
+            ctx, poly, exp,
+            str(c.real).encode(), str(c.imag).encode())
+
+    _mps.mps_context_set_input_poly(ctx, poly)
+    _mps.mps_mpsolve(ctx)
+
+    n = _mps.mps_context_get_degree(ctx)
+    roots_r = ctypes.POINTER(ctypes.c_char_p)()
+    roots_i = ctypes.POINTER(ctypes.c_char_p)()
+    radii_p = ctypes.POINTER(ctypes.c_double)()
+    _mps.mps_context_get_roots_s(ctx,
+                                 ctypes.byref(roots_r),
+                                 ctypes.byref(roots_i),
+                                 ctypes.byref(radii_p))
+
+    roots = np.empty(n, dtype=object)
+    radii = np.empty(n, dtype=object)
+    for k in range(n):
+        roots[k] = mp.mpc(roots_r[k].decode(), roots_i[k].decode())
+        radii[k] = mp.mpf(radii_p[k])
+
+    _mps.mps_polynomial_free(ctx, poly)
+    _mps.mps_context_free(ctx)
+    return roots, radii
+@
+
+\newpage
+\subsection{{\tt MPSolve} tests}
+<<, engine='python',size="small">>=
+from mpmath import mp 
+w20 = np.poly1d([1])
+for k in range(1, 21):
+    w20 *= np.poly1d([1, -k])
+
+cf_hi = w20.coeffs.astype(np.complex128)          # highest degree first
+
+for prec in (2048, 1024, 512, 256, 64, 32, 16, 8, 4):
+    r = mpsolve(cf_hi, precision=prec)
+    res = np.max(np.abs(np.polyval(cf_hi, r)))
+    print(f"prec={prec:<3}  max residual = {res: .1e}")
+
+cf_hi = w20.coeffs
+mp.dps = 70 
+for prec in (2048, 1024, 512, 256, 64, 32, 16, 8, 4):
+    r,rad = mpsolve_mp(cf_hi, precision=prec)
+    res_mp = max(abs(mp.polyval(cf_hi, z)) for z in r)
+    print(f"prec={prec:<3}  max residual = {res: .1e}")
+
+
+@
+
+\newpage
+\section{MPSolve v3}
+
+\begin{center}
+\fbox{\Sexpr{make_pdf_page("papers/mpsolve3.pdf",1,"14cm","10cm")}}
+\end{center}
+
+\begin{center}
+\fbox{\Sexpr{make_pdf_page("papers/mpsolve3.pdf",2,"14cm","10cm")}}
+\end{center}
+
+
+\begin{center}
+\fbox{\Sexpr{make_pdf_page("papers/mpsolve3.pdf",3,"14cm","10cm")}}
+\end{center}
+
+
+\begin{center}
+\fbox{\Sexpr{make_pdf_page("papers/mpsolve3.pdf",4,"14cm","10cm")}}
+\end{center}
+
+\begin{center}
+\fbox{\Sexpr{make_pdf_page("papers/mpsolve3.pdf",5,"14cm","10cm")}}
+\end{center}
+
+\begin{center}
+\fbox{\Sexpr{make_pdf_page("papers/mpsolve3.pdf",6,"14cm","10cm")}}
+\end{center}
+
+\begin{center}
+\fbox{\Sexpr{make_pdf_page("papers/mpsolve3.pdf",7,"14cm","10cm")}}
+\end{center}
+
+\begin{center}
+\fbox{\Sexpr{make_pdf_page("papers/mpsolve3.pdf",8,"14cm","10cm")}}
+\end{center}
+
+
+\newpage
+\section{Weierstrass is not generally convergent}
+
+\begin{center}
+\fbox{\Sexpr{make_pdf_page("papers/weierstrass.pdf",1,"14cm","10cm")}}
+\end{center}
+
+\begin{center}
+\fbox{\Sexpr{make_pdf_page("papers/weierstrass.pdf",2,"14cm","10cm")}}
+\end{center}
+
+
+\begin{center}
+\fbox{\Sexpr{make_pdf_page("papers/weierstrass.pdf",3,"14cm","10cm")}}
+\end{center}
+
+
+\begin{center}
+\fbox{\Sexpr{make_pdf_page("papers/weierstrass.pdf",4,"14cm","10cm")}}
+\end{center}
+
+\begin{center}
+\fbox{\Sexpr{make_pdf_page("papers/weierstrass.pdf",5,"14cm","10cm")}}
+\end{center}
+
+\begin{center}
+\fbox{\Sexpr{make_pdf_page("papers/weierstrass.pdf",6,"14cm","10cm")}}
+\end{center}
+
+
+\end{document}

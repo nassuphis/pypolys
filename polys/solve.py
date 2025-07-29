@@ -4,6 +4,51 @@
 
 from . import polystate as ps
 import numpy as np
+from numba import njit 
+
+def circle_guess(n, radius=1.0):
+    theta = np.linspace(0, 2*np.pi, n, endpoint=False)
+    return radius * np.exp(1j * theta)
+
+@njit
+def horner(p, x):
+    s = 0.0 + 0j
+    for c in p:
+        s = s * x + c
+    return s
+
+def circle_guess(n, radius=1.0):
+    theta = np.linspace(0, 2*np.pi, n, endpoint=False)
+    return radius * np.exp(1j * theta)
+
+def wssn(cf):
+    x0 = circle_guess(cf.size-1)
+    return wssn_jit(cf,x0)
+    
+
+@njit
+def wssn_jit(p_coeffs,x0):
+    max_iter=100 
+    tol=1e-12
+    p_coeffs = p_coeffs / p_coeffs[0]
+    x = x0.copy()
+    n = x.size
+    for k in range(max_iter):
+        delta = 0.0
+        for i in range(n):
+            denom = 1.0 + 0j
+            xi = x[i]
+            for j in range(n):
+                if j != i:
+                    denom *= xi - x[j]
+            if denom != 0:
+                numer = horner(p_coeffs, xi)
+                new_xi = xi -  numer / denom
+                delta = max(delta, abs(new_xi - xi))
+                x[i] = new_xi
+        if delta < tol:
+            break
+    return x
 
 def solve(cf):
   try:

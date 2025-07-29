@@ -2832,3 +2832,58 @@ def p11b3(t1, t2):
             return cf
         except:
             return np.zeros(4, dtype=complex)
+
+
+def companion_matrix(coeffs):
+    """n×n upper‑Hessenberg companion of a monic polynomial."""
+    coeffs = np.atleast_1d(coeffs).astype(np.complex128)
+    n = coeffs.size - 1
+    coeffs = coeffs / coeffs[0]
+    C = np.zeros((n, n), dtype=np.complex128)
+    if n > 1:
+        C[:-1, 1:] = np.eye(n - 1)
+    C[-1, :] = -coeffs[:0:-1]
+    return C
+
+
+def poly_giga_140(t1, t2):
+    try:
+        n = 5
+        fac = 1.0/(n+1.0)
+        x , y = 2.0 * ( np.indices(((n,n)))/(n-1) - 0.5 )
+        z = (x + 1j*y).astype(np.complex128)
+        v = (t1 + 1j*t2)
+        vv = fac*np.exp(1j*2*np.pi*v)
+        cf = np.poly( (z + vv ).flatten())
+        cm = companion_matrix(cf).astype(np.complex128)
+        a = np.abs(cm)%1
+        acf = [1,1j,0,0]
+        ap = np.polyval([1,1j,0,0],a)
+        tcm = ( 1.0*(cm) - 0.75*( ap ) ).astype(np.complex128)
+        roots = np.linalg.eigvals(tcm).astype(np.complex128)
+        cf = np.poly( roots ).astype(np.complex128)
+        return cf.astype(np.complex128)
+    except:
+        return np.zeros(5,dtype=np.complex128)
+    
+
+def poly_giga_142(t1, t2):
+    try:
+        n = 5
+        fac = 1.0/(n+1.0)
+        x , y = 2.0 * ( np.indices(((n,n)))/(n-1) - 0.5 )
+        z = (x + 1j*y).astype(np.complex128)
+        v = (t1 + 1j*t2)
+        vv = fac*np.exp(1j*2*np.pi*v)
+        cf = np.poly( (z + vv ).flatten())
+        cm = companion_matrix(cf).astype(np.complex128)
+        a = np.abs(cm)%1
+        acf = [1,1j,0,0]
+        ap = np.polyval([1,1j,0,0],a)
+        tcm = ( cm + np.transpose(cm) - 0.75*( ap ) ).astype(np.complex128)
+        roots = np.linalg.eigvals(tcm).astype(np.complex128)
+        cf = np.poly( roots ).astype(np.complex128)
+        return cf.astype(np.complex128)
+    except:
+        return np.zeros(5,dtype=np.complex128)
+    
