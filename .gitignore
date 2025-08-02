@@ -68,6 +68,7 @@ test.tex
 # Translations
 *.mo
 *.pot
+settings.json
 
 # Django stuff:
 *.log

@@ -6,7 +6,13 @@
 \usepackage{pdfpages}
 \usepackage[export]{adjustbox} 
 \usepackage{booktabs}
+\usepackage{tikz}
+\usetikzlibrary{shadings,arrows.meta,positioning,calc,intersections}
 \usepackage{hyperref}
+
+<<,cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+fns = list.files("figure/*.pdf")
+@
 
 <<,cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
 require(glue)
@@ -58,14 +64,95 @@ make_pdf_page<-function(
   )
   latex
 }
+
+
+
 @
 
 
-<<setup, include=FALSE>>=
+<<setup_py, include=FALSE>>=
 library(reticulate)
 use_virtualenv("/Users/nicknassuphis/pypolys/.venv", required = TRUE)
 @
 
+<<,  include=FALSE, engine='python'>>=
+import sys
+import os
+import numpy as np
+import cmath
+import  mlx.mps as mps
+import argparse
+import timeit
+import pandas as pd
+from numba import njit, prange
+from mpmath import mp 
+import re
+from numpy.typing import NDArray
+from typing import Tuple
+import gmpy2
+@
+
+<<, include=FALSE, engine='python'>>=
+def coeff_to_latex(c):
+    r, im = c.real, c.imag
+    # Pure real
+    if np.isclose(im, 0):
+        if np.isclose(abs(r), 1):
+            return "-" if r < 0 else ""  # -1 or 1 handled in main loop
+        else:
+            return f"({r:g})"
+    # Pure imaginary
+    if np.isclose(r, 0):
+        if np.isclose(abs(im), 1):
+            return "-\\mathrm{i}" if im < 0 else "\\mathrm{i}"
+        else:
+            return f"({im:g}\\mathrm{i})"
+    # Complex
+    sign = "+" if im >= 0 else "-"
+    im_abs = abs(im)
+    if np.isclose(im_abs, 1):
+        im_part = "\\mathrm{i}"
+    else:
+        im_part = f"{im_abs:g}\\mathrm{i}"
+    return f"({r:g}{sign}{im_part})"
+
+def polyvec_to_latex(coeffs, var='x'):
+    coeffs = np.asarray(coeffs)
+    deg = len(coeffs) - 1
+    terms = []
+    for i, c in enumerate(coeffs):
+        d = deg - i
+        if np.isclose(c, 0):
+            continue
+        coeff_str = coeff_to_latex(c)
+        if d == 0:
+            term = coeff_str if coeff_str else "1"
+        elif d == 1:
+            if coeff_str == "":
+                term = var
+            elif coeff_str == "-":
+                term = f"-{var}"
+            else:
+                term = f"{coeff_str}{var}"
+        else:
+            if coeff_str == "":
+                term = f"{var}^{d}"
+            elif coeff_str == "-":
+                term = f"-{var}^{d}"
+            else:
+                term = f"{coeff_str}{var}^{d}"
+        terms.append(term)
+    if not terms:
+        return "$0$"
+    # Construct LaTeX with correct spacing and signs
+    out = terms[0]
+    for t in terms[1:]:
+        if t.startswith('-'):
+            out += " - " + t[1:]
+        else:
+            out += " + " + t
+    return f"${out}$"
+@
 
 \title{
 \vskip 2cm
@@ -89,16 +176,221 @@ use_virtualenv("/Users/nicknassuphis/pypolys/.venv", required = TRUE)
 \newpage
 \section{Initialize}
 
-<<py-version, engine='python'>>=
-import sys, os, numpy as np, mlx.mps as mps, argparse, timeit
-import pandas as pd
-from numba import njit, prange
-from mpmath import mp 
-import re
+
+<<test_pretty_poly, engine='python',results='asis'>>=
+v = [2+1j, 0, -3j, 1-1j]
+print(polyvec_to_latex(v)+" $=0$")
 @
 
 \newpage
-\section{Bounds on roots}
+\section{The Basics}
+
+\vskip 1cm
+
+\begin{itemize}
+ \item Evaluate a Polynomial at a given point (Horner)
+ \item Deflate a polynomial by found root
+ \item Formulate suitable initial guess 
+ \item Stopping criteria for iterations
+ \item Taylor shift
+ \item Find linear and quadratic roots of a Polynomial
+\end{itemize}
+
+\newpage
+\section{Methods}
+
+\begin{itemize}
+    \item Newton
+    \item Haley
+    \item Ostrowski
+    \item Ostrowski multi-point
+    \item Ostrowski Square-root
+    \item Secant
+    \item Muller
+    \item Steffensen
+    \item Graeffe
+    \item Tangent-Graeffe
+    \item Laguerre
+    \item Jenkins-Traub
+    \item Durant-Kerner
+    \item Aberth-Erhlich
+    \item Companion Matrix
+    \item Householders 3rd
+    \item Rutishauser Quotient-Difference
+    \item Bairstow
+    \item Chebyshev
+\end{itemize}
+
+\newpage
+\section{Horner Speedup with {\tt numba} JIT compilation}
+
+\begin{center}
+\begin{tabular}{c}
+\begin{tabular}{m{10cm}m{10cm}}
+\toprule
+Implementation & Test \\
+\midrule
+\begin{minipage}[m]{10cm}
+<<, engine='python',size="tiny",echo=TRUE,results='hide'>>=
+@njit
+def horner(p, x):
+    s = 0.0 + 0.0j
+    for c in p: s = s * x + c
+    return s
+
+@njit
+def horner_vec(coeffs, x):
+    value = np.empty_like(x, dtype=np.complex128)
+    for i in range(x.size):
+        y = coeffs[0]
+        for j in range(1,coeffs.size): y = y * x[i] + coeffs[j]
+        value[i] = y
+    return value
+
+@njit
+def horner_multi(p, x):
+    deg_plus_1, n_polys = p.shape
+    n_points = x.size
+    out = np.empty((n_polys, n_points), dtype=np.complex128)
+
+    for j in range(n_polys):         # each polynomial
+        for i in range(n_points):    # each point
+            y = p[0, j]
+            for k in range(1, deg_plus_1):
+                y = y * x[i] + p[k, j]
+            out[j, i] = y
+    return out
+@ 
+\end{minipage}
+&
+\begin{minipage}[m]{10cm}
+<<, engine='python',size="tiny">>=
+cf = (np.random.randn(10) + 1j*np.random.randn(10))
+cfm = np.column_stack([cf,cf+1,cf+2])
+x  = (np.random.randn(100) + 1j*np.random.randn(100))
+
+h0 = horner(cf,x[0])
+hv = horner_vec(cf,x)
+hm = horner_multi(cfm,x)
+pv = np.polyval(cf,x)
+pm = np.vstack([np.polyval(cf,x),np.polyval(cf+1,x),np.polyval(cf+2,x)])
+
+err = np.abs(hv[0] - pv[0])
+errv = np.max(np.abs(hv - pv))
+errm = np.max(np.abs(hm - pm))
+
+spm="np.column_stack([np.polyval(cf,x),np.polyval(cf+1,x),np.polyval(cf+2,x)])"
+tpm=timeit.timeit(spm,globals=globals(), number=100)
+tpv=timeit.timeit("np.polyval(cf,x)", globals=globals(), number=100)
+tp=timeit.timeit("np.polyval(cf,x[0])", globals=globals(), number=100)
+
+thm=timeit.timeit("horner_multi(cfm,x)",globals=globals(), number=100)
+thv=timeit.timeit("horner_vec(cf,x)", globals=globals(), number=100)
+th=timeit.timeit("horner(cf,x[0])", globals=globals(), number=100)
+
+sm = tpm/thm
+sv= tpv/thv
+s= tp/th
+@
+\end{minipage}
+\\
+\bottomrule
+\end{tabular}
+\end{tabular}
+\end{center}
+
+\begin{itemize}
+    \item {\tt cf} size: \Sexpr{dim(py[["cf"]])}
+    \item {\tt cfm} size: \Sexpr{dim(py[["cfm"]])}
+    \item {\tt x} size: \Sexpr{dim(py[["x"]])}
+    \item {\tt horner} error: \Sexpr{py[["err"]]}
+    \item {\tt horner\_vec} error: \Sexpr{py[["errv"]]}
+    \item {\tt horner\_multi} error: \Sexpr{py[["errm"]]}
+    \item {\tt numba} just-in-time compiler {\tt horner} speedup: \Sexpr{round(py[["s"]],2)} times {\tt np.polyval}
+    \item {\tt numba} just-in-time compiler {\tt horner\_vec} speedup: \Sexpr{round(py[["sv"]],2)} times {\tt np.polyval}
+    \item {\tt numba} just-in-time compiler {\tt horner\_multi} speedup: \Sexpr{round(py[["sm"]],2)} times {\tt np.polyval}
+\end{itemize}
+
+\newpage
+\section{Upper, Lower Bounds on Root Radius}
+
+\vskip 2cm
+
+\begin{center}
+\begin{tabular}{cc}
+\toprule
+Root Bounds & Divergence Mitigation Strategy \\
+\midrule
+\begin{tikzpicture}[>=Latex,scale=0.66,every node/.style={font=\small}]
+  \draw[->] (-4,0) -- (4,0) node[right] {$x$};
+  \draw[->] (0,-4) -- (0,4) node[above] {$i y$};
+  \begin{scope}
+    \clip (0,0) circle (3cm);
+    \shade[inner color=blue!10, outer color=blue!60]
+      (0,0) circle (3cm);
+  \end{scope}
+  \draw[blue!80!black, thick] (0,0) circle (3cm);
+  \fill[white] (0,0) circle (1cm);
+  \draw[red, thick] (0,0) circle (1cm);
+  \node[text width=4cm, align=center, font=\tiny]
+    at (0,1.75) {\small All roots are\\ within the blue\\ shaded area.};
+  \draw[->, thick, blue!60!black]
+    (45:3cm) -- ++(1.5,1) 
+    node[right, align=left] {
+        \small Upper bound\\[-2pt]
+        e.g.\ Kalantaris or\\[-2pt]
+        Deutsch formula};
+ \draw[->, thick, red]
+  (-30:1cm) -- ++(-30:2.5cm) 
+  node[anchor=west, xshift=3pt, align=left, red]{%
+    \small Lower Bound\\[-2pt]
+    e.g.\ Start point\\[-2pt]
+    formula};
+\end{tikzpicture}
+&
+\begin{tikzpicture}[>=Stealth,scale=0.5,every node/.style={font=\small}]
+\coordinate (O)   at (0,0);          % circle centre
+\coordinate (Zn)  at (1.2,0.8);      % Z_n
+\coordinate (Znp) at (5,3);          % Z_{n+1}  (red tip)
+\coordinate (Yend)at (2,4);      % yellow tip  (rotated DZn)
+\coordinate (Gend) at (0.5,1.1); % new DZ_n (green tip)
+\fill[blue!20,opacity=0.3] (O) circle (4);  % outer bound
+\draw[gray!70,->] (-5,0) -- (5,0) node[right] {$x$};
+\draw[gray!70,->] (0,-5) -- (0,5) node[above] {$iy$};
+\draw[very thick,red,->]   (Zn) -- (Znp)
+      node[pos=0.5,below right] {$DZ_{n}$}
+      node[above right] {$Z_{n+1}$};
+\draw[very thick,orange!85!yellow,->] (Zn) -- (Yend)
+      node[pos=1.0,above right] {rotate by $(0.6+i0.8)$};
+\draw[very thick,green!60!black,->]   (Zn) -- (Gend)
+      node[pos=0.7,above left] {new $DZ_{n}$};
+\draw[dashed,gray] (O) -- (Yend);
+\fill (Zn) circle (2pt) node[below right] {$Z_n$};
+\end{tikzpicture}
+\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\vskip 2cm
+
+\begin{center}
+  \fbox{%
+    \begin{minipage}{0.5\linewidth}
+        \vskip 2mm
+        \begin{itemize}
+            \item root bounds are used to detect divergence
+            \item rotation and scaling are used for recovery
+            \item initial guesses are constrained by bounds
+            \item use “flipped” coefficients to compute lower bounds
+        \end{itemize}
+        \vskip 2mm
+    \end{minipage}%
+  }
+\end{center}
+
+\newpage
+\subsection{45 Upper Bounds on Root Radius}
 
 <<, engine='python',size="tiny",echo=FALSE,results='hide'>>=
 from math import sqrt, cos, pi
@@ -111,7 +403,7 @@ def register_bound(name):
         return func
     return decorator
 
-@register_bound("actual")
+@register_bound("Actual_Root_Radius")
 def bound_actual(coeffs):
     return np.max(np.abs(np.roots(coeffs)))
 
@@ -141,7 +433,7 @@ def evaluate_bounds(coeffs):
     return results
 @
 
-\subsection{A1 to A12 Bounds}
+\subsubsection{A1 to A12 Bounds}
 
 \begin{center}
 \begin{tabular}{c}
@@ -461,7 +753,7 @@ print(f"{v:.1f}")
 \end{center}
 
 \newpage
-\subsection{A13 to A26 definition}
+\subsubsection{A13 to A26 definition}
 
 \begin{center}
 \begin{tabular}{c}
@@ -828,7 +1120,7 @@ print(f"{v:.1f}")
 
 
 \newpage
-\subsection{A27 to A31 definition}
+\subsubsection{A27 to A31 definition}
 
 \begin{center}
 \begin{tabular}{c}
@@ -966,7 +1258,7 @@ print(f"{v:.1f}")
 \end{center}
 
 \newpage
-\subsection{B1 to B14 definition}
+\subsubsection{B1 to B14 definition}
 
 \begin{center}
 \begin{tabular}{c}
@@ -985,7 +1277,15 @@ def bound_B1(coeffs):
 &
 \begin{minipage}[m]{10cm}
 $\zeta \leq \max\left[1, \max_{0 \leq i < n} |c_i| \right]$
-\end{minipage} \\
+\end{minipage} 
+&
+\begin{minipage}[m]{3cm}
+<<, engine='python',echo=FALSE,size="tiny",results="asis">>=
+v = root_bounds["B1_Riddell_1974"](np.ones(10))
+print(f"{v:.1f}")
+@ 
+\end{minipage}
+\\
 % B2
 \begin{minipage}[m]{6cm}
 <<, engine='python',size="tiny">>=
@@ -998,7 +1298,15 @@ def bound_B2(coeffs):
 &
 \begin{minipage}[m]{10cm}
 $\zeta \leq \sum_{i=0}^{n-1} |c_i|^{1 / (n - i)}$
-\end{minipage} \\
+\end{minipage} 
+&
+\begin{minipage}[m]{3cm}
+<<, engine='python',echo=FALSE,size="tiny",results="asis">>=
+v = root_bounds["B2_Walsh_1924"](np.ones(10))
+print(f"{v:.1f}")
+@ 
+\end{minipage}
+\\
 % B3
 \begin{minipage}[m]{6cm}
 <<, engine='python',size="tiny">>=
@@ -1011,7 +1319,15 @@ def bound_B3(coeffs):
 &
 \begin{minipage}[m]{10cm}
 $\zeta \leq |c_{n-1}| + \sum_{i=0}^{n-2} \frac{|c_i|}{|c_{i+1}|}$
-\end{minipage} \\
+\end{minipage} 
+&
+\begin{minipage}[m]{3cm}
+<<, engine='python',echo=FALSE,size="tiny",results="asis">>=
+v = root_bounds["B3_Walsh_1924"](np.ones(10))
+print(f"{v:.1f}")
+@ 
+\end{minipage}
+\\
 % B4
 \begin{minipage}[m]{6cm}
 <<, engine='python',size="tiny">>=
@@ -1023,7 +1339,15 @@ def bound_B4(coeffs):
 &
 \begin{minipage}[m]{10cm}
 $\zeta \leq 1 + \sum_{i=0}^{n-1} |c_i|^2$
-\end{minipage} \\
+\end{minipage} 
+&
+\begin{minipage}[m]{3cm}
+<<, engine='python',echo=FALSE,size="tiny",results="asis">>=
+v = root_bounds["B4_Williams_1922"](np.ones(10))
+print(f"{v:.1f}")
+@ 
+\end{minipage}
+\\
 % B5
 \begin{minipage}[m]{6cm}
 <<, engine='python',size="tiny">>=
@@ -1037,22 +1361,38 @@ def bound_B5(coeffs):
 &
 \begin{minipage}[m]{10cm}
 $\zeta \leq 1 + (|c_{n-1}| - 1)^2 + \sum_{i=0}^{n-2} |c_i - c_{i+1}|^2 + |c_0|^2$
-\end{minipage} \\
+\end{minipage} 
+&
+\begin{minipage}[m]{3cm}
+<<, engine='python',echo=FALSE,size="tiny",results="asis">>=
+v = root_bounds["B5_Williams_1922"](np.ones(10))
+print(f"{v:.1f}")
+@ 
+\end{minipage}
+\\
 % B6
 \begin{minipage}[m]{6cm}
 <<, engine='python',size="tiny">>=
 @register_bound("B6_Kittaneh_1995")
 def bound_B6(coeffs):
     alpha = sum(abs(c)**2 for c in coeffs)
-    c0_sq = abs(coeffs[0])**2 if coeffs else 0
-    return (alpha + 1 + ((alpha + 1)**2 - 4 * c0_sq)**0.5) / 2
+    co_sq = abs(coeffs[0])**2 if len(coeffs) > 0 else 0
+    return (alpha + 1 + ((alpha + 1)**2 - 4 * co_sq)**0.5) / 2
 @
 \end{minipage}
 &
 \begin{minipage}[m]{10cm}
 With $\alpha = \sum_{i=0}^{n-1} |c_i|^2$, \\
 $\zeta \leq \frac{\alpha + 1 + \sqrt{(\alpha + 1)^2 - 4|c_0|^2}}{2}$
-\end{minipage} \\
+\end{minipage} 
+&
+\begin{minipage}[m]{3cm}
+<<, engine='python',echo=FALSE,size="tiny",results="asis">>=
+v = root_bounds["B6_Kittaneh_1995"](np.ones(10))
+print(f"{v:.1f}")
+@ 
+\end{minipage}
+\\
 % B7
 \begin{minipage}[m]{6cm}
 <<, engine='python',size="tiny">>=
@@ -1065,7 +1405,15 @@ def bound_B7(coeffs):
 &
 \begin{minipage}[m]{10cm}
 $\zeta \leq \cos\left(\frac{\pi}{n + 1}\right) + \frac{\sum_{i=0}^{n-1} |c_i|^2 + |c_{n-1}|}{2}$
-\end{minipage} \\
+\end{minipage} 
+&
+\begin{minipage}[m]{3cm}
+<<, engine='python',echo=FALSE,size="tiny",results="asis">>=
+v = root_bounds["B7_Fujii_Kubo_1993"](np.ones(10))
+print(f"{v:.1f}")
+@ 
+\end{minipage}
+\\
 % B8
 \begin{minipage}[m]{6cm}
 <<, engine='python',size="tiny">>=
@@ -1082,7 +1430,15 @@ def bound_B8(coeffs):
 $\left|\zeta + \frac{1}{2} c_{n-1}\right| \leq \frac{1}{2} |c_{n-1}| + \alpha M$ \\
 $M = \sum_{i=2}^{n} |c_{n-i}|^{1/i}$, \\
 $\alpha = \max_{2 \leq i \leq n} \left[(M - 1)|c_{n-i}|^{1/i}\right]^{(i-1)/i}$
-\end{minipage} \\
+\end{minipage} 
+&
+\begin{minipage}[m]{3cm}
+<<, engine='python',echo=FALSE,size="tiny",results="asis">>=
+v = root_bounds["B8_Rahman_1970"](np.ones(10))
+print(f"{v:.1f}")
+@ 
+\end{minipage}
+\\
 % B9
 \begin{minipage}[m]{6cm}
 <<, engine='python',size="tiny">>=
@@ -1097,7 +1453,15 @@ def bound_B9(coeffs):
 \begin{minipage}[m]{10cm}
 $\zeta \leq |c_{n-1}| + \sum_{i=2}^{n} |c_{n-i}| \alpha^{i-2}$ \\
 $\alpha = \frac{1}{\max_{2 \leq i \leq n} |c_{n-i}|^{1/i}}$
-\end{minipage} \\
+\end{minipage} 
+&
+\begin{minipage}[m]{3cm}
+<<, engine='python',echo=FALSE,size="tiny",results="asis">>=
+v = root_bounds["B9_Alzer_1995"](np.ones(10))
+print(f"{v:.1f}")
+@ 
+\end{minipage}
+\\
 % B10
 \begin{minipage}[m]{6cm}
 <<, engine='python',size="tiny">>=
@@ -1110,7 +1474,15 @@ def bound_B10(coeffs):
 &
 \begin{minipage}[m]{10cm}
 $\zeta \leq |c_{n-1}| + \sum_{i=2}^{n} \left|\frac{c_{n-i}}{c_{n-1}}\right|$
-\end{minipage} \\
+\end{minipage} 
+&
+\begin{minipage}[m]{3cm}
+<<, engine='python',echo=FALSE,size="tiny",results="asis">>=
+v = root_bounds["B10_Guggenheimer_1978"](np.ones(10))
+print(f"{v:.1f}")
+@ 
+\end{minipage}
+\\
 % B11
 \begin{minipage}[m]{6cm}
 <<, engine='python',size="tiny">>=
@@ -1123,7 +1495,15 @@ def bound_B11(coeffs):
 &
 \begin{minipage}[m]{10cm}
 $\zeta \leq 1 + \sum_{i=1}^{n} \frac{b_i}{i}$ \quad \text{(exact form of $b_i$ not specified)}
-\end{minipage} \\
+\end{minipage} 
+&
+\begin{minipage}[m]{3cm}
+<<, engine='python',echo=FALSE,size="tiny",results="asis">>=
+v = root_bounds["B11_Guggenheimer_1978"](np.ones(10))
+print(f"{v:.1f}")
+@ 
+\end{minipage}
+\\
 % B12
 \begin{minipage}[m]{6cm}
 <<, engine='python',size="tiny">>=
@@ -1142,6 +1522,13 @@ def bound_B12(coeffs):
 Only if $\sum |c_i|^2 < 1$ \newline
 $\zeta \leq \frac{n^n}{(n-1)^{n-1}} \left( \sum_{i=0}^{n-1} |c_i|^2 \right)^{1 / (2n)}$
 \end{minipage}
+&
+\begin{minipage}[m]{3cm}
+<<, engine='python',echo=FALSE,size="tiny",results="asis">>=
+v = root_bounds["B12_Kuniyeda_1916"](np.ones(10))
+print(f"{v:.1f}")
+@ 
+\end{minipage}
 \\
 % B13
 \begin{minipage}[m]{6cm}
@@ -1158,13 +1545,19 @@ def bound_B13(coeffs):
 \begin{minipage}[m]{10cm}
 $\zeta \leq \max\left[1, \frac{1}{2}\left(|c_{n-1}| + |c_{n-1}|^2 + 4 \sum_{j=0}^{n-2} |c_j|\right)\right]$
 \end{minipage}
+&
+\begin{minipage}[m]{3cm}
+<<, engine='python',echo=FALSE,size="tiny",results="asis">>=
+v = root_bounds["B13_Parodi_1949"](np.ones(10))
+print(f"{v:.1f}")
+@ 
+\end{minipage}
 \\
 % B14
 \begin{minipage}[m]{6cm}
 <<, engine='python',size="tiny">>=
 @register_bound("B14_Mignotte_1999")
 def bound_B14(coeffs):
-    import numpy as np
     total = sum(abs(c) for c in coeffs)
     if total >= 1:
         return np.nan
@@ -1176,33 +1569,42 @@ def bound_B14(coeffs):
 Only if $\sum |c_i| < 1$ \newline
 $\zeta \leq \left( \sum_{i=0}^{n-1} |c_i| \right)^{1/n}$
 \end{minipage}
+&
+\begin{minipage}[m]{3cm}
+<<, engine='python',echo=FALSE,size="tiny",results="asis">>=
+v = root_bounds["B14_Mignotte_1999"](np.ones(10))
+print(f"{v:.1f}")
+@ 
+\end{minipage}
 \\
 \bottomrule
 \end{tabular}
 \end{tabular}
 \end{center}
 
-
-
 \newpage
-\subsection{Bound tests}
+\subsubsection{Root Ratio Bounds Tests}
 <<, engine='python',size="small",echo=FALSE,results='asis'>>=
 
 def latex_escape(s):
-    return re.sub(r'([_&#%${}\\])', r'\\\1', s)
+    v = re.sub(r'([_&#%${}\\])', r'\\\1', s)
+    return  v
 
 def normalize_bounds(bounds):
-    actual = bounds.get("actual", np.nan)
+    actual = bounds.get("Actual_Root_Radius", np.nan)
     return {k: (v / actual if actual > 0 and np.isfinite(v) else np.nan)
             for k, v in bounds.items()}
 
-# Generate 5 test polynomials
+# Generate 8 test polynomials
 test_polys = [
     (np.arange(10) + 1j * np.flip(np.arange(10))).astype(np.complex128),
     (np.linspace(1, 2, 10) + 1j * np.random.rand(10)).astype(np.complex128),
     (np.random.rand(10) + 1j * np.random.rand(10)).astype(np.complex128),
     (np.exp(-np.linspace(0, 5, 10)) + 1j * np.linspace(0, 1, 10)).astype(np.complex128),
     (np.ones(10) + 1j * np.sin(np.linspace(0, np.pi, 10))).astype(np.complex128),
+    (np.random.randn(20) + 1j * np.random.randn(20)).astype(np.complex128),
+    (np.random.randn(30) + 1j * np.random.randn(30)).astype(np.complex128),
+    (np.random.randn(40) + 1j * np.random.randn(40)).astype(np.complex128),
 ]
 
 # Evaluate all bounds
@@ -1220,15 +1622,433 @@ df.index = df.index.map(latex_escape)
 # Format as LaTeX
 latex_code = (
     "\\begin{center}\n" +
-    df.to_latex(float_format="%.2f", escape=False) +
+    "\\begin{tabular}{c}"+
+    "Root Radius Bound divided by Actual Root Radius \\\\"+
+    df.to_latex(
+        float_format=lambda x: (
+            f"{x:.1e}" if abs(x) >= 1e2 else f"{x:.1f}"
+        ) if np.isfinite(x) else "NaN", 
+        escape=False
+    ) +
+    "\\end{tabular}"
     "\\end{center}"
 )
 print(latex_code)
 @
 
+\newpage
+\subsubsection{{\bf MCNAMEE} 2005 : Upper Bound Selection}
+
+\begin{center}
+\fbox{\Sexpr{make_pdf_page("papers/bounds_comparison.pdf",2,"26cm","18cm")}}
+\end{center}
 
 \newpage
-\section{Weierstrass, Gauss-Seidel scheme}
+\begin{center}
+\fbox{\Sexpr{make_pdf_page("papers/bounds_comparison.pdf",3,"26cm","18cm")}}
+\end{center}
+
+\newpage
+\subsection{A Lower Bound on Root Radius}
+\begin{center}
+\fbox{\Sexpr{make_pdf_page("papers/madsen_1973.pdf",1,"26cm","18cm")}}
+\end{center}
+
+\newpage
+\section{Stopping Criteria}
+
+\begin{center}
+\begin{tabular}{c}
+\begin{tabular}{m{10cm}m{10cm}}
+\toprule
+\begin{minipage}[m]{10cm}
+\begin{equation*}
+    \left| x_{i+1} - x_i \right| < \epsilon
+\end{equation*}
+\end{minipage}
+&
+Absolute
+\\[1cm]
+\begin{minipage}[m]{10cm}
+\begin{equation*}
+    \left| \frac{x_{i+1} - x_i}{x_i} \right| < \epsilon
+\end{equation*}
+\end{minipage}
+&
+Relative
+\\[1cm]
+\begin{minipage}[m]{10cm}
+\begin{equation*}
+    \left| \text{\tt horner}(coeff,x_i) \right| < \epsilon
+\end{equation*}
+\end{minipage}
+&
+Residual
+\\[1cm]
+\bottomrule
+\end{tabular}
+\end{tabular}
+\end{center}
+
+
+
+
+
+
+
+\newpage
+\section{Deflation}
+\subsection{Forward}
+
+\begin{center}
+\begin{tabular}{c}
+\begin{tabular}{m{10cm}m{10cm}}
+\toprule
+Implementation & Test \\
+\midrule
+\begin{minipage}[m]{10cm}
+<<fdef1, engine='python', size="tiny">>=
+def fdef(coefs, r):
+    n = coefs.size - 1
+    b = np.empty(n, dtype=complex)
+    b[0] = coefs[0]
+    for i in range(1, n): b[i] = coefs[i] + r * b[i-1]
+    rem = coefs[n] + r * b[n-1]
+    return b, rem
+@njit
+def fdef_jit(coefs, r):
+    n = coefs.size - 1
+    b = np.empty(n, dtype=complex)
+    b[0] = coefs[0]
+    for i in range(1, n): b[i] = coefs[i] + r * b[i-1]
+    rem = coefs[n] + r * b[n-1]
+    return b, rem
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm}
+<<fdef2, engine='python', size="tiny">>=
+p = np.array([1, -9, 26, -24], dtype=np.complex128)
+q_fwd, rem_fwd = fdef(p, 3)
+@
+\end{minipage}
+\\
+\bottomrule
+\end{tabular}
+\end{tabular}
+\end{center}
+
+\begin{itemize}
+    \item {\tt q\_fwd} : \Sexpr{py[["q_fwd"]]}
+    \item {\tt rem\_fwd}: \Sexpr{py[["rem_fwd"]]}
+\end{itemize}
+
+\subsection{Backward}
+
+\begin{center}
+\begin{tabular}{c}
+\begin{tabular}{m{10cm}m{10cm}}
+\toprule
+Implementation & Test \\
+\midrule
+\begin{minipage}[m]{10cm}
+<<bdef1, engine='python', size="tiny">>=
+def bdef(coefs, r):
+    n = coefs.size - 1
+    b = np.empty(n, dtype=complex)
+    b[0] = coefs[0]
+    for i in range(1, n): b[i] = coefs[i] + r * b[i-1]
+    rem = coefs[n] + r * b[n-1]
+    return b, rem
+@njit
+def bdef_jit(coefs, r):
+    n = coefs.size - 1
+    b = np.empty(n, dtype=complex)
+    b[0] = coefs[0]
+    for i in range(1, n): b[i] = coefs[i] + r * b[i-1]
+    rem = coefs[n] + r * b[n-1]
+    return b, rem
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm}
+<<bdef2, engine='python', size="tiny">>=
+p = np.array([1, -9, 26, -24], dtype=np.complex128)
+q_bwd, rem_bwd = bdef(p, 3)
+@
+\end{minipage}
+\\
+\bottomrule
+\end{tabular}
+\end{tabular}
+\end{center}
+
+\begin{itemize}
+    \item {\tt q\_bwd} : \Sexpr{py[["q_bwd"]]}
+    \item {\tt rem\_bwd}: \Sexpr{py[["rem_bwd"]]}
+\end{itemize}
+
+
+\newpage
+\section{Polynomial Transformations}
+\subsection{Taylor Shif}
+\subsection{Reversal}
+
+\newpage
+\section{Quadratics, Cubics}
+
+
+\newpage
+\section{Newton}
+
+\begin{equation*}
+    x_{i+1} = x_i - \frac{f(x_i)}{f'(x_i)}
+    \qquad (i = 0, 1, \ldots, m)
+\end{equation*}
+
+\begin{center}
+\begin{tabular}{c}
+\begin{tabular}{m{10cm}m{10cm}}
+\toprule
+Implementation & Test \\
+\midrule
+\begin{minipage}[m]{10cm}
+<<newton1, engine='python', size="tiny">>=
+def newton(poly, x0, tol=1e-12, maxiter=100):
+    x = x0
+    for _ in range(maxiter):
+        p = poly[0]
+        dp = 0
+        for coeff in poly[1:]:
+            dp = p + x*dp
+            p = coeff + x*p
+        if abs(p) < tol: return x
+        if dp == 0: break
+        delta = p / dp
+        x -= delta
+        if abs(delta) < tol: return x
+    return x
+
+@njit
+def newton_jit(poly, x0, tol=1e-12, maxiter=100):
+    x = x0
+    for _ in range(maxiter):
+        p = poly[0]
+        dp = 0
+        for coeff in poly[1:]:
+            dp = p + x*dp
+            p = coeff + x*p
+        if abs(p) < tol: return x
+        if dp == 0: break
+        delta = p / dp
+        x -= delta
+        if abs(delta) < tol: return x
+    return x
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm}
+<<newton2, engine='python', size="tiny">>=
+np.random.seed(42)
+cf = np.random.randn(50) + 1j * np.random.randn(50)  
+x0 = np.random.randn()+1j*np.random.randn() 
+root = newton(cf, x0)
+root_jit = newton_jit(cf, x0)
+err = np.abs(np.polyval(cf, root))
+err_jit = np.abs(np.polyval(cf, root_jit))
+tn=timeit.timeit("newton(cf, x0)", globals=globals(), number=100)
+tnj=timeit.timeit("newton_jit(cf, x0)", globals=globals(), number=100)
+s = tn/tnj
+@
+\end{minipage}
+\\
+\bottomrule
+\end{tabular}
+\end{tabular}
+\end{center}
+
+\begin{itemize}
+    \item coefficients {\tt cf} : \Sexpr{dim(py[["cf"]])}
+    \item {\tt x0} : \Sexpr{py[["x0"]]}
+    \item {\tt err}: \Sexpr{py[["err"]]}
+    \item {\tt err\_jit}: \Sexpr{py[["err_jit"]]}
+    \item jit speedup {\tt s}: \Sexpr{py[["s"]]}
+\end{itemize}
+
+\newpage
+\section{Laguerre}
+
+\begin{equation*}
+z_{k+1} = z_k -
+\frac{n\, p(z_k)}{
+    p'(z_k) \pm 
+    \sqrt{(n-1)\left[ (n-1) [p'(z_k)]^2 - n\, p(z_k)\, p''(z_k) \right]}
+}
+\end{equation*}
+
+\begin{center}
+\begin{tabular}{c}
+\begin{tabular}{m{10cm}m{10cm}}
+\toprule
+Implementation & Test \\
+\midrule
+\begin{minipage}[m]{10cm}
+<<lag1, engine='python',size="tiny">>=
+def laguerre(poly, x0, tol=1e-12, maxiter=100):
+    n = len(poly) - 1
+    x = x0
+    for i in range(maxiter):
+        p = poly[0]
+        dp = 0
+        ddp = 0
+        for coeff in poly[1:]:
+            ddp = 2*dp + x*ddp
+            dp = p + x*dp
+            p = coeff + x*p
+        if abs(p) < tol: return x
+        G = dp / p
+        H = G*G - ddp / p
+        denom1 = G + np.sqrt((n-1)*(n*H - G*G))
+        denom2 = G - np.sqrt((n-1)*(n*H - G*G))
+        if abs(denom1) > abs(denom2):
+            a = n / denom1
+        else:
+            a = n / denom2
+        x -= a
+        if abs(a) < tol: return x
+    return x
+
+@njit
+def laguerre_jit(poly, x0, tol=1e-12, maxiter=100):
+    n = len(poly) - 1
+    x = x0
+    for i in range(maxiter):
+        p = poly[0]
+        dp = 0
+        ddp = 0
+        for coeff in poly[1:]:
+            ddp = 2*dp + x*ddp
+            dp = p + x*dp
+            p = coeff + x*p
+        if abs(p) < tol: return x
+        G = dp / p
+        H = G*G - ddp / p
+        denom1 = G + np.sqrt((n-1)*(n*H - G*G))
+        denom2 = G - np.sqrt((n-1)*(n*H - G*G))
+        if abs(denom1) > abs(denom2):
+            a = n / denom1
+        else:
+            a = n / denom2
+        x -= a
+        if abs(a) < tol: return x
+    return x
+@ 
+\end{minipage}
+&
+\begin{minipage}[m]{10cm}
+<<lag2, engine='python',size="tiny">>=
+np.random.seed(42)
+cf = np.random.randn(50)+1j*np.random.randn(50)
+x0 = np.random.randn()+1j*np.random.randn()
+root = laguerre(cf,x0)
+root_jit = laguerre_jit(cf, x0)
+err = np.abs(np.polyval(cf,root))
+err_jit = np.abs(np.polyval(cf, root_jit))
+tn=timeit.timeit("laguerre(cf, x0)", globals=globals(), number=100)
+tnj=timeit.timeit("laguerre_jit(cf, x0)", globals=globals(), number=100)
+s = tn/tnj
+@
+\end{minipage}
+\\
+\bottomrule
+\end{tabular}
+\end{tabular}
+\end{center}
+
+\begin{itemize}
+    \item coefficients {\tt cf} : \Sexpr{dim(py[["cf"]])}
+    \item {\tt x0} : \Sexpr{py[["x0"]]}
+    \item {\tt err}: \Sexpr{py[["err"]]}
+    \item {\tt err\_jit}: \Sexpr{py[["err_jit"]]}
+    \item jit speedup {\tt s}: \Sexpr{py[["s"]]}
+\end{itemize}
+
+
+\newpage
+\section{Secant (Regula Falsi)}
+
+\begin{equation*}
+x_{i+1} =
+\frac{p(x_i)}{p(x_i) - p(x_{i-1})} x_{i-1}
++
+\frac{p(x_{i-1})}{p(x_{i-1}) - p(x_i)} x_i
+\end{equation*}
+
+\begin{center}
+\begin{tabular}{c}
+\begin{tabular}{m{10cm}m{10cm}}
+\toprule
+Implementation & Test \\
+\midrule
+\begin{minipage}[m]{10cm}
+<<sec1, engine='python',size="tiny">>=
+def secant(coeffs, x0, x1, tol=1e-12, maxiter=100):
+    p0 = horner(coeffs, x0)
+    p1 = horner(coeffs, x1)
+    for i in range(1, maxiter+1):
+        denom = p1 - p0
+        if denom == 0:
+            raise ZeroDivisionError(f"Zero denominator at iteration {i}")
+        x2 = (p1    / (p1 - p0)) * x0 + (p0    / (p0 - p1)) * x1
+        if abs(x2 - x1) < tol:
+            return x2, i
+        x0, p0 = x1, p1
+        x1, p1 = x2, horner(coeffs, x2)
+    return x2, i
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm}
+<<sec2, engine='python',size="tiny">>=
+np.random.seed(42)
+cf = np.random.randn(50)+1j*np.random.randn(50)
+x0, x1 = np.random.randn(2)+1j*np.random.randn(2)
+root, niter = secant(cf,x0,x1)
+err = np.abs(np.polyval(cf,root))
+@
+\end{minipage}
+\\
+\bottomrule
+\end{tabular}
+\end{tabular}
+\end{center}
+
+\begin{itemize}
+    \item coefficients {\tt cf} : \Sexpr{dim(py[["cf"]])}
+    \item {\tt x0} : \Sexpr{py[["x0"]]}
+    \item {\tt x1} : \Sexpr{py[["x1"]]}
+    \item iterations {\tt niter}: \Sexpr{py[["niter"]]}
+    \item {\tt err}: \Sexpr{py[["err"]]}
+    \item also called {\bf Regula Falsi}, known since antiquity
+    \item known as “rule of double false position” after 1202 A.D. in the West
+    \item known as the “Method of Surplus and Deficiency” in China around 2nd century B.C.
+    \item first reference in the Rhind papyrus from Egypt, second millenium B.C.
+    \item appears in the Siddhantadipika of Paramesvara (ca 1380–1460 A.D.)
+    \item no guarantees for complex polynomials
+    \item can be used as a ``plan B'' inside another method if convergence slows
+\end{itemize}
+
+\newpage
+\section{Muller's Method}
+
+\[
+\begin{array}{rlcl}
+    h_1 &= x_{i-1} - x_{i-2}   & \quad & a = \dfrac{\delta_2 - \delta_1}{h_2 + h_1} \\[2.5ex]
+    h_2 &= x_{i} - x_{i-1}     &       & b = a h_2 + \delta_2 \\[2.5ex]
+    \delta_1 &= \dfrac{f(x_{i-1}) - f(x_{i-2})}{h_1} & & c = f(x_i) \\[2.5ex]
+    \delta_2 &= \dfrac{f(x_{i}) - f(x_{i-1})}{h_2} & & x_{i+1} = x_i - \dfrac{2c}{b \pm \sqrt{b^2 - 4ac}}
+\end{array}
+\]
 
 \begin{center}
 \begin{tabular}{c}
@@ -1238,7 +2058,232 @@ Implementation & Test \\
 \midrule
 \begin{minipage}[m]{10cm}
 <<, engine='python',size="tiny">>=
-def weierstrass_gs(p_coeffs, x0, max_iter=100, tol=1e-12, verbose=False):
+@njit
+def muller_step(cf, x0, x1, x2):
+    h1 = x1 - x0
+    h2 = x2 - x1
+    delta1 = (horner(cf,x1) - horner(cf,x0)) / h1
+    delta2 = (horner(cf,x2) - horner(cf,x1)) / h2
+    a = (delta2 - delta1) / (h2 + h1)
+    b = a * h2 + delta2
+    c = horner(cf,x2)
+    discrim = b**2 - 4*a*c
+    sqrt_disc = np.sqrt(discrim)
+    if abs(b + sqrt_disc) > abs(b - sqrt_disc):
+        denom = b + sqrt_disc
+    else:
+        denom = b - sqrt_disc
+    if denom == 0:
+        raise ZeroDivisionError("Denominator in Muller step is zero.")
+    dx = -2 * c / denom
+    x3 = x2 + dx
+    return x3
+@ 
+\end{minipage}
+&
+\begin{minipage}[m]{10cm}
+<<, engine='python',size="tiny">>=
+np.random.seed(42)
+cf = np.random.randn(50)+1j*np.random.randn(50)
+x0, x1, x2 = np.random.randn(3)+1j*np.random.randn(3)
+for i in range(100):
+    x0, x1, x2 = x1, x2, muller_step(cf, x0, x1, x2)
+    if np.abs(horner(cf,x2)) < 1e-12: break
+err = np.abs(np.polyval(cf,x2))
+@ 
+\end{minipage}
+\\
+\bottomrule
+\end{tabular}
+\end{tabular}
+\end{center}
+
+\begin{itemize}
+    \item coefficients {\tt cf} : \Sexpr{dim(py[["cf"]])}
+    \item {\tt x0} : \Sexpr{py[["x0"]]}
+    \item {\tt x1} : \Sexpr{py[["x1"]]}
+    \item {\tt x2} : \Sexpr{py[["x2"]]}
+    \item iterations {\tt i}: \Sexpr{py[["i"]]}
+    \item {\tt err}: \Sexpr{py[["err"]]}
+\end{itemize}
+
+
+\newpage
+\section{Steffensen's Method}
+
+\begin{equation*}
+x_{n+1} = x_n - \frac{f(x_n)^2}{f(x_n + f(x_n)) - f(x_n)}
+\end{equation*}
+
+\begin{center}
+\begin{tabular}{c}
+\begin{tabular}{m{10cm}m{10cm}}
+\toprule
+Implementation & Test \\
+\midrule
+\begin{minipage}[m]{10cm}
+<<setff1, engine='python',size="tiny">>=
+
+def kalantari_radius(cf):
+    a_n = cf[0]
+    if a_n == 0:
+        raise ValueError("Leading coefficient (cf[0]) must be non‑zero.")
+    n = len(cf) - 1
+    exponents = 1.0 / np.arange(n, 0, -1)          # 1/n, 1/(n-1), …, 1
+    R = 2.0 * np.max((np.abs(cf[1:]) / np.abs(a_n)) ** exponents)
+    return float(R)
+
+def steffensen_step(cf,z):
+    f  = horner(cf, z)
+    f2 = horner(cf, z + f)
+    denom = f2 - f
+    if denom == 0:
+        raise ZeroDivisionError("Denominator in Steffensen step is zero.")
+    return z - f * f / denom
+
+def steffensen(
+    cf, z0, tol: float = 1e-12,maxiter: int = 100, rot: complex = 0.6 + 0.8j
+):
+    cf = np.asarray(cf, dtype=np.complex128)
+    R = kalantari_radius(cf)
+    r_mid = 0.5 * R
+    nrot = 0
+    z = z0
+    for k in range(1, maxiter + 1):
+        try:
+            z_new = steffensen_step(cf, z)
+        except ZeroDivisionError:
+            z_new = z + rot * z # timid fallback
+        if np.abs(z_new) > R:
+            nrot += 1
+            step_rot = rot * (z_new - z)
+            z_new = z + step_rot
+            z_new = z_new / abs(z_new) * r_mid if z_new != 0 else r_mid*(1+1j)
+        f_new = horner(cf, z_new)
+        step  = np.abs(z_new - z)
+        if step < tol:             
+            if abs(f_new) < 1e-10:
+                return z_new, k, nrot, R, step
+            else:
+                nrot += 1
+                step_rot = rot * (z_new - z)
+                z_new = z + step_rot
+                z_new = z_new / abs(z_new) * r_mid if z_new != 0 else r_mid*(1+1j)
+        z = z_new
+    return z, maxiter, nrot, R, step
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm}
+<<steff2, engine='python',size="tiny">>=
+np.random.seed(42)
+cf = np.random.randn(10)+1j*np.random.randn(10)
+cf = cf / np.abs(cf[0])
+x0 = np.random.randn()+1j*np.random.randn()
+root, niter, nrot, R, chg = steffensen(cf, x0)
+err = np.abs(horner(cf,root))
+@
+\end{minipage}
+\\
+\bottomrule
+\end{tabular}
+\end{tabular}
+\end{center}
+
+\begin{itemize}
+    \item coefficients {\tt cf} : \Sexpr{dim(py[["cf"]])}
+    \item {\tt x0} : \Sexpr{py[["x0"]]}
+    \item radius {\tt R}: \Sexpr{py[["R"]]}
+    \item chg {\tt chg}: \Sexpr{py[["chg"]]}
+    \item iterations {\tt niter}: \Sexpr{py[["niter"]]}
+    \item rotations {\tt nrot}: \Sexpr{py[["nrot"]]}
+    \item {\tt err}: \Sexpr{py[["err"]]}
+\end{itemize}
+
+\newpage
+\section{Ostrowski Multi-point}
+
+\begin{center}
+$y_{n} = z_n - \frac{p(z_n)}{p'(z_n)}$ \\[5mm]
+$z_{n+1} = y_n - \frac{p(z_n)}{p(z_n)-2p(y_n)} \frac{p(y_n)}{p'(y_n)}$
+\end{center}
+
+\begin{center}
+\begin{tabular}{c}
+\begin{tabular}{m{10cm}m{10cm}}
+\toprule
+Implementation & Test \\
+\midrule
+\begin{minipage}[m]{10cm}
+<<ostro1, engine='python',size="tiny">>=
+def ostrowski(coeffs, z0, tol=1e-12, maxiter=100):
+    dcoeffs = np.polyder(coeffs)
+    z = z0
+    for i in range(1, maxiter + 1):
+        pz  = horner(coeffs,   z)
+        dpz = horner(dcoeffs,  z)
+        if dpz == 0:
+            raise ZeroDivisionError(f"Zero derivative at iteration {i}")        
+        # first auxiliary point
+        y = z - pz / dpz
+        py  = horner(coeffs,  y)
+        dpy = horner(dcoeffs, y)
+        denom = pz - 2 * py
+        if denom == 0 or dpy == 0:
+            raise ZeroDivisionError(f"Zero denominator at iteration {i}")
+        z_next = y - (pz / denom) * (py / dpy)
+        if abs(z_next - z) < tol:
+            return z_next, i
+        z = z_next
+    return z_next, i
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm}
+<<ostro2, engine='python',size="tiny">>=
+np.random.seed(42)
+cf = np.random.randn(50)+1j*np.random.randn(50)
+cf = cf / np.abs(cf[0])
+x0 = np.random.randn()+1j*np.random.randn()
+root, niter = ostrowski(cf, x0)
+err = np.abs(horner(cf,root))
+@
+\end{minipage}
+\\
+\end{tabular}
+\end{tabular}
+\end{center}
+
+\begin{itemize}
+    \item coefficients {\tt cf} : \Sexpr{dim(py[["cf"]])}
+    \item {\tt x0} : \Sexpr{py[["x0"]]}
+    \item iterations {\tt niter}: \Sexpr{py[["niter"]]}
+    \item {\tt err}: \Sexpr{py[["err"]]}
+\end{itemize}
+
+\newpage
+\section{Weierstrass-Durand-Kerner (WDK), Gauss-Seidel scheme}
+
+\begin{equation*}
+    z_i^{(k+1)} = z_i^{(k)} - 
+    \frac{P\left(z_i^{(k)}\right)}
+    {
+        \displaystyle
+        \prod_{j=1}^{i-1} \left( z_i^{(k)} - z_j^{(k+1)} \right)
+        \prod_{j=i+1}^{n} \left( z_i^{(k)} - z_j^{(k)} \right)
+    }
+    \qquad (i=1, \ldots, n)
+\end{equation*}
+
+\begin{center}
+\begin{tabular}{c}
+\begin{tabular}{m{10cm}m{10cm}}
+\toprule
+Implementation & Test \\
+\midrule
+\begin{minipage}[m]{10cm}
+<<wdk_gs, engine='python',size="tiny">>=
+def wdk_gs(p_coeffs, x0, max_iter=100, tol=1e-12, verbose=False):
     x = np.array(x0, dtype=np.complex128, copy=True)   # isolate from caller
     n = x.size
     ones = np.ones(n, dtype=np.complex128)
@@ -1253,8 +2298,6 @@ def weierstrass_gs(p_coeffs, x0, max_iter=100, tol=1e-12, verbose=False):
             numer = np.polyval(p_coeffs, x[i])
             x[i] -= numer / denom                       
         delta = np.abs(x - x_old).max()
-        if verbose:
-            print(f"iter {k:2d}: max |Δx| = {delta:.2e}")
         if delta < tol:
             break
     return x, k
@@ -1262,9 +2305,45 @@ def weierstrass_gs(p_coeffs, x0, max_iter=100, tol=1e-12, verbose=False):
 \end{minipage}
 &
 \begin{minipage}[m]{10cm}
-<<, engine='python',size="tiny">>=
-r,n = weierstrass_gs([1,2,3,4],[0.1+0.5j,0.1-0.1j,0.1+1j])
-np.max(np.abs(np.polyval([1,2,3,4],r)))
+<<test_wdk_gs, engine='python',size="tiny">>=
+np.random.seed(42)
+cf = np.random.randn(10)+1j*np.random.randn(10)
+cf = cf / np.abs(cf[0])
+x0 = np.random.randn(9)+1j*np.random.randn(9)
+r_wdk_gs, n_wdk_gs = wdk_gs(cf,x0)
+err_wdk_gs=np.max(np.abs(np.polyval(cf,r_wdk_gs)))
+@
+\end{minipage}
+\\
+\begin{minipage}[m]{10cm}
+<<wdk_gs_jit, engine='python',size="tiny">>=
+@njit
+def wdk_gs_jit(p_coeffs, x0, max_iter=100, tol=1e-12):
+    x = x0.copy()
+    n = x.size
+    for k in range(max_iter):
+        delta = 0.0
+        for i in range(n):
+            denom = 1.0 + 0j
+            xi = x[i]
+            for j in range(n):
+                if j != i:
+                    denom *= xi - x[j]
+            if denom != 0:
+                numer = horner(p_coeffs, xi)
+                new_xi = xi -  numer / denom
+                delta = max(delta, abs(new_xi - xi))
+                x[i] = new_xi
+        if delta < tol:
+            break
+    return x, k
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm}
+<<test_wdk_gs_jit, engine='python',size="tiny">>=
+r_wdk_gs_jit, n_wdk_gs_jit = wdk_gs_jit(cf,x0)
+err_wdk_gs_jit=np.max(np.abs(np.polyval(cf,r_wdk_gs_jit)))
 @
 \end{minipage}
 \\
@@ -1273,11 +2352,38 @@ np.max(np.abs(np.polyval([1,2,3,4],r)))
 \end{tabular}
 \end{center}
 
-\newpage
-\section{Weierstrass, Jacobi scheme}
+\begin{itemize}
+    \item {\tt cf} size: \Sexpr{dim(py[["cf"]])}
+    \item {\tt x0} size: \Sexpr{dim(py[["x0"]])}
+    \item {\tt err\_wdk\_gs}: \Sexpr{py[["err_wdk_gs"]]} 
+    \item {\tt n\_wdk\_gs}: \Sexpr{py[["n_wdk_gs"]]}
+    \item {\tt err\_wdk\_gs\_jit}: \Sexpr{py[["err_wdk_gs_jit"]]}
+    \item {\tt n\_wdk\_gs\_jit}: \Sexpr{py[["n_wdk_gs_jit"]]}
+\end{itemize}
 
-<<, engine='python'>>=
-def weierstrass_jcb(p_coeffs, x0, max_iter=100, tol=1e-12, verbose=False):
+
+
+\newpage
+\section{WDK, Jacobi scheme}
+
+\begin{center}
+\begin{equation*}
+    z_i^{(k+1)} = z_i^{(k)} - 
+    \frac{P\left(z_i^{(k)}\right)}
+         {\prod_{\substack{j=1 \\ j \ne i}}^{n} \left( z_i^{(k)} - z_j^{(k)} \right)}
+    \qquad (i=1,\ldots,n;\; k=0,1,\ldots)
+\end{equation*}    
+\end{center}
+
+\begin{center}
+\begin{tabular}{c}
+\begin{tabular}{m{10cm}m{10cm}}
+\toprule
+Implementation & Test \\
+\midrule
+\begin{minipage}[m]{10cm}
+<<, engine='python',size="tiny">>=
+def wdk_jcb(p_coeffs, x0, max_iter=100, tol=1e-12, verbose=False):
     x = np.asarray(x0, dtype=np.complex128, copy=True)
     n = x.size
     diag_idx = np.diag_indices(n)
@@ -1290,51 +2396,138 @@ def weierstrass_jcb(p_coeffs, x0, max_iter=100, tol=1e-12, verbose=False):
         nz = denom != 0
         x[nz] -= numer[nz] / denom[nz]
         delta = np.abs(x - x_old).max()
-        if verbose:
-            print(f"iter {k:2d}: max |Δx| = {delta:.2e}")
         if delta < tol:
             break
     return x, k
 @
+\end{minipage}
+&
+\begin{minipage}[m]{10cm}
+<<, engine='python',size="tiny">>=
+np.random.seed(42)
+cf = np.random.randn(10)+1j*np.random.randn(10)
+cf = cf / np.abs(cf[0])
+x0 = np.random.randn(9)+1j*np.random.randn(9)
+r_wdk_jcb, n_wdk_jcb = wdk_jcb(cf,x0)
+err_wdk_jcb=np.max(np.abs(np.polyval(cf,r_wdk_jcb)))
+@
+\end{minipage}
+\\
+\begin{minipage}[m]{10cm}
+<<, engine='python',size="tiny">>=
+@njit
+def wdk_jcb_jit(p_coeffs, x0, max_iter=100, tol=1e-12):
+    x = x0.copy()
+    n = x.size
+    denom = np.empty(n, dtype=np.complex128)
+    dx = np.empty(n, dtype=np.complex128)
+    numer = np.empty(n, dtype=np.complex128)
+    for k in range(max_iter):
+        for i in range(n):
+            xi = x[i]
+            di = 1.0 + 0j
+            for j in range(n):
+                if i != j:
+                    di *= (xi - x[j])
+            denom[i] = di
+            numer[i] = horner(p_coeffs, xi)
+        max_delta = 0.0
+        for i in range(n):
+            if denom[i] != 0.0:
+                dx_i = -numer[i] / denom[i]
+            else:
+                dx_i = 0.0  
+            dx[i] = dx_i
+            if abs(dx_i) > max_delta:
+                max_delta = abs(dx_i)
+        x += dx
+        if max_delta < tol:
+            break
+    return x,k
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm}
+<<, engine='python',size="tiny">>=
+r_wdk_jcb_jit, n_wdk_jcb_jit = wdk_jcb_jit(cf,x0)
+err_wdk_jcb_jit=np.max(np.abs(np.polyval(cf,r_wdk_jcb_jit)))
+@
+\end{minipage}
+\\
+\bottomrule
+\end{tabular}
+\end{tabular}
+\end{center}
+
+\begin{itemize}
+    \item {\tt cf} size: \Sexpr{dim(py[["cf"]])}
+    \item {\tt x0} size: \Sexpr{dim(py[["x0"]])}
+    \item {\tt err\_wdk\_jcb}: \Sexpr{py[["err_wdk_jcb"]]} 
+    \item {\tt n\_wdk\_jcb}: \Sexpr{py[["n_wdk_jcb"]]}
+    \item {\tt err\_wdk\_jcb\_jit}: \Sexpr{py[["err_wdk_jcb_jit"]]}
+    \item {\tt n\_wdk\_jcb\_jit}: \Sexpr{py[["n_wdk_jcb_jit"]]}
+\end{itemize}
 
 \newpage
-\section{Weierstrass, Jacobi scheme with Over-Relaxation}
+\section{WDK, Jacobi scheme with Over-Relaxation}
 
-<<, engine='python'>>=
-def weierstrass_jcb_sor(
-    p_coeffs, x0, *,
-    omega=0.5,      # 1.0 → plain Jacobi
-    max_iter=100, tol=1e-12,
-    verbose=False
-):
+\begin{center}
+\begin{equation*}
+    z_i^{(k+1)} = z_i^{(k)} - 
+    \omega \frac{P\left(z_i^{(k)}\right)}
+         {\prod_{\substack{j=1 \\ j \ne i}}^{n} \left( z_i^{(k)} - z_j^{(k)} \right)}
+    \qquad (i=1,\ldots,n;\; k=0,1,\ldots)
+\end{equation*}    
+\end{center}
+
+\begin{center}
+\begin{tabular}{c}
+\begin{tabular}{m{10cm}m{10cm}}
+\toprule
+Implementation & Test \\
+\midrule
+\begin{minipage}[m]{10cm}
+<<, engine='python',size="tiny">>=
+def wdk_jcb_sor(cf, x0, *,omega=0.5,max_iter=100, tol=1e-12):
     x = np.asarray(x0, dtype=np.complex128, copy=True)
     n = x.size
     diag = np.diag_indices(n)
-
     for k in range(max_iter):
         diff = x[:, None] - x[None, :]
         diff[diag] = 1.0
         denom = diff.prod(axis=1)
-        numer = np.polyval(p_coeffs, x)
-
+        numer = horner(cf, x)
         dx = np.where(denom != 0, -numer / denom, 0.0)
-        x_new = x + omega * dx           # relaxation
-
-        if verbose:
-            print(f"iter {k:2d}: max |Δx| = {np.abs(dx).max():.2e}")
-
-        if np.abs(dx).max() < tol:
-            return x_new
+        x_new = x + omega * dx 
+        if np.abs(dx).max() < tol: return x_new, k
         x = x_new
-
     return x, k
 @
-
+\end{minipage}
+&
+\begin{minipage}[m]{10cm}
+<<, engine='python',size="tiny">>=
+r,n = wdk_jcb_sor([1,2,3,4],[0.1+0.5j,0.1-0.1j,0.1+1j])
+np.max(np.abs(np.polyval([1,2,3,4],r)))
+@
+\end{minipage}
+\\
+\bottomrule
+\end{tabular}
+\end{tabular}
+\end{center}
 
 \newpage
 \section{Ehrlich Aberth}
 
-<<, engine='python'>>=
+\begin{center}
+\begin{tabular}{c}
+\begin{tabular}{m{10cm}m{10cm}}
+\toprule
+Implementation & Test \\
+\midrule
+\begin{minipage}[m]{10cm}
+<<, engine='python',size="tiny">>=
 def aberth(p_coeffs, x0, max_iter=100, tol=1e-12, verbose=False):
     x = np.asarray(x0, dtype=np.complex128, copy=True)
     n = len(x)
@@ -1345,115 +2538,326 @@ def aberth(p_coeffs, x0, max_iter=100, tol=1e-12, verbose=False):
         pdervals = np.polyval(p_der, x)
         N = np.zeros_like(x)
         np.divide(pvals, pdervals, out=N, where=(pdervals != 0))
-        
         # Compute sum_{j != i} 1/(x_i - x_j)
         X = x[:, np.newaxis]
         D = X - x[np.newaxis, :]
         mask = np.eye(n, dtype=bool)
         inv_D = np.zeros_like(D)
         np.divide(1.0, D, out=inv_D, where=~mask)
-        sums = np.sum(inv_D, axis=1)
-        
+        sums = np.sum(inv_D, axis=1)     
         denoms = 1.0 - N * sums
         corrections = np.zeros_like(x)
         np.divide(N, denoms, out=corrections, where=(denoms != 0))
         x -= corrections
-        
         delta = np.max(np.abs(x - x_old))
-        if verbose:
-            print(f"iter {k}, max Δx = {delta:.2e}")
-        if delta < tol:
-            break
+        if delta < tol: break
     return x, k
 @
+\end{minipage}
+&
+\begin{minipage}[m]{10cm}
+<<, engine='python',size="tiny">>=
+r,n = aberth([1,2,3,4],[0.1+0.5j,0.1-0.1j,0.1+1j])
+np.max(np.abs(np.polyval([1,2,3,4],r)))
+@
+\end{minipage}
+\\
+\bottomrule
+\end{tabular}
+\end{tabular}
+\end{center}
 
 \newpage
 \section{Companion Matrix}
 
-<<, engine='python'>>=
-def companion_matrix(coeffs):
-    coeffs = np.atleast_1d(coeffs).astype(np.complex128)
-    n = coeffs.size - 1
-    coeffs = coeffs / coeffs[0]
+\[
+\mathbf{C} =
+\begin{bmatrix}
+0 & 1 & 0 & \cdots & 0 \\
+0 & 0 & 1 & \cdots & 0 \\
+\vdots & \vdots & \ddots & \ddots & \vdots \\
+0 & 0 & \cdots & 0 & 1 \\
+-c_0 & -c_1 & \cdots & -c_{n-2} & -c_{n-1}
+\end{bmatrix}
+\]
+
+\begin{center}
+\begin{tabular}{c}
+\begin{tabular}{m{10cm}m{10cm}}
+\toprule
+Implementation & Test \\
+\midrule
+\begin{minipage}[m]{10cm}
+<<, engine='python',size="tiny">>=
+@njit
+def companion_matrix(coeff):
+    cf = coeff/coeff[0]
+    n = cf.size - 1
     C = np.zeros((n, n), dtype=np.complex128)
-    if n > 1:
-        C[:-1, 1:] = np.eye(n - 1)
-    C[-1, :] = -coeffs[:0:-1]
+    if n > 1: C[:-1, 1:] = np.eye(n - 1)
+    C[-1, :] = -cf[:0:-1]
     return C
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm}
+<<, engine='python',size="tiny">>=
+np.random.seed(42)
+cf = np.random.randn(50)+1j*np.random.randn(50)
+r = np.linalg.eigvals(companion_matrix(cf))
+err = np.max(np.abs(np.polyval(cf,r)))
+@
+\end{minipage}
+\\
+\bottomrule
+\end{tabular}
+\end{tabular}
+\end{center}
 
-cf=np.arange(10)+1
-np.max(np.abs(np.sort(np.roots(cf))-np.sort(np.linalg.eigvals(companion_matrix(cf)))))
+\begin{itemize}
+    \item {\tt cf} size: \Sexpr{dim(py[["cf"]])}
+    \item {\tt err}: \Sexpr{py[["err"]]} 
+\end{itemize}
 
-timeit.timeit("np.roots(cf)", globals=globals(), number=100)
-timeit.timeit("np.linalg.eigvals(companion_matrix(cf))", globals=globals(), number=100)
+\newpage
+\section{{\tt GNU} {\tt\bf GMP}}
 
+GMP is a free library for arbitrary precision arithmetic, operating on signed integers, rational numbers, and floating-point numbers. 
+There is no practical limit to the precision except the ones implied by the available memory in the machine GMP runs on. GMP has a rich set of functions,
+and the functions have a regular interface. \\
+
+\noindent The main target applications for GMP are cryptography applications and research, Internet security applications, algebra systems, 
+computational algebra research, etc. \\
+
+\noindent GMP is carefully designed to be as fast as possible, both for small operands and for huge operands. The speed is achieved by 
+using fullwords as the basic arithmetic type, by using fast algorithms, with highly optimised assembly code for the most common 
+inner loops for a lot of CPUs, and by a general emphasis on speed.\\
+
+\noindent The first GMP release was made in 1991. It is continually developed and maintained, with a new release about once a year. \\
+
+\noindent Since version 6, GMP is distributed under the dual licenses, GNU LGPL v3 and GNU GPL v2. These licenses make the library free to use, 
+share, and improve, and allow you to pass on the result. The GNU licenses give freedoms, but also set firm restrictions on the use with 
+non-free programs. \\
+
+\noindent GMP is part of the GNU project. For more information about the GNU project, please see the official 
+GNU web site. \\
+
+\noindent GMP's main target platforms are Unix-type systems, such as GNU/Linux, Solaris, HP-UX, Mac OS X/Darwin, BSD, AIX, etc. 
+It also is known to work on Windows in both 32-bit and 64-bit mode.
+
+\vskip 2cm
+\begin{itemize}
+    \item Why do we care?
+    \item {\tt MPSolve} uses {\tt\bf GMP}
+    \item to see high-precision results we need to process {\tt\bf GMP} number representations
+\end{itemize}
+
+\newpage
+\subsection{{\tt\bf GMP} example}
+
+\subsubsection{{\tt\bf GMP} libraries, types}
+<<, engine='python',size="small">>=
+import ctypes, ctypes.util
+
+_libgmp = ctypes.CDLL(ctypes.util.find_library("gmp"))
+_libc   = ctypes.CDLL(ctypes.util.find_library("c"))
+_libc.free.argtypes = [ctypes.c_void_p]
+
+class mpf_t(ctypes.Structure):
+    _fields_ = [
+        ('_mp_prec', ctypes.c_int),
+        ('_mp_size', ctypes.c_int),
+        ('_mp_exp', ctypes.c_long),
+        ('_mp_d', ctypes.POINTER(ctypes.c_ulong))
+    ]
 @
 
-\Sexpr{py$cf}
+\newpage
+\subsubsection{{\tt\bf GMP} functions}
+<<, engine='python',size="small">>=
+# Function: void mpf_init2 (mpf_t x, mp_bitcnt_t prec) 
+_libgmp.__gmpf_init2.argtypes = [ctypes.POINTER(mpf_t), ctypes.c_ulong] 
+# Function: void mpf_set_d (mpf_t rop, double op) 
+_libgmp.__gmpf_set_d.argtypes = [ctypes.POINTER(mpf_t), ctypes.c_double]
+# Function: void mpf_add (mpf_t rop, const mpf_t op1, const mpf_t op2) : Set rop to op1 + op2
+_libgmp.__gmpf_add.argtypes = [ctypes.POINTER(mpf_t), ctypes.POINTER(mpf_t),ctypes.POINTER(mpf_t)]
+# Function: void mpf_clear (mpf_t x) : Free the space occupied by x. 
+_libgmp.__gmpf_clear.argtypes = [ctypes.POINTER(mpf_t)]
+
+# Function: char * mpf_get_str (char *str, mp_exp_t *expptr, int base, size_t n_digits, const mpf_t op)
+#
+# Convert op to a string of digits in base base. 
+# The base argument may vary from 2 to 62 or from −2 to −36. 
+# Up to n_digits digits will be generated. 
+# Trailing zeros are not returned. 
+# No more digits than can be accurately represented by op are ever generated. 
+# If n_digits is 0 then that accurate maximum number of digits are generated.
+# For base in the range 2..36, digits and lower-case letters are used; 
+# for −2..−36, digits and upper-case letters are used; 
+# for 37..62, digits, upper-case letters, and lower-case letters (in that significance order) are used.
+# If str is NULL, the result string is allocated using the current 
+# allocation function (see Custom Allocation). 
+# The block will be strlen(str)+1 bytes, that being exactly enough for the string and null-terminator.
+# If str is not NULL, it should point to a block of n_digits + 2 bytes, that being enough for the mantissa, 
+# a possible minus sign, and a null-terminator. 
+# When n_digits is 0 to get all significant digits, 
+# an application won’t be able to know the space required, and str should be NULL in that case.
+# The generated string is a fraction, with an implicit radix point 
+# immediately to the left of the first digit. 
+# The applicable exponent is written through the expptr pointer. 
+# For example, the number 3.1416 would be returned as string "31416" and exponent 1.
+# When op is zero, an empty string is produced and the exponent returned is 0.
+# A pointer to the result string is returned, being either the allocated block or the given str.
+_libgmp.__gmpf_get_str.argtypes = [
+    ctypes.c_char_p,                      # user buffer (or NULL)
+    ctypes.POINTER(ctypes.c_long),        # exponent out
+    ctypes.c_int,                         # base
+    ctypes.c_size_t,                      # number of digits (0 = all)
+    ctypes.POINTER(mpf_t)                 # the mpf_t to convert
+]
+_libgmp.__gmpf_get_str.restype = ctypes.c_void_p
+@ 
+
+<<, engine='python',size="small">>=
+def mpf_to_str(x: mpf_t, base: int = 10) -> str:
+    exp = ctypes.c_long()
+    raw_ptr = _libgmp.__gmpf_get_str(None,ctypes.byref(exp),base,0,ctypes.byref(x))
+    if not raw_ptr: return "0"
+    mant_bytes = ctypes.cast(raw_ptr, ctypes.c_char_p).value
+    mant_str   = mant_bytes.decode()
+    _libc.free(raw_ptr)
+    neg = mant_str.startswith('-')
+    if neg: mant_str = mant_str[1:]
+    if len(mant_str) == 1:
+        s = mant_str + ".0"
+    else:
+        s = mant_str[0] + "." + mant_str[1:]
+    s += f"e{exp.value}"
+    return "-" + s if neg else s
+
+def mpf_t_to_mpfr(x: mpf_t) -> gmpy2.mpfr:
+    s = mpf_to_str(x)         # e.g. "3.1415926535…e0"
+    return gmpy2.mpfr(s)
+@ 
+
+\newpage
+\subsubsection{{\tt\bf GMP} add two numbers}
+<<, engine='python',size="small">>=
+a = mpf_t()
+b = mpf_t()
+c = mpf_t()
+
+_libgmp.__gmpf_init2(ctypes.byref(a), 128)
+_libgmp.__gmpf_init2(ctypes.byref(b), 128)
+_libgmp.__gmpf_init2(ctypes.byref(c), 128)
+_libgmp.__gmpf_set_d(ctypes.byref(a), 1.25)
+_libgmp.__gmpf_set_d(ctypes.byref(b), 2.75)
+_libgmp.__gmpf_add(ctypes.byref(c), ctypes.byref(a), ctypes.byref(b))
+
+print(f"result: {mpf_to_str(a)}+{mpf_to_str(b)}={mpf_to_str(c)}")
+
+_libgmp.__gmpf_clear(ctypes.byref(a))
+_libgmp.__gmpf_clear(ctypes.byref(b))
+_libgmp.__gmpf_clear(ctypes.byref(c))
+@ 
+
+\subsubsection{{\tt\bf MPSolve} complex number structure}
+<<, engine='python',size="small">>=
+
+@ 
+
 
 \newpage
 \section{{\tt MPSolve}}
-\subsection{{\tt MPSolve} library}
+\subsection{{\tt MPSolve} load library}
 <<, engine='python',size="small">>=
-import ctypes, numpy as np, os, sys
-
 _mps_path = "/usr/local/lib/libmps.dylib"
-if not os.path.exists(_mps_path):
-    raise FileNotFoundError(f"MPSolve not found at {_mps_path}")
+if not os.path.exists(_mps_path): raise FileNotFoundError(f"MPSolve not found at {_mps_path}")
 _mps = ctypes.CDLL(_mps_path, mode=ctypes.RTLD_GLOBAL)
+@ 
 
-class Cplx(ctypes.Structure):
+\subsection{{\tt MPSolve} data types}
+<<, engine='python',size="small">>=
+class Cplx(ctypes.Structure): # float complex
     _fields_ = [("real", ctypes.c_double),("imag", ctypes.c_double)]
     def __complex__(self):
         return complex(self.real, self.imag)
 
-_mps.mps_context_new.restype  = ctypes.c_void_p
-_mps.mps_context_free.argtypes= [ctypes.c_void_p]
+class mpc_t(ctypes.Structure):  # MPSolve's custom mpc_t using GMP mpf_t
+    _fields_ = [ 
+        ("re", mpf_t),
+        ("im", mpf_t)
+    ]
+
+def mpc_t_to_mpc(z: mpc_t) -> gmpy2.mpc: # convert
+    re = mpf_t_to_mpfr(z.re)
+    im = mpf_t_to_mpfr(z.im)
+    return gmpy2.mpc(re, im)
+@ 
+
+\subsection{{\tt MPSolve} context setup}
+<<, engine='python',size="small">>=
+MPS_OUTPUT_GOAL_APPROXIMATE = 1
+MPS_ALGORITHM_SECULAR_GA    = 1
+
+_mps.mps_context_new.restype  = ctypes.c_void_p   # create context
+_mps.mps_context_free.argtypes= [ctypes.c_void_p] # free context
 
 _mps.mps_context_set_input_prec .argtypes = [ctypes.c_void_p, ctypes.c_long]
 _mps.mps_context_set_output_prec.argtypes = [ctypes.c_void_p, ctypes.c_long]
 _mps.mps_context_set_output_goal.argtypes = [ctypes.c_void_p, ctypes.c_int]
 _mps.mps_context_select_algorithm.argtypes = [ctypes.c_void_p, ctypes.c_int]
 
-_mps.mps_monomial_poly_new.argtypes  = [ctypes.c_void_p, ctypes.c_int]
-_mps.mps_monomial_poly_new.restype   = ctypes.c_void_p
-_mps.mps_monomial_poly_set_coefficient_d.argtypes = (
-        ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int,
-        ctypes.c_double, ctypes.c_double)
-_mps.mps_polynomial_free.argtypes    = [ctypes.c_void_p, ctypes.c_void_p]
-
 _mps.mps_context_set_input_poly.argtypes  = [ctypes.c_void_p, ctypes.c_void_p]
+
 _mps.mps_context_get_degree.argtypes      = [ctypes.c_void_p]
 _mps.mps_context_get_degree.restype       = ctypes.c_int
-_mps.mps_mpsolve.argtypes                 = [ctypes.c_void_p]
 
-_mps.mps_context_get_roots_d.argtypes = [
-    ctypes.c_void_p,
-    ctypes.POINTER(ctypes.POINTER(Cplx)),          # Cplx **roots
-    ctypes.POINTER(ctypes.POINTER(ctypes.c_double))] # double **radii
-_mps.mps_context_get_roots_d.restype  = ctypes.c_int
+_mps.mps_mpsolve.argtypes                 = [ctypes.c_void_p]
+@ 
+
+\newpage
+\subsection{{\tt MPSolve} poly setup}
+<<, engine='python',size="small">>=
+_mps.mps_monomial_poly_new.argtypes  = [ctypes.c_void_p, ctypes.c_int] # create poly
+_mps.mps_monomial_poly_new.restype   = ctypes.c_void_p # free poly
+
+_mps.mps_monomial_poly_set_coefficient_d.argtypes = (
+    ctypes.c_void_p, 
+    ctypes.c_void_p, 
+    ctypes.c_int,
+    ctypes.c_double, 
+    ctypes.c_double
+)
+_mps.mps_polynomial_free.argtypes    = [ctypes.c_void_p, ctypes.c_void_p]
 
 _mps.mps_monomial_poly_set_coefficient_s = _mps.mps_monomial_poly_set_coefficient_s
 _mps.mps_monomial_poly_set_coefficient_s.argtypes = (
         ctypes.c_void_p,             # ctx
         ctypes.c_void_p,             # poly
         ctypes.c_int,                # exponent
-        ctypes.c_char_p, ctypes.c_char_p)  # real, imag  (ASCII strings)
-
+        ctypes.c_char_p,             # real (ASCII string)
+        ctypes.c_char_p              # real (ASCII string)
+)  
 _mps.mps_monomial_poly_set_coefficient_s.restype  = None
+@ 
 
-_mps.mps_context_get_roots_s = _mps.mps_context_get_roots_s
-_mps.mps_context_get_roots_s.argtypes = [
-        ctypes.c_void_p,
-        ctypes.POINTER(ctypes.POINTER(ctypes.c_char_p)),   # real**
-        ctypes.POINTER(ctypes.POINTER(ctypes.c_char_p)),   # imag**
-        ctypes.POINTER(ctypes.POINTER(ctypes.c_double))]   # radii**
+\newpage
+\subsection{{\tt MPSolve} get roots}
+<<, engine='python',size="small">>=
+_mps.mps_context_get_roots_d.argtypes = [
+    ctypes.c_void_p,# context
+    ctypes.POINTER(ctypes.POINTER(Cplx)), # vector of Cplx float structures
+    ctypes.POINTER(ctypes.POINTER(ctypes.c_double)) # double **radii
+] 
+_mps.mps_context_get_roots_d.restype  = ctypes.c_int
 
-_mps.mps_context_get_roots_s.restype = ctypes.c_int
-
-MPS_OUTPUT_GOAL_APPROXIMATE = 1
-MPS_ALGORITHM_SECULAR_GA    = 1
-
+_mps.mps_context_get_roots_m.argtypes = [
+    ctypes.c_void_p, # context
+    ctypes.POINTER(ctypes.POINTER(mpc_t)), # vector of GMP complex
+    ctypes.POINTER(ctypes.POINTER(ctypes.c_double)) # vector of radii
+]
+_mps.mps_context_get_roots_m.restype = ctypes.c_int
 @ 
 
 
@@ -1462,101 +2866,73 @@ MPS_ALGORITHM_SECULAR_GA    = 1
 
 <<, engine='python',size="small">>=
 def mpsolve(coeffs: np.ndarray, precision: int = 100) -> np.ndarray:
-    """
-    Solve a complex polynomial with MPSolve and return its roots.
-    `coeffs` must be highest‑degree first (NumPy convention).
-    """
-    coeffs = np.asarray(coeffs, dtype=np.complex128)
     degree = len(coeffs) - 1
-
-    # 3‑a.  Create and configure a context
     ctx = _mps.mps_context_new()
     _mps.mps_context_set_input_prec (ctx, precision)
     _mps.mps_context_set_output_prec(ctx, precision)
     _mps.mps_context_set_output_goal(ctx, MPS_OUTPUT_GOAL_APPROXIMATE)
     _mps.mps_context_select_algorithm(ctx, MPS_ALGORITHM_SECULAR_GA)
-
-    # 3‑b.  Build polynomial   (MPS expects a₀ + a₁x + … + aₙxⁿ)
     poly = _mps.mps_monomial_poly_new(ctx, degree)
-    for exp, c in enumerate(coeffs[::-1]):           # constant term first
+    for exp, c in enumerate(coeffs[::-1]):
         _mps.mps_monomial_poly_set_coefficient_d(
-            ctx, poly, exp, c.real, c.imag)
-
+            ctx, 
+            poly, 
+            exp, 
+            c.real, 
+            c.imag
+        )
     _mps.mps_context_set_input_poly(ctx, poly)
-
-    # 3‑c.  Solve
     _mps.mps_mpsolve(ctx)
-
-    # 3‑d.  Retrieve the roots  -----------------------------
     n   = _mps.mps_context_get_degree(ctx)
-    if n != degree:          # sanity check
-        raise RuntimeError("Degree reported by MPSolve differs from input")
-
-    roots_ptr  = ctypes.POINTER(Cplx)()
-    radii_ptr  = ctypes.POINTER(ctypes.c_double)()   # must supply a pointer!
+    if n != degree: raise RuntimeError("Degree reported by MPSolve differs from input")
+    roots_ptr  = ctypes.POINTER(Cplx)()  
+    radii_ptr  = ctypes.POINTER(ctypes.c_double)()  
     err = _mps.mps_context_get_roots_d(
-              ctx, ctypes.byref(roots_ptr), ctypes.byref(radii_ptr))
-    if err != 0 or not bool(roots_ptr):
-        raise RuntimeError("mps_context_get_roots_d failed")
-
+              ctx, 
+              ctypes.byref(roots_ptr), # pass address of results pointer
+              ctypes.byref(radii_ptr)  # pass address of radii pointer
+    )
+    if err != 0 or not bool(roots_ptr): raise RuntimeError("mps_context_get_roots_d failed")
     roots = np.empty(n, dtype=np.complex128)
-    for i in range(n):
+    radii = np.empty(n, dtype=float)
+    for i in range(degree): 
         roots[i] = complex(roots_ptr[i])
-
-    # 3‑e.  Clean up
+        radii[i] = float(radii_ptr[i])
     _mps.mps_polynomial_free(ctx, poly)
     _mps.mps_context_free(ctx)
-
-    return roots
-
+    return roots, radii
 @
 
 \newpage
 \subsection{{\tt MPSolve} multi-precision solver}
 <<, engine='python',size="small">>=
-from mpmath import mp 
-
-def _as_py(obj):
-    if isinstance(obj, np.generic):
-        return obj.item()           # unwrap numpy scalar
-    return obj
-
 def mpsolve_mp(coeffs, precision=256):
-    coeffs = list(coeffs)
     degree = len(coeffs) - 1
-    mp.prec = precision
-
     ctx = _mps.mps_context_new()
     _mps.mps_context_set_input_prec(ctx,  precision)
     _mps.mps_context_set_output_prec(ctx, precision)
     _mps.mps_context_set_output_goal(ctx, MPS_OUTPUT_GOAL_APPROXIMATE)
     _mps.mps_context_select_algorithm(ctx, MPS_ALGORITHM_SECULAR_GA)
-
     poly = _mps.mps_monomial_poly_new(ctx, degree)
-    for exp, c in enumerate(reversed(coeffs)):          # a₀, a₁, …
-        c = mp.mpc(_as_py(c))                           # <- robust promotion
-        _mps.mps_monomial_poly_set_coefficient_s(
-            ctx, poly, exp,
-            str(c.real).encode(), str(c.imag).encode())
-
+    for exp, c in enumerate(coeffs[::-1]): # a0 first
+        _mps.mps_monomial_poly_set_coefficient_d(ctx, poly, exp, c.real, c.imag)
     _mps.mps_context_set_input_poly(ctx, poly)
     _mps.mps_mpsolve(ctx)
-
     n = _mps.mps_context_get_degree(ctx)
-    roots_r = ctypes.POINTER(ctypes.c_char_p)()
-    roots_i = ctypes.POINTER(ctypes.c_char_p)()
-    radii_p = ctypes.POINTER(ctypes.c_double)()
-    _mps.mps_context_get_roots_s(ctx,
-                                 ctypes.byref(roots_r),
-                                 ctypes.byref(roots_i),
-                                 ctypes.byref(radii_p))
-
-    roots = np.empty(n, dtype=object)
-    radii = np.empty(n, dtype=object)
-    for k in range(n):
-        roots[k] = mp.mpc(roots_r[k].decode(), roots_i[k].decode())
-        radii[k] = mp.mpf(radii_p[k])
-
+    roots_pp = ctypes.POINTER(mpc_t)() # GMP complex type
+    radii_pp = ctypes.POINTER(ctypes.c_double)() # float radius
+    status = _mps.mps_context_get_roots_m(ctx, ctypes.byref(roots_pp), ctypes.byref(radii_pp))
+    if status != 0 or not bool(roots_pp): raise RuntimeError("mps_context_get_roots_m failed")
+    roots = [gmpy2.mpc(0)] * n
+    radii = [0.0] * n
+    for i in range(n):
+        roots[i] = mpc_t_to_mpc(roots_pp[i])
+        radii[i] = float(radii_pp[i])
+    for i in range(n):
+        _libgmp.__gmpf_clear(ctypes.byref(roots_pp[i].re))
+        _libgmp.__gmpf_clear(ctypes.byref(roots_pp[i].im))
+    _libc.free(roots_pp)
+    _libc.free(radii_pp)
     _mps.mps_polynomial_free(ctx, poly)
     _mps.mps_context_free(ctx)
     return roots, radii
@@ -1564,27 +2940,60 @@ def mpsolve_mp(coeffs, precision=256):
 
 \newpage
 \subsection{{\tt MPSolve} tests}
+\subsubsection{multi-precision functions}
 <<, engine='python',size="small">>=
-from mpmath import mp 
+def np2mpc(xs: np.ndarray) -> list[gmpy2.mpc]:
+    return [gmpy2.mpc(z.real, z.imag) for z in xs.ravel()]
+
+def horner_mpc(coeffs: list[gmpy2.mpc], x: gmpy2.mpc) -> gmpy2.mpc:
+    if not coeffs: return gmpy2.mpc(0)
+    result = coeffs[0]
+    for a in coeffs[1:]:
+        result = result * x + a
+    return result
+
+def horner_vec_mpc(coeffs: list[gmpy2.mpc], xs: list[gmpy2.mpc]) -> list[gmpy2.mpc]:
+    return [horner_mpc_high_to_low(coeffs, x) for x in xs]
+
+def mpc_abs(xs: list[gmpy2.mpc]) -> list[gmpy2.mpfr]:
+    return [gmpy2.sqrt(z.real*z.real + z.imag*z.imag) for z in xs]
+
+def mpfr_max(xs: list[gmpy2.mpfr]) -> gmpy2.mpfr:
+    if not xs: return gmpy2.mpfr(0)
+    max_val = xs[0]
+    for v in xs[1:]:
+        if v > max_val: max_val = v
+    return max_val
+@
+
+\subsubsection{Wilkinson: the Darth Vader of polynomials}
+<<, engine='python',size="small">>=
 w20 = np.poly1d([1])
-for k in range(1, 21):
-    w20 *= np.poly1d([1, -k])
+for k in range(1, 21): w20 *= np.poly1d([1, -k])
+cf = w20.coeffs.astype(np.complex128)         
+coeffs_mpc = np2mpc(cf)
+@
 
-cf_hi = w20.coeffs.astype(np.complex128)          # highest degree first
-
+\newpage
+\subsubsection{test float solve}
+<<, engine='python',size="small">>=
 for prec in (2048, 1024, 512, 256, 64, 32, 16, 8, 4):
-    r = mpsolve(cf_hi, precision=prec)
-    res = np.max(np.abs(np.polyval(cf_hi, r)))
-    print(f"prec={prec:<3}  max residual = {res: .1e}")
+    z,r = mpsolve(cf, precision=prec)
+    res = np.max(np.abs(np.polyval(cf, z)))
+    rad = np.max(r)
+    print(f"prec={prec:<3}  max residual = {res: .1e}, max radius {rad: .1e}")
+@
 
-cf_hi = w20.coeffs
-mp.dps = 70 
+\newpage
+\subsubsection{test multiprecision solve}
+<<, engine='python',size="small">>=
 for prec in (2048, 1024, 512, 256, 64, 32, 16, 8, 4):
-    r,rad = mpsolve_mp(cf_hi, precision=prec)
-    res_mp = max(abs(mp.polyval(cf_hi, z)) for z in r)
-    print(f"prec={prec:<3}  max residual = {res: .1e}")
-
-
+    z, r = mpsolve_mp(cf, precision=prec)
+    rad = np.max(r)
+    residuals = [horner_mpc(coeffs_mpc, xi) for xi in z]
+    mags   = mpc_abs(residuals)
+    res_mp = mpfr_max(mags)    
+    print(f"prec={prec:<3}  max residual = {res_mp:e}  max radius {rad: .1e}")
 @
 
 \newpage
@@ -1622,36 +3031,6 @@ for prec in (2048, 1024, 512, 256, 64, 32, 16, 8, 4):
 
 \begin{center}
 \fbox{\Sexpr{make_pdf_page("papers/mpsolve3.pdf",8,"14cm","10cm")}}
-\end{center}
-
-
-\newpage
-\section{Weierstrass is not generally convergent}
-
-\begin{center}
-\fbox{\Sexpr{make_pdf_page("papers/weierstrass.pdf",1,"14cm","10cm")}}
-\end{center}
-
-\begin{center}
-\fbox{\Sexpr{make_pdf_page("papers/weierstrass.pdf",2,"14cm","10cm")}}
-\end{center}
-
-
-\begin{center}
-\fbox{\Sexpr{make_pdf_page("papers/weierstrass.pdf",3,"14cm","10cm")}}
-\end{center}
-
-
-\begin{center}
-\fbox{\Sexpr{make_pdf_page("papers/weierstrass.pdf",4,"14cm","10cm")}}
-\end{center}
-
-\begin{center}
-\fbox{\Sexpr{make_pdf_page("papers/weierstrass.pdf",5,"14cm","10cm")}}
-\end{center}
-
-\begin{center}
-\fbox{\Sexpr{make_pdf_page("papers/weierstrass.pdf",6,"14cm","10cm")}}
 \end{center}
 
 
