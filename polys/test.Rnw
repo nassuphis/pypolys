@@ -1655,6 +1655,171 @@ print(latex_code)
 \end{center}
 
 \newpage
+\section{Stability}
+
+\subsection{Wilkinson: the Darth Vader of polynomials}
+\vskip 1cm
+\begin{center}
+\[
+w(x) \;=\; \prod_{i=1}^{20} (x - i)
+\;=\; (x-1)\,(x-2)\,\cdots\,(x-20).
+\]
+\end{center}
+\vskip 1cm
+\begin{center}
+\fbox{%
+\begin{minipage}{0.66\linewidth}
+\vskip 5mm
+\begin{quote}
+``{\it Speaking for myself, I regard it as the most traumatic 
+experience \newline in my career as a numerical analyst}'' 
+
+\begin{flushright}
+—James H. Wilkinson, 1963    
+\end{flushright}
+\end{quote}
+\vskip 5mm
+\end{minipage}
+}
+\end{center}
+\vskip 5mm
+\begin{itemize}
+    \item {\it well-conditioned}: a small change in the coefficients will lead to a small change in the roots
+    \item typically happens when roots are close: $x^{2}=0$ has double root at 0 but $x^2-\epsilon=0$ has roots at $\pm\sqrt{\epsilon}$, much larger than \epsilon
+    \item wilkinson's roots are {\it well separated}, but its still unstable
+    \item expanding the coefficients shows why:
+\end{itemize}
+
+\begin{center}
+\begin{align*}
+w(x) &= x^{20}
+   -210\,x^{19}
+   +20\,615\,x^{18}
+   -1\,256\,850\,x^{17}
+   +53\,327\,946\,x^{16}\\
+     &\quad
+   -1\,672\,280\,820\,x^{15}
+   +40\,171\,771\,630\,x^{14}
+   -756\,111\,184\,500\,x^{13}
+   +11\,310\,276\,995\,381\,x^{12}\\
+     &\quad
+   -135\,585\,182\,899\,530\,x^{11}
+   +1\,307\,535\,010\,540\,395\,x^{10}
+   -10\,142\,299\,865\,511\,450\,x^{9}\\
+     &\quad
+   +63\,030\,812\,099\,294\,896\,x^{8}
+   -311\,333\,643\,161\,390\,640\,x^{7}
+   +1\,206\,647\,803\,780\,373\,360\,x^{6}\\
+     &\quad
+   -3\,599\,979\,517\,947\,607\,200\,x^{5}
+   +8\,037\,811\,822\,645\,051\,776\,x^{4}
+   -12\,870\,931\,245\,150\,988\,800\,x^{3}\\
+     &\quad
+   +13\,803\,759\,753\,640\,704\,000\,x^{2}
+   -8\,752\,948\,036\,761\,600\,000\,x
+   +2\,432\,902\,008\,176\,640\,000\,.
+\end{align*}
+\end{center}
+\vskip 5mm
+\begin{itemize}
+    \item The spacing between the roots is tiny relative to these coefficients.
+\end{itemize}
+
+\newpage
+\subsection{{\tt numpy} meets Wilkinson}
+\subsubsection{integer coefficients}
+<<, engine='python', size="tiny">>=
+N = 20
+p = np.array([1,-1],dtype=int)
+for n in range(2, N+1): p = np.append(p,[0]) - np.append([0], p*n)
+print(p)
+x = np.arange(1,21)
+print(x)
+z = np.polyval(p,x)
+print(z)
+r = np.roots(p)
+print(r)
+np.max(np.abs(np.polyval(p,r)))
+@   
+
+\subsubsection{np.float64 coefficients}
+<<, engine='python', size="tiny">>=
+N = 20
+p = np.array([1.0,-1.0],dtype=np.float64)
+m = np.arange(2,21,dtype=np.float64)
+for n in m: p = np.append(p,[0.0]) - np.append([0.0], p*n)
+print(p)
+x = np.arange(1,21,dtype=np.float64)
+print(x)
+z = np.polyval(p,x)
+print(z)
+r = np.roots(p)
+print(r)
+np.max(np.abs(np.polyval(p,r)))
+@ 
+
+\newpage
+\subsection{{\tt mpmath} meets Wilkinson}
+<<mp_wilkinson, engine='python', size="tiny">>=
+def wilkinson(N):
+    p = [mp.mpf(1), mp.mpf(-1)]
+    for n in range(2, N+1):
+        new = [mp.mpf(0)]*(len(p)+1)
+        for i, c in enumerate(p):
+            new[i]   += c       # × x
+            new[i+1] += -mp.mpf(n)*c  # constant term
+        p = new
+    return p
+
+def bozo_aberth(coeffs, maxsteps, roots_init):
+    n = len(coeffs) - 1
+    cf = [c/coeffs[0] for c in coeffs]
+    roots = [roots_init**k for k in range(n)]
+    for _ in range(maxsteps):
+        for i in range(n):
+            pi = roots[i]
+            delta = mp.polyval(cf, pi)
+            for j in range(n):
+                if i == j: continue
+                try:
+                    delta /= (pi - roots[j])
+                except ZeroDivisionError:
+                    pass
+            roots[i] = pi - delta
+    return roots
+
+def show_roots(cf,roots):
+    roots_sorted = sorted(roots, key=lambda z: z.real,reverse=True)
+    df = pd.DataFrame({
+        "Real Part": [mp.nstr(r.real, 15) for r in roots_sorted],
+        "Imag Part": [mp.nstr(r.imag, 15) for r in roots_sorted],
+        "Residual" : [abs(mp.polyval(cf, r)) for r in roots_sorted]
+    })
+    print(df.to_string(index=False))
+@
+\subsubsection{10 digits}
+<<mp_1digit, engine='python', size="tiny">>=
+with mp.workdps(10):
+    cf = wilkinson(20)
+    show_roots(cf,bozo_aberth(cf,100,mp.mpc(mp.mpf('0.1'), mp.mpf('0.3333333'))))
+    
+@ 
+\subsubsection{100 digits}
+<<mp_1000digit, engine='python', size="tiny">>=
+with mp.workdps(100):
+    cf = wilkinson(20)
+    show_roots(cf,bozo_aberth(cf,100,mp.mpc(mp.mpf('0.1'), mp.mpf('0.3333333'))))
+@ 
+
+\begin{itemize}
+    \item {\tt np.roots} fails miserably on wilkinson.
+    \item we use a simple aberth solver that runs a fixed number of iteration to test {\tt mpmath}
+    \item {\tt mpmath} fails with 10 digits
+    \item {\tt mpmath} eats wilkinson for breakfast at 100 digits
+    \item digits is all you need?
+\end{itemize}
+
+\newpage
 \section{Stopping Criteria}
 
 \begin{center}
@@ -1791,11 +1956,11 @@ q_bwd, rem_bwd = bdef(p, 3)
 
 \newpage
 \section{Polynomial Transformations}
-\subsection{Taylor Shif}
+\subsection{Taylor Shift}
 \subsection{Reversal}
 
 \newpage
-\section{Quadratics, Cubics}
+\section{Quadratics, Cubics, Quartics}
 
 
 \newpage
@@ -2650,6 +2815,7 @@ It also is known to work on Windows in both 32-bit and 64-bit mode.
     \item Why do we care?
     \item {\tt MPSolve} uses {\tt\bf GMP}
     \item to see high-precision results we need to process {\tt\bf GMP} number representations
+    \item {\tt gmpy2} is the python interface to {\tt\bf GMP} and {\tt\bf MPFR}
 \end{itemize}
 
 \newpage
@@ -2761,10 +2927,42 @@ _libgmp.__gmpf_clear(ctypes.byref(b))
 _libgmp.__gmpf_clear(ctypes.byref(c))
 @ 
 
-\subsubsection{{\tt\bf MPSolve} complex number structure}
+\subsubsection{multi-precision functions}
 <<, engine='python',size="small">>=
+def np2mpc(xs: np.ndarray) -> list[gmpy2.mpc]:
+    return [gmpy2.mpc(z.real, z.imag) for z in xs.ravel()]
 
-@ 
+def r2cf(roots: list[gmpy2.mpc]) -> list[gmpy2.mpc]:
+    coeffs = [gmpy2.mpc(1)]
+    for r in roots:
+        new_coeffs = [gmpy2.mpc(0)] * (len(coeffs) + 1)
+        for i, c in enumerate(coeffs):
+            new_coeffs[i] += c
+            new_coeffs[i+1] -= c * r
+        coeffs = new_coeffs
+    return coeffs
+
+def horner_mpc(coeffs: list[gmpy2.mpc], x: gmpy2.mpc) -> gmpy2.mpc:
+    if not coeffs: return gmpy2.mpc(0)
+    result = coeffs[0]
+    for a in coeffs[1:]:
+        result = result * x + a
+    return result
+
+def horner_vec_mpc(coeffs: list[gmpy2.mpc], xs: list[gmpy2.mpc]) -> list[gmpy2.mpc]:
+    return [horner_mpc(coeffs, x) for x in xs]
+
+def mpc_abs(xs: list[gmpy2.mpc]) -> list[gmpy2.mpfr]:
+    return [gmpy2.sqrt(z.real*z.real + z.imag*z.imag) for z in xs]
+
+def mpfr_max(xs: list[gmpy2.mpfr]) -> gmpy2.mpfr:
+    if not xs: return gmpy2.mpfr(0)
+    max_val = xs[0]
+    for v in xs[1:]:
+        if v > max_val: max_val = v
+    return max_val
+@
+
 
 
 \newpage
@@ -2940,33 +3138,14 @@ def mpsolve_mp(coeffs, precision=256):
 
 \newpage
 \subsection{{\tt MPSolve} tests}
-\subsubsection{multi-precision functions}
+
+\subsubsection{simple solve}
 <<, engine='python',size="small">>=
-def np2mpc(xs: np.ndarray) -> list[gmpy2.mpc]:
-    return [gmpy2.mpc(z.real, z.imag) for z in xs.ravel()]
-
-def horner_mpc(coeffs: list[gmpy2.mpc], x: gmpy2.mpc) -> gmpy2.mpc:
-    if not coeffs: return gmpy2.mpc(0)
-    result = coeffs[0]
-    for a in coeffs[1:]:
-        result = result * x + a
-    return result
-
-def horner_vec_mpc(coeffs: list[gmpy2.mpc], xs: list[gmpy2.mpc]) -> list[gmpy2.mpc]:
-    return [horner_mpc_high_to_low(coeffs, x) for x in xs]
-
-def mpc_abs(xs: list[gmpy2.mpc]) -> list[gmpy2.mpfr]:
-    return [gmpy2.sqrt(z.real*z.real + z.imag*z.imag) for z in xs]
-
-def mpfr_max(xs: list[gmpy2.mpfr]) -> gmpy2.mpfr:
-    if not xs: return gmpy2.mpfr(0)
-    max_val = xs[0]
-    for v in xs[1:]:
-        if v > max_val: max_val = v
-    return max_val
+np.column_stack(mpsolve([1+1j,2+0j,0+4j,4], precision=53))
 @
 
-\subsubsection{Wilkinson: the Darth Vader of polynomials}
+\subsubsection{Wilkinson}
+
 <<, engine='python',size="small">>=
 w20 = np.poly1d([1])
 for k in range(1, 21): w20 *= np.poly1d([1, -k])
