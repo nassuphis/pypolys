@@ -1759,7 +1759,7 @@ np.max(np.abs(np.polyval(p,r)))
 @ 
 
 \newpage
-\subsection{{\tt mpmath} meets Wilkinson}
+\subsection{Wilkinson meets {\tt mpmath}}
 <<mp_wilkinson, engine='python', size="tiny">>=
 def wilkinson(N):
     p = [mp.mpf(1), mp.mpf(-1)]
@@ -1781,10 +1781,8 @@ def bozo_aberth(coeffs, maxsteps, roots_init):
             delta = mp.polyval(cf, pi)
             for j in range(n):
                 if i == j: continue
-                try:
-                    delta /= (pi - roots[j])
-                except ZeroDivisionError:
-                    pass
+                div = pi - roots[j]
+                if mp.fabs(div)>0 : delta /= div
             roots[i] = pi - delta
     return roots
 
@@ -1793,7 +1791,7 @@ def show_roots(cf,roots):
     df = pd.DataFrame({
         "Real Part": [mp.nstr(r.real, 15) for r in roots_sorted],
         "Imag Part": [mp.nstr(r.imag, 15) for r in roots_sorted],
-        "Residual" : [abs(mp.polyval(cf, r)) for r in roots_sorted]
+        "Residual" : [mp.nstr(mp.fabs(mp.polyval(cf, r)),2) for r in roots_sorted]
     })
     print(df.to_string(index=False))
 @
@@ -1801,6 +1799,7 @@ def show_roots(cf,roots):
 <<mp_1digit, engine='python', size="tiny">>=
 with mp.workdps(10):
     cf = wilkinson(20)
+    
     show_roots(cf,bozo_aberth(cf,100,mp.mpc(mp.mpf('0.1'), mp.mpf('0.3333333'))))
     
 @ 
@@ -1812,12 +1811,20 @@ with mp.workdps(100):
 @ 
 
 \begin{itemize}
-    \item {\tt np.roots} fails miserably on wilkinson.
-    \item we use a simple aberth solver that runs a fixed number of iteration to test {\tt mpmath}
-    \item {\tt mpmath} fails with 10 digits
-    \item {\tt mpmath} eats wilkinson for breakfast at 100 digits
+    \item {\tt np.roots} fails miserably
+    \item {\tt bozo\_aberth} just runs 100 multi-precision iterations
+    \item {\tt bozo\_aberth} with 10 digits: miserable failure
+    \item {\tt bozo\_aberth} with 100 digits: eats wilkinson for breakfast 
     \item digits is all you need?
 \end{itemize}
+
+\newpage
+\subsubsection{wilkinson root locus}
+
+\vskip 1cm
+\begin{center}
+\includegraphics[width=15cm, height=15cm]{w20_2.png}    
+\end{center}
 
 \newpage
 \section{Stopping Criteria}
