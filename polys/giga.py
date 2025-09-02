@@ -2887,3 +2887,59 @@ def poly_giga_142(t1, t2):
     except:
         return np.zeros(5,dtype=np.complex128)
     
+cf_wilkinson = np.poly(np.arange(1,20)).astype(np.complex128)
+
+def sort_abs(cf):
+  return cf[np.argsort(np.abs(cf))]
+
+def poly_giga_143(s,t):
+    perturbed_cf = cf_wilkinson.copy()
+    PI2 = 2 * np.pi
+    st10=np.sin(10*(s+t))
+    s10=np.sin(s*10)
+    t10=np.sin(t*10)
+    s29=np.sin(s*29)
+    t29=np.sin(t*29)
+    t71=np.sin(t*71)
+    s71=np.sin(s*71)
+    maxp=max(s29,t71)
+    minp=min(s29,t71)
+    ss10 = np.exp(1j * PI2 * s10)
+    tt10 = np.exp(1j * PI2 * t10)
+    sstt = np.exp(1j * PI2 * maxp)
+    ttss = np.exp(1j * PI2 * minp)
+    perturbed_cf[11]  *= ttss+(s+1j*t)*PI2
+    perturbed_cf[10]  *= tt10*ss10+(t+1j*s)*PI2
+    perturbed_cf[-5]  *= sstt+(maxp+1j*minp)*PI2*100
+    perturbed_cf[-4]  *= ttss+(minp+1j*maxp)*PI2*1000
+    perturbed_cf[-3]  *= (t71+1j*s29)*PI2*100000
+    perturbed_cf[-2]  *= (maxp+1j*minp)*PI2*100000
+    perturbed_cf[-1]  *= sstt
+    fcf1 = perturbed_cf*st10
+    fcf2 = sort_abs(perturbed_cf)*(1-st10)
+    fcf3 = fcf1 + fcf2 
+    return fcf3
+
+def poly_giga_144(s,t):
+    PI2 = 2 * np.pi
+    ss = np.exp(1j * PI2 * s)
+    tt = np.exp(1j * PI2 * t)
+    perturbed_cf = cf_wilkinson.copy()
+    perturbed_cf[1]  += ss*tt
+    perturbed_cf[2]  += ss+tt
+    perturbed_cf[3]  *= (ss-tt)**3
+    perturbed_cf[4]  += (ss*ss-tt*tt)**2
+    perturbed_cf[-1] *= tt-ss
+    return sort_abs(perturbed_cf)
+
+def poly_giga_145(s,t):
+    PI2 = 2 * np.pi
+    ss = np.exp(1j * PI2 * s)
+    tt = np.exp(1j * PI2 * t)
+    perturbed_cf = cf_wilkinson.copy()
+    perturbed_cf[1]  += ss*tt
+    perturbed_cf[2]  += ss+tt
+    perturbed_cf[3]  *= (ss-tt)**3
+    perturbed_cf[4]  += (ss*ss-tt*tt)**2
+    perturbed_cf[-1] *= tt-ss
+    return perturbed_cf

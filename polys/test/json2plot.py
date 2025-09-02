@@ -1,12 +1,14 @@
 #!/usr/bin/env python
 
 # test/cli2json.py test123 -x unit_circle,coeff7 -p poly_362 -z rev -s solve  | test/json2plot.py 10000
-
+# test/cli2json.py  mps -m write -x identity -p poly_giga_143 -z none -s solve --roots 10 -r 20000 -v '(-25-50j,75+50j)' | test/json2plot.py 100000000
 import polys
 import sys
 import numpy as np
 import pandas as pd
 import matplotlib
+import ast
+import polys.polystate
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
@@ -23,7 +25,7 @@ def sample_chunk(args):
     np.random.seed(worker_id) 
     blocks = []
     for j in range(start, stop):
-        if j % 1000 ==0 and worker_id==0:
+        if j % ((start-stop)//100) ==0 and worker_id==0:
             print(f"{worker_id} : {round(100*(j-start)/(stop-start),2)}% {stop-start}")
         t1 = np.random.random()
         t2 = np.random.random()
@@ -50,9 +52,11 @@ if __name__ == "__main__":
         js_config = sys.stdin.read()
             
     polys.polystate.json2state(js_config)
+    sv = polys.polystate.view["view"]
+    print(f"sv:{sv}")
+    llx, lly, urx, ury = sv[0].real, sv[0].imag, sv[1].real, sv[1].imag
 
-    rts = polys.polystate.sample(0.5, 0.5)
-    print(rts)
+    print(f"llx:{llx} lly:{lly} urx:{urx} ury:{ury}")
 
     num_samples = int(sys.argv[1])
     num_workers = multiprocessing.cpu_count()
@@ -72,6 +76,12 @@ if __name__ == "__main__":
     print("End")
 
     m= np.vstack(all)
+
+   
+    mask =  (m[:,0]>llx) & (m[:,0]<urx) & (m[:,1]>lly) & (m[:,1]<ury)
+
+    m = m[mask]
+
     print(f"Data : {m.shape}") 
     v1 = m[:,0]
     v2 = m[:,1]
@@ -87,8 +97,8 @@ if __name__ == "__main__":
     hue = (((rng*1.0)%1)*0.5 + 0.01) % 1
     sat = (((ngl*10.0)%1)*0.99) % 1
 
-    px=5000
-    roots = px*(norm(v1)+1j*norm(v2))
+    px=20000
+    roots = px*((v1-llx)/(urx-llx)+1j*(v2-lly)/(ury-lly))
 
 
     print(f"roots.real: {np.min(roots.real)} - {np.max(roots.real)}")
@@ -113,8 +123,9 @@ if __name__ == "__main__":
     img[y, x] = (colors * 255).astype(np.uint8)
 
     im = Image.fromarray(img)
-    #im_inv = ImageOps.invert(im)
+    im_inv = ImageOps.invert(im)
     im.save('myplot.png')
+    im_inv.save('myplot_inv.png')
 
     
 

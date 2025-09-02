@@ -3,6 +3,8 @@
 \usepackage{graphicx}
 \usepackage[dvipsnames,table]{xcolor}
 \usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
 \usepackage{pdfpages}
 \usepackage[export]{adjustbox} 
 \usepackage{booktabs}
@@ -156,9 +158,9 @@ def polyvec_to_latex(coeffs, var='x'):
 
 \title{
 \vskip 2cm
-{\bf\Huge Polynomial Solvers}
+{\bf\Huge Polynomial Manifolds:}
 \vskip 1cm
-{\bf\Huge Speed \& Stability Benchmarks}
+{\bf\Huge Notes on Speed \& Stability}
 \vskip 1cm
 \begin{center}
 \includegraphics[width=15cm, height=15cm]{myplot_oldplot.png}
@@ -188,12 +190,16 @@ print(polyvec_to_latex(v)+" $=0$")
 \vskip 1cm
 
 \begin{itemize}
- \item Evaluate a Polynomial at a given point (Horner)
- \item Deflate a polynomial by found root
- \item Formulate suitable initial guess 
- \item Stopping criteria for iterations
- \item Taylor shift
- \item Find linear and quadratic roots of a Polynomial
+\item Multi-precision arithmetic
+\item Polynomial bases: monic, chebyshev
+\item Horner: Evaluate a monomial base polynomial at a given point
+\item Clenshaw-Chebyshev: Evaluate a Chebyshev base polynomial at a given point
+\item Deflate a polynomial by found root (forward or backward)
+\item Formulate suitable initial guess (symmetry, a-priori bounds)
+\item Warm start, root vector guess extrapolation for scanning solvers
+\item Stopping criteria for iterative solvers: absolute, relative, residual 
+\item Transofrmations: Taylor shift
+\item Low degree known solutions: degree 1, 2, 3, 4 
 \end{itemize}
 
 \newpage
@@ -309,7 +315,64 @@ s= tp/th
     \item {\tt numba} just-in-time compiler {\tt horner} speedup: \Sexpr{round(py[["s"]],2)} times {\tt np.polyval}
     \item {\tt numba} just-in-time compiler {\tt horner\_vec} speedup: \Sexpr{round(py[["sv"]],2)} times {\tt np.polyval}
     \item {\tt numba} just-in-time compiler {\tt horner\_multi} speedup: \Sexpr{round(py[["sm"]],2)} times {\tt np.polyval}
+    \item high powers cause numerical issues
 \end{itemize}
+
+\newpage
+\section{Clenshaw-Chebyshev Speedup with {\tt numba} JIT compilation}
+
+
+\begin{center}
+\begin{tabular}{c}
+\begin{tabular}{m{10cm}m{10cm}}
+\toprule
+Implementation & Test \\
+\midrule
+\begin{minipage}[m]{10cm}
+<<, engine='python',size="tiny",echo=TRUE,results='hide'>>=
+@njit
+def clenshaw_chebyshev(a, x):
+    n = len(a) - 1
+    b_kplus1 = 0.0
+    b_kplus2 = 0.0
+    for k in range(n, -1, -1):
+        b_k = 2 * x * b_kplus1 - b_kplus2 + a[k]
+        b_kplus2 = b_kplus1
+        b_kplus1 = b_k
+    return b_k - x * b_kplus2
+@ 
+\end{minipage}
+&
+\begin{minipage}[m]{10cm}
+<<, engine='python',size="tiny">>=
+from numpy.polynomial import chebyshev as cheb
+cf = (np.random.randn(10) + 1j*np.random.randn(10))
+x  = (np.random.randn() + 1j*np.random.randn())
+
+ccc = clenshaw_chebyshev(cf,x)
+ccn = cheb.chebval(x, cf)
+
+err = np.abs(ccc - ccn)
+
+tccn=timeit.timeit("cheb.chebval(x, cf)", globals=globals(), number=100)
+tccc=timeit.timeit("clenshaw_chebyshev(cf,x)", globals=globals(), number=100)
+
+s= tccn/tccc
+@
+\end{minipage}
+\\
+\bottomrule
+\end{tabular}
+\end{tabular}
+\end{center}
+
+\begin{itemize}
+    \item {\tt cf} size: \Sexpr{dim(py[["cf"]])}
+    \item {\tt clenshaw\_chebyshev} error: \Sexpr{py[["err"]]}
+    \item {\tt numba} just-in-time compiler {\tt clenshaw\_chebyshev} speedup: \Sexpr{round(py[["s"]],2)} times {\tt np.cheb.chebval}
+    \item reccurence is much more stable than high powers
+\end{itemize}
+
 
 \newpage
 \section{Upper, Lower Bounds on Root Radius}
@@ -1819,12 +1882,288 @@ with mp.workdps(100):
 \end{itemize}
 
 \newpage
-\subsubsection{wilkinson root locus}
+\subsection{Wilkinson meets Mr Chebyshev}
+
+<<wilk_lag, engine='python', size="tiny">>=
+# Step 1: Chebyshev nodes in [1, 20]
+def chebyshev_nodes(a, b, n):
+    result = []
+    for i in range(n + 1):
+        angle = (2*i + 1) * np.pi / (2*(n + 1))
+        x = 0.5*(a + b) + 0.5*(b - a)*np.cos(angle)
+        result.append(x)
+    return result
+
+# Step 2: Wilkinson polynomial (factored form)
+def wilkinson(x):
+    prod = 1.0
+    for r in range(1, 21):
+        prod *= (x - r)
+    return prod
+
+# Step 3: Barycentric weights
+def barycentric_weights(xi):
+    n = len(xi)
+    w = []
+    for j in range(n):
+        wj = 1.0
+        for k in range(n):
+            if k != j:
+                wj *= (xi[j] - xi[k])
+        w.append(1.0 / wj)
+    return w
+
+# Step 4: Barycentric interpolation
+def barycentric_interpolant(x, xi, yi, wi):
+    num = 0.0
+    den = 0.0
+    for j in range(len(xi)):
+        xj = xi[j]
+        if x == xj:
+            return yi[j]  # exact match
+        temp = wi[j] / (x - xj)
+        num += temp * yi[j]
+        den += temp
+    return num / den
+
+# Step 5: Bisection root finding
+def bisection(f, a, b, tol=1e-12, maxiter=100):
+    fa = f(a)
+    fb = f(b)
+    if fa * fb > 0:
+        return None
+    for _ in range(maxiter):
+        mid = 0.5 * (a + b)
+        fmid = f(mid)
+        if abs(fmid) < tol or (b - a) < tol:
+            return mid
+        if fa * fmid < 0:
+            b, fb = mid, fmid
+        else:
+            a, fa = mid, fmid
+    return 0.5 * (a + b)
+
+def find_roots(f, intervals):
+    roots = []
+    for (a, b) in intervals:
+        root = bisection(f, a, b)
+        if root is not None:
+            roots.append(root)
+    return [round(r,12) for r in roots]
+
+# === Main ===
+n = 20
+xi = chebyshev_nodes(1, 20, n)
+yi = [wilkinson(x) for x in xi]
+wi = barycentric_weights(xi)
+
+def interp(x):
+    return barycentric_interpolant(x, xi, yi, wi)
+
+# Root search intervals near integers 1..20
+intervals = [(k - 0.4, k + 0.4) for k in range(1, 21)]
+roots = find_roots(interp, intervals)
+
+# Print recovered roots and residuals
+print("Recovered roots and residuals:")
+for r in roots:
+    print(f"{r:.12f} {wilkinson(r):.12e}")
+@ 
+
+\begin{itemize}
+    \item it worked!
+    \item look: no extra digits!
+    \item stable represenatation is all you need?
+\end{itemize}
+
+\newpage
+\subsection{Polynomial Representations}
+
+\vskip 1cm 
+
+\begin{itemize}
+  \item A degree-$n$ polynomial is uniquely determined by its values at any $n+1$ distinct points.
+  \item This representation avoids the monomial basis and is numerically more stable.
+  \item The monomial basis is convenient but often ill-conditioned for evaluation and root-finding.
+  \item Alternative bases (Lagrange, Chebyshev, Bernstein) provide better numerical properties.
+  \item Interpolating from point values enables polynomial evaluation, differentiation, and root-finding without ever expanding the coefficients.
+  \item This viewpoint is especially useful when coefficients are large, exact, or unavailable.
+  \item In practical computation, the Lagrange or barycentric form is often superior to monomial expansions.
+  \item This basis-free approach underlies many modern algorithms in numerical analysis and approximation theory.
+\end{itemize}
+
+\vskip 1cm 
+
+\begin{center}
+\begin{tabular}{llp{8cm}}
+\toprule
+\textbf{Basis} & \textbf{Basis Functions} & \textbf{Coefficient Representation} \\
+\midrule
+Monomial       & $x^k$                  & $p(x) = \sum_{k=0}^{n} a_k x^k$ \\
+Chebyshev      & $T_k(x)$               & $p(x) = \sum_{k=0}^{n} c_k T_k(x)$ \\
+Legendre       & $P_k(x)$               & $p(x) = \sum_{k=0}^{n} l_k P_k(x)$ \\
+Lagrange       & $\ell_k(x)$            & $p(x) = \sum_{k=0}^{n} f(x_k) \ell_k(x)$, where $\ell_k(x_i) = \delta_{ki}$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\vskip 1cm
+
+We can approach the polynomial manifold calculation problem like this:
+
+\begin{itemize}
+  \item Represent each polynomial as a Chebyshev series:
+    \[
+    p(x) = \sum_{k=0}^n c_k(\theta)\, T_k(x)
+    \]
+    where \( T_k(x) \) are Chebyshev polynomials, and \( c_k(\theta) \) are parameter-dependent coefficients.
+
+  \item Use Clenshaw's algorithm for efficient and stable evaluation of \( p(x) \) and its derivative \( p'(x) \).
+
+  \item Apply a root-finding method such as Aberth, Newton, or Laguerre using the Chebyshev-evaluated function and derivative.
+
+  \item Sweep over parameter values \( \theta \) to trace out the root manifold efficiently.
+
+  \item Avoid monomial coefficients entirely; this eliminates issues with ill-conditioning and large dynamic range.
+
+  \item Benefit from numerical stability due to the orthogonality and boundedness of the Chebyshev basis.
+
+  \item The root manifold evolves smoothly under parameter variation, making root tracking straightforward.
+
+\end{itemize}
+
+
+\newpage
+\subsection{wilkinson root locus}
 
 \vskip 1cm
 \begin{center}
-\includegraphics[width=15cm, height=15cm]{w20_2.png}    
+\includegraphics[width=15cm, height=15cm]{w20_parallel_2.png}    
 \end{center}
+
+\newpage
+\subsection{First-Order Sensitivity of Polynomial Roots to Perturbations}
+
+Let \( p(x) \) be a polynomial of degree \( n \) with simple roots \( \alpha_1, \alpha_2, \ldots, \alpha_n \), so that
+\[
+p(x) = \prod_{j=1}^n (x - \alpha_j).
+\]
+Suppose we perturb \( p \) by adding a small multiple of another polynomial \( c(x) \), resulting in the perturbed polynomial
+\[
+p_t(x) = p(x) + t \cdot c(x),
+\]
+where \( t \in \mathbb{R} \) is a small parameter. 
+
+We are interested in how the roots \( \alpha_j(t) \) of \( p_t \) change 
+with \( t \), particularly their first-order variation at \( t = 0 \).
+
+Let \( \alpha_j(t) \) denote the root of \( p_t \) that satisfies \( \alpha_j(0) = \alpha_j \). 
+Since \( \alpha_j(t) \) is a root of \( p_t \), we have:
+\[
+p_t(\alpha_j(t)) = p(\alpha_j(t)) + t \cdot c(\alpha_j(t)) = 0.
+\]
+Differentiating both sides with respect to \( t \), we apply the chain rule:
+\[
+\frac{d}{dt} \left[ p(\alpha_j(t)) + t \cdot c(\alpha_j(t)) \right] = 0,
+\]
+\[
+p'(\alpha_j(t)) \cdot \frac{d\alpha_j}{dt} + c(\alpha_j(t)) + t \cdot c'(\alpha_j(t)) \cdot \frac{d\alpha_j}{dt} = 0.
+\]
+Evaluating this expression at \( t = 0 \), where \( \alpha_j(t) = \alpha_j \), we obtain:
+\[
+p'(\alpha_j) \cdot \frac{d\alpha_j}{dt} + c(\alpha_j) = 0.
+\]
+Solving for \( \frac{d\alpha_j}{dt} \), we find:
+\[
+\frac{d\alpha_j}{dt} = -\frac{c(\alpha_j)}{p'(\alpha_j)}.
+\]
+
+\subsubsection{Interpretation}
+
+This formula expresses the first-order sensitivity of the root \( \alpha_j \) to the perturbation \( t \cdot c(x) \). 
+It shows that the rate at which the root moves under perturbation is governed by:
+
+\begin{itemize}
+    \item the value of the perturbation polynomial \( c(x) \) evaluated at the root \( \alpha_j \), and
+    \item the derivative \( p'(x) \) of the original polynomial evaluated at the same point.
+\end{itemize}
+
+In particular, if \( p'(\alpha_j) \) is small, the root \( \alpha_j \) is highly sensitive to perturbations, 
+reflecting ill-conditioning. Conversely, if \( p'(\alpha_j) \) is large, the root is stable under small changes in the 
+polynomial.
+
+\newpage
+\subsection{Sensitivity of Polynomial Roots to Coefficient Changes}
+
+\subsubsection{Formula in Monomial Basis}
+
+For a polynomial \( p(x) = \sum_{k=0}^n a_k x^k \) with a simple root \( r \) (i.e., \( p(r) = 0 \) and \( p'(r) \neq 0 \)), 
+the rate of change of \( r \) with respect to the coefficient \( a_k \) is
+\[
+\frac{\partial r}{\partial a_k} = -\frac{r^k}{p'(r)}.
+\]
+
+\paragraph{Derivation}
+Consider \( p(r) = 0 \). Differentiate implicitly with respect to \( a_k \):
+\[
+\frac{\partial p}{\partial a_k} + p'(r) \frac{\partial r}{\partial a_k} = 0.
+\]
+Since \( \frac{\partial p}{\partial a_k} = r^k \), solving gives the formula above. This assumes \( r \) is simple; for multiple roots, 
+higher-order derivatives or other methods are needed.
+
+\subsubsection{Formula in Chebyshev Basis}
+
+For a polynomial expressed as \( p(x) = \sum_{k=0}^n c_k T_k(x) \), where \( T_k(x) \) are Chebyshev polynomials of 
+the first kind, with simple root \( r \), the rate of change with respect to \( c_k \) is
+\[
+\frac{\partial r}{\partial c_k} = -\frac{T_k(r)}{p'(r)}.
+\]
+
+\paragraph{Derivation}
+Analogous to the monomial case: differentiate \( p(r) = 0 \) implicitly with respect to \( c_k \), yielding 
+\( \frac{\partial p}{\partial c_k} + p'(r) \frac{\partial r}{\partial c_k} = 0 \), where \( \frac{\partial p}{\partial c_k} = T_k(r) \).
+
+Similar formulas apply to other orthogonal bases (e.g., Legendre), replacing \( T_k(r) \) with the basis polynomial evaluated at \( r \).
+
+\subsubsection{Conditioning Comparison}
+
+Polynomial roots are generally less sensitive to coefficient perturbations in the Chebyshev basis than in the monomial basis, 
+especially for high degrees on intervals like \([-1, 1]\). The monomial basis is ill-conditioned 
+(condition numbers grow exponentially with degree, e.g., ~7245 for degree 11), making roots highly sensitive. 
+The Chebyshev basis is well-conditioned (condition number ~4 for degree 11), reducing sensitivity and improving numerical 
+stability in root-finding. Legendre bases offer similar benefits.
+
+\newpage
+\subsection{Condition Number}
+
+In numerical analysis, the condition number measures the sensitivity of a mathematical problem 
+or function to small perturbations in its input data. 
+
+\noindent For a square invertible matrix \( A \), it is defined as \( \kappa(A) = \|A\| \cdot \|A^{-1}\| \), where \( \| \cdot \| \) is a matrix norm (e.g., the 
+2-norm gives the ratio of largest to smallest singular value). 
+
+\noindent More generally, for a function \( f \), it quantifies how much the relative change in output 
+can be amplified by a relative change in input, often in the worst case.
+
+\noindent This metric is crucial because it indicates numerical stability in computations. 
+
+\noindent A high condition number (much greater than 1) means the problem is ill-conditioned: 
+
+\noindent tiny errors in input (e.g., from rounding in floating-point arithmetic) can lead to large errors in output. 
+
+\noindent This is critical in areas like solving linear systems, optimization, and eigenvalue problems, where ill-conditioning can make results unreliable. 
+
+\noindent Low condition numbers imply well-conditioned problems, more robust to perturbations.
+
+\noindent Alan Turing coined the term ``condition number'' and introduced the concept in his 1948 paper ``Rounding-Off Errors in Matrix Processes'', 
+defining variants like the M- and N-condition numbers for matrices. 
+
+\noindent Earlier, John von Neumann and Herman Goldstine used a similar idea (ratio of eigenvalues) in their 1947 paper without the name. 
+
+\noindent James H. Wilkinson popularized it in his 1963 book ``Rounding Errors in Algebraic Processes.'' 
+
+\noindent Precursors to ``ill-conditioned'' appear as early as 1933 in R. R. Mallock's work.
+
 
 \newpage
 \section{Stopping Criteria}
@@ -2690,8 +3029,8 @@ np.max(np.abs(np.polyval([1,2,3,4],r)))
 \end{center}
 
 \newpage
-\section{Ehrlich Aberth}
-
+\section{Aberth}
+\subsection{Aberth with Monomial Basis, {\tt float} precision}
 \begin{center}
 \begin{tabular}{c}
 \begin{tabular}{m{10cm}m{10cm}}
@@ -2700,7 +3039,7 @@ Implementation & Test \\
 \midrule
 \begin{minipage}[m]{10cm}
 <<, engine='python',size="tiny">>=
-def aberth(p_coeffs, x0, max_iter=100, tol=1e-12, verbose=False):
+def aberth(p_coeffs, x0, max_iter=100, tol=1e-12):
     x = np.asarray(x0, dtype=np.complex128, copy=True)
     n = len(x)
     p_der = np.polyder(p_coeffs)
@@ -2731,6 +3070,215 @@ def aberth(p_coeffs, x0, max_iter=100, tol=1e-12, verbose=False):
 <<, engine='python',size="tiny">>=
 r,n = aberth([1,2,3,4],[0.1+0.5j,0.1-0.1j,0.1+1j])
 np.max(np.abs(np.polyval([1,2,3,4],r)))
+@
+\end{minipage}
+\\
+\bottomrule
+\end{tabular}
+\end{tabular}
+\end{center}
+
+\newpage
+\subsection{Aberth with Monomial Basis, multi-precision}
+\begin{center}
+\begin{tabular}{c}
+\begin{tabular}{m{10cm}m{10cm}}
+\toprule
+Implementation & Test \\
+\midrule
+\begin{minipage}[m]{10cm}
+<<, engine='python',size="tiny">>=
+from mpmath import mp 
+def aberth_mp(coeffs, maxsteps, roots_init):
+    n = len(coeffs) - 1
+    tol=mp.mpf('1e-12')
+    roots = roots_init.copy()
+    for step in range(maxsteps):
+        done = True 
+        for i in range(n):
+            pi = roots[i]
+            delta = coeffs[0]
+            for c in coeffs[1:]: delta = delta * pi + c
+            if mp.fabs(delta) < tol: continue
+            done = False
+            for j in range(n):
+                if i != j:
+                    div = pi - roots[j]
+                    if mp.fabs(div) > 0: delta /= div
+            roots[i] = pi - delta
+        if done: break
+    return roots,step
+
+def wilkinson(n):
+    p = [mp.mpf(1), mp.mpf(-1)]
+    for k in range(2, n+1):
+        new = [mp.mpf(0)] * (len(p)+1)
+        for i, c in enumerate(p):
+            new[i]   += c
+            new[i+1] += -mp.mpf(k) * c
+        p = new
+    p = [c / p[0] for c in p]
+    return p
+
+def perturb(cf,s,t):
+    PI2 = 2 * mp.pi
+    perturbed_cf = cf.copy()
+    perturbed_cf[1]  *= mp.exp(1j * PI2 * t)
+    perturbed_cf[2]  *= mp.exp(1j * PI2 * s * t)
+    perturbed_cf[5]  *= mp.exp(1j * PI2 * (s - t))
+    perturbed_cf[9]  *= mp.exp(1j * PI2 * (s + t))
+    perturbed_cf[-1] *= s * mp.exp(1j * PI2 * t)
+    return perturbed_cf
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm}
+<<, engine='python',size="tiny">>=
+with mp.workdps(100): 
+    cf = wilkinson(20)
+    roots_init = mp.mpc(mp.mpf('0.1'), mp.mpf('0.3333333'))
+    guess = [roots_init ** k for k in range(len(cf)-1)]
+    unperturbed_r,n = aberth_mp(cf,100,guess)
+    print(f"Initial Iterations:{n}")
+    perturbed_r_1,n = aberth_mp(perturb(cf,0,0.0001),100,unperturbed_r)
+    print(f"Perturbed Iterations 1:{n}")
+    perturbed_r_2,n = aberth_mp(perturb(cf,0,0.0002),100,perturbed_r_1)
+    print(f"Perturbed Iterations 2:{n}")
+@
+\end{minipage}
+\\
+\bottomrule
+\end{tabular}
+\end{tabular}
+\end{center}
+
+\newpage
+\subsection{Aberth with Chebyshev Basis, {\tt float} precision}
+\begin{center}
+\begin{tabular}{c}
+\begin{tabular}{m{10cm}m{10cm}}
+\toprule
+Implementation & Test \\
+\midrule
+\begin{minipage}[m]{10cm}
+<<, engine='python',size="tiny">>=
+from numpy.polynomial import chebyshev as cheb
+from numpy.polynomial import Chebyshev
+from numpy.polynomial import Polynomial
+import pandas as pd
+
+def wilkinson(n):
+    p = np.array([1.0, -1.0], dtype=np.complex128)  # (x - 1)
+    for k in range(2, n + 1):
+        new = np.zeros(len(p) + 1, dtype=np.complex128)
+        new[:-1] += p            # multiply by x
+        new[1:]  += -k * p       # multiply by (-k)
+        p = new
+    # normalize so leading coefficient is 1
+    p /= p[0]
+    return p
+
+def wilkinson_cheb(n, pad=0.5):
+    A, B = 1 - pad, n + pad
+    roots = np.arange(1, n+1, dtype=float)
+    return Chebyshev.fromroots(roots, domain=[A, B])
+
+
+def cheb2mono(c_cheb):
+    n = len(c_cheb)
+    mono_basis = []
+    for k in range(n):
+        row = cheb.cheb2poly([0]*k + [1])  # T_k(x) as monomial
+        padded = np.pad(row, (0, n - len(row)))  # pad to length n
+        mono_basis.append(padded)
+    mono_basis = np.stack(mono_basis, axis=0)  # shape: (n, n)
+    mono_cf = np.flip(np.dot(c_cheb, mono_basis))
+    return mono_cf
+
+def clenshaw_chebyshev(a, x):
+    n = len(a) - 1
+    b_kplus1 = 0.0
+    b_kplus2 = 0.0
+    for k in range(n, -1, -1):
+        b_k = 2 * x * b_kplus1 - b_kplus2 + a[k]
+        b_kplus2 = b_kplus1
+        b_kplus1 = b_k
+    return b_k - x * b_kplus2
+
+def chebyshev_derivative_coeffs(a):
+    n = len(a) - 1
+    b = [0.0] * (n + 2)
+    for k in range(n, 0, -1):
+        b[k - 1] = b[k + 1] + 2 * k * a[k]
+    b[0] *= 0.5
+    return b[:n + 1]
+
+def aberth_cheb(C, maxiter=200, tol=1e-14, jitter=1e-12, step_cap_factor=0.25):
+    n = C.degree()
+    if n <= 0:
+        return np.array([], dtype=np.complex128)
+
+    A, B = C.domain
+    width = B - A
+
+    # Start at Chebyshev nodes mapped to [A,B], plus a tiny imaginary jitter
+    k = np.arange(1, n+1)
+    nodes = (A+B)/2 + (B-A)/2 * np.cos((2*k-1)*np.pi/(2*n))
+    z = nodes.astype(np.complex128)
+    z += 1j*jitter*(1 + 0.1*k)  # break symmetry
+
+    Cp = C.deriv()
+    cap = step_cap_factor * width  # cap step length per iteration
+
+    for _ in range(maxiter):
+        pz  = C(z)
+        dpz = Cp(z)
+
+        # Guard against near-stationary derivative
+        tiny = np.abs(dpz) < 1e-30*np.maximum(1.0, np.abs(pz))
+        dpz[tiny] = dpz[tiny] + 1e-30
+
+        ratio = pz / dpz  # Newton correction
+
+        diffs = z[:, None] - z[None, :]
+        np.fill_diagonal(diffs, np.inf)            # exclude self-terms
+        S = (1.0 / diffs).sum(axis=1)              # ∑_{k≠j} 1/(z_j - z_k)
+
+        dz = ratio / (1.0 - ratio * S)             # Aberth–Ehrlich step
+
+        # Simple damping to avoid stepping far outside [A,B]
+        big = np.abs(dz) > cap
+        if np.any(big):
+            dz[big] *= cap / np.abs(dz[big])
+
+        z -= dz
+
+        # Relative stopping test
+        if np.max(np.abs(dz) / np.maximum(1.0, np.abs(z))) < tol:
+            break
+
+    return z
+
+def show_roots(roots):
+    roots_sorted = sorted(roots, key=lambda z: z.real,reverse=True)
+    df = pd.DataFrame({
+        "Real Part": [round(r.real, 3) for r in roots_sorted],
+        "Imag Part": [round(r.imag, 15) for r in roots_sorted]
+    })
+    print(df.to_string(index=False))
+@
+\end{minipage}
+&
+\begin{minipage}[m]{10cm}
+<<, engine='python',size="tiny">>=
+np.random.seed(42)
+ccf = Chebyshev(np.random.randn(10)+1j*np.random.randn(10))
+cf = ccf.convert(kind=Polynomial).coef[::-1]
+show_roots(aberth_cheb(ccf))
+show_roots(np.roots(cf))
+
+show_roots(aberth_cheb(wilkinson_cheb(20)))
+
 @
 \end{minipage}
 \\
@@ -2790,6 +3338,9 @@ err = np.max(np.abs(np.polyval(cf,r)))
     \item {\tt cf} size: \Sexpr{dim(py[["cf"]])}
     \item {\tt err}: \Sexpr{py[["err"]]} 
 \end{itemize}
+
+\newpage
+\section{Chebyshev}
 
 \newpage
 \section{{\tt GNU} {\tt\bf GMP}}

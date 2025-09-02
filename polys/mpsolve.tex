@@ -1,0 +1,867 @@
+\documentclass{article}\usepackage[]{graphicx}\usepackage[dvipsnames,table]{xcolor}
+% maxwidth is the original width if it is less than linewidth
+% otherwise use linewidth (to make sure the graphics do not exceed the margin)
+\makeatletter
+\def\maxwidth{ %
+  \ifdim\Gin@nat@width>\linewidth
+    \linewidth
+  \else
+    \Gin@nat@width
+  \fi
+}
+\makeatother
+
+\definecolor{fgcolor}{rgb}{0.345, 0.345, 0.345}
+\newcommand{\hlnum}[1]{\textcolor[rgb]{0.686,0.059,0.569}{#1}}%
+\newcommand{\hlsng}[1]{\textcolor[rgb]{0.192,0.494,0.8}{#1}}%
+\newcommand{\hlcom}[1]{\textcolor[rgb]{0.678,0.584,0.686}{\textit{#1}}}%
+\newcommand{\hlopt}[1]{\textcolor[rgb]{0,0,0}{#1}}%
+\newcommand{\hldef}[1]{\textcolor[rgb]{0.345,0.345,0.345}{#1}}%
+\newcommand{\hlkwa}[1]{\textcolor[rgb]{0.161,0.373,0.58}{\textbf{#1}}}%
+\newcommand{\hlkwb}[1]{\textcolor[rgb]{0.69,0.353,0.396}{#1}}%
+\newcommand{\hlkwc}[1]{\textcolor[rgb]{0.333,0.667,0.333}{#1}}%
+\newcommand{\hlkwd}[1]{\textcolor[rgb]{0.737,0.353,0.396}{\textbf{#1}}}%
+\let\hlipl\hlkwb
+
+\usepackage{framed}
+\makeatletter
+\newenvironment{kframe}{%
+ \def\at@end@of@kframe{}%
+ \ifinner\ifhmode%
+  \def\at@end@of@kframe{\end{minipage}}%
+  \begin{minipage}{\columnwidth}%
+ \fi\fi%
+ \def\FrameCommand##1{\hskip\@totalleftmargin \hskip-\fboxsep
+ \colorbox{shadecolor}{##1}\hskip-\fboxsep
+     % There is no \\@totalrightmargin, so:
+     \hskip-\linewidth \hskip-\@totalleftmargin \hskip\columnwidth}%
+ \MakeFramed {\advance\hsize-\width
+   \@totalleftmargin\z@ \linewidth\hsize
+   \@setminipage}}%
+ {\par\unskip\endMakeFramed%
+ \at@end@of@kframe}
+\makeatother
+
+\definecolor{shadecolor}{rgb}{.97, .97, .97}
+\definecolor{messagecolor}{rgb}{0, 0, 0}
+\definecolor{warningcolor}{rgb}{1, 0, 1}
+\definecolor{errorcolor}{rgb}{1, 0, 0}
+\newenvironment{knitrout}{}{} % an empty environment to be redefined in TeX
+
+\let\hlesc\hldef \let\hlpps\hldef \let\hllin\hldef \let\hlslc\hlcom \let\hlppc\hlcom
+\usepackage{alltt}
+\usepackage[portrait, headheight = 0cm, margin=0.25cm, top = 0.25cm]{geometry} 
+\usepackage{graphicx}
+\usepackage[dvipsnames,table]{xcolor}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{pdfpages}
+\usepackage[export]{adjustbox} 
+\usepackage{booktabs}
+\usepackage{tikz}
+\usetikzlibrary{shadings,arrows.meta,positioning,calc,intersections}
+\usepackage{hyperref}
+
+
+
+
+
+
+
+
+
+
+
+
+\title{
+\vskip 1cm
+{\bf\huge {\tt MPSolve}}
+\vskip 5mm
+{\bf\huge for}
+\vskip 5mm
+{\bf\huge Polynomial Manifolds}
+\vskip 1cm
+\begin{center}
+\includegraphics[width=15cm, height=15cm]{myresultplot_white_sml.png}
+\end{center}
+\vskip 1cm
+}
+\author{Wigerich}
+\IfFileExists{upquote.sty}{\usepackage{upquote}}{}
+\begin{document}
+\maketitle
+
+\newpage
+\tableofcontents
+
+\newpage
+\section{Objective}
+
+\begin{itemize}
+    \item {\tt MPSolve} with warm start
+\end{itemize}
+
+\newpage
+\section{load {\tt mpslib} and dependencies}
+
+\begin{center}
+\begin{minipage}[m]{15cm}
+\begin{knitrout}\small
+\definecolor{shadecolor}{rgb}{0.969, 0.969, 0.969}\color{fgcolor}\begin{kframe}
+\noindent
+\ttfamily
+\hldef{}\hlkwa{import\ }\hldef{os}\hspace*{\fill}\\
+\hldef{}\hlkwa{import\ }\hldef{numpy\ }\hlkwa{as\ }\hldef{np}\hspace*{\fill}\\
+\hldef{}\hlkwa{import\ }\hldef{ctypes}\hlopt{,\ }\hldef{ctypes}\hlopt{.}\hldef{util}\hspace*{\fill}\\
+\hldef{}\hlkwa{import\ }\hldef{gmpy2}\hspace*{\fill}\\
+\hldef{}\hlkwa{import\ }\hldef{timeit}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hlslc{\#\ libmps\ is\ MPSolve}\hspace*{\fill}\\
+\hldef{\textunderscore mps\textunderscore path\ }\hlopt{=\ }\hldef{}\hlsng{"/usr/local/lib/libmps.dylib"}\hldef{}\hspace*{\fill}\\
+\hldef{}\hlkwa{if\ not\ }\hldef{os}\hlopt{.}\hldef{path}\hlopt{.}\hldef{}\hlkwd{exists}\hldef{}\hlopt{(}\hldef{\textunderscore mps\textunderscore path}\hlopt{):\ }\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{raise\ }\hldef{}\hlkwd{FileNotFoundError}\hldef{}\hlopt{(}\hldef{f}\hlsng{"MPSolve\ not\ found\ at\ }\hlipl{\{\textunderscore mps\textunderscore path\}}\hlsng{"}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{\textunderscore mps\ }\hlopt{=\ }\hldef{ctypes}\hlopt{.}\hldef{}\hlkwd{CDLL}\hldef{}\hlopt{(}\hldef{\textunderscore mps\textunderscore path}\hlopt{,\ }\hldef{mode}\hlopt{=}\hldef{ctypes}\hlopt{.}\hldef{RTLD\textunderscore GLOBAL}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hlslc{\#\ GMP\ multiprecision\ to\ interpret\ results}\hspace*{\fill}\\
+\hldef{\textunderscore libgmp\ }\hlopt{=\ }\hldef{ctypes}\hlopt{.}\hldef{}\hlkwd{CDLL}\hldef{}\hlopt{(}\hldef{ctypes}\hlopt{.}\hldef{util}\hlopt{.}\hldef{}\hlkwd{find\textunderscore library}\hldef{}\hlopt{(}\hldef{}\hlsng{"gmp"}\hldef{}\hlopt{))}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hlslc{\#\ C\ libraries\ for\ malloc\ and\ file\ I/O}\hspace*{\fill}\\
+\hldef{\textunderscore libc}\hldef{\ \ \ }\hldef{}\hlopt{=\ }\hldef{ctypes}\hlopt{.}\hldef{}\hlkwd{CDLL}\hldef{}\hlopt{(}\hldef{ctypes}\hlopt{.}\hldef{util}\hlopt{.}\hldef{}\hlkwd{find\textunderscore library}\hldef{}\hlopt{(}\hldef{}\hlsng{"c"}\hldef{}\hlopt{))}\hldef{}\hspace*{\fill}
+\mbox{}
+\normalfont
+\end{kframe}
+\end{knitrout}
+\end{minipage}
+\end{center}
+
+\newpage
+\section{data structures}
+\begin{center}
+\begin{minipage}[m]{15cm}
+\begin{knitrout}\small
+\definecolor{shadecolor}{rgb}{0.969, 0.969, 0.969}\color{fgcolor}\begin{kframe}
+\noindent
+\ttfamily
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hlslc{\#\ {-}{-}{-}\ MP\ mpf\textunderscore t\ {-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}}\hspace*{\fill}\\
+\hldef{}\hlkwa{class\ }\hldef{}\hlkwd{mpf\textunderscore t}\hldef{}\hlopt{(}\hldef{ctypes}\hlopt{.}\hldef{Structure}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{\textunderscore fields\textunderscore \ }\hlopt{=\ {[}}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlopt{(}\hldef{}\hlsng{'\textunderscore mp\textunderscore prec'}\hldef{}\hlopt{,\ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore int}\hlopt{),}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlopt{(}\hldef{}\hlsng{'\textunderscore mp\textunderscore size'}\hldef{}\hlopt{,\ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore int}\hlopt{),}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlopt{(}\hldef{}\hlsng{'\textunderscore mp\textunderscore exp'}\hldef{}\hlopt{,\ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore long}\hlopt{),}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlopt{(}\hldef{}\hlsng{'\textunderscore mp\textunderscore d'}\hldef{}\hlopt{,\ }\hldef{ctypes}\hlopt{.}\hldef{}\hlkwd{POINTER}\hldef{}\hlopt{(}\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore ulong}\hlopt{))}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hlslc{\#\ {-}{-}{-}\ float\ complex\ {-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}}\hspace*{\fill}\\
+\hldef{}\hlkwa{class\ }\hldef{}\hlkwd{Cplx}\hldef{}\hlopt{(}\hldef{ctypes}\hlopt{.}\hldef{Structure}\hlopt{):\ }\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{\textunderscore fields\textunderscore \ }\hlopt{=\ {[}(}\hldef{}\hlsng{"real"}\hldef{}\hlopt{,\ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore double}\hlopt{),(}\hldef{}\hlsng{"imag"}\hldef{}\hlopt{,\ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore double}\hlopt{){]}}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{\textunderscore \textunderscore complex\textunderscore \textunderscore }\hldef{}\hlopt{(}\hldef{self}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{}\hlkwb{complex}\hldef{}\hlopt{(}\hldef{self}\hlopt{.}\hldef{real}\hlopt{,\ }\hldef{self}\hlopt{.}\hldef{imag}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hlslc{\#\ {-}{-}{-}\ MPSolve's\ custom\ mpc\textunderscore t\ using\ GMP\ mpf\textunderscore t\ {-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}}\hspace*{\fill}\\
+\hldef{}\hlkwa{class\ }\hldef{}\hlkwd{mpc\textunderscore t}\hldef{}\hlopt{(}\hldef{ctypes}\hlopt{.}\hldef{Structure}\hlopt{):\ }\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{\textunderscore fields\textunderscore \ }\hlopt{=\ {[}\ }\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlopt{(}\hldef{}\hlsng{"re"}\hldef{}\hlopt{,\ }\hldef{mpf\textunderscore t}\hlopt{),}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlopt{(}\hldef{}\hlsng{"im"}\hldef{}\hlopt{,\ }\hldef{mpf\textunderscore t}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hlslc{\#\ {-}{-}{-}\ rdpe\textunderscore t:\ "double\ mantissa\ +\ long\ exponent"\ {-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}{-}}\hspace*{\fill}\\
+\hldef{}\hlkwa{class\ }\hldef{}\hlkwd{RDPE\textunderscore struct}\hldef{}\hlopt{(}\hldef{ctypes}\hlopt{.}\hldef{Structure}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{\textunderscore fields\textunderscore \ }\hlopt{=\ {[}(}\hldef{}\hlsng{"m"}\hldef{}\hlopt{,\ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore double}\hlopt{),\ (}\hldef{}\hlsng{"e"}\hldef{}\hlopt{,\ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore long}\hlopt{){]}}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hlslc{\#\ In\ the\ C\ headers:\ typedef\ \textunderscore \textunderscore rdpe\textunderscore struct\ rdpe\textunderscore t{[}1{]};}\hspace*{\fill}\\
+\hldef{}\hlslc{\#\ Mirror\ that\ "array{-}of{-}1"\ trick\ in\ ctypes:}\hspace*{\fill}\\
+\hldef{rdpe\textunderscore t\ }\hlopt{=\ }\hldef{RDPE\textunderscore struct\ }\hlopt{{*}\ }\hldef{}\hlnum{1}\hldef{}\hspace*{\fill}
+\mbox{}
+\normalfont
+\end{kframe}
+\end{knitrout}
+\end{minipage}
+\end{center}
+
+\newpage
+\section{C functions}
+\begin{center}
+\begin{minipage}[m]{15cm}
+\begin{knitrout}\small
+\definecolor{shadecolor}{rgb}{0.969, 0.969, 0.969}\color{fgcolor}\begin{kframe}
+\noindent
+\ttfamily
+\hldef{}\hlslc{\#\ {-}{-}{-}\ libc\ mem\ management\ helpers}\hspace*{\fill}\\
+\hldef{\textunderscore libc}\hlopt{.}\hldef{free}\hlopt{.}\hldef{argtypes\ }\hlopt{=\ {[}}\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore void\textunderscore p}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hlslc{\#\ {-}{-}{-}\ libc\ FILE{*}\ helpers}\hspace*{\fill}\\
+\hldef{\textunderscore libc}\hlopt{.}\hldef{fopen}\hlopt{.}\hldef{argtypes}\hldef{\ \ }\hldef{}\hlopt{=\ {[}}\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore char\textunderscore p}\hlopt{,\ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore char\textunderscore p}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{\textunderscore libc}\hlopt{.}\hldef{fopen}\hlopt{.}\hldef{restype}\hldef{\ \ \ }\hldef{}\hlopt{=\ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore void\textunderscore p}\hspace*{\fill}\\
+\hldef{\textunderscore libc}\hlopt{.}\hldef{fclose}\hlopt{.}\hldef{argtypes\ }\hlopt{=\ {[}}\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore void\textunderscore p}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{\textunderscore libc}\hlopt{.}\hldef{fclose}\hlopt{.}\hldef{restype}\hldef{\ \ }\hldef{}\hlopt{=\ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore int}\hspace*{\fill}\\
+\hldef{\textunderscore libc}\hlopt{.}\hldef{fdopen}\hlopt{.}\hldef{argtypes}\hldef{\ \ }\hldef{}\hlopt{=\ {[}}\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore int}\hlopt{,\ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore char\textunderscore p}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{\textunderscore libc}\hlopt{.}\hldef{fdopen}\hlopt{.}\hldef{restype}\hldef{\ \ \ }\hldef{}\hlopt{=\ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore void\textunderscore p}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hlslc{\#\ (optional\ but\ handy\ if\ you\ try\ the\ tmpfile\ fallback\ below)}\hspace*{\fill}\\
+\hldef{\textunderscore libc}\hlopt{.}\hldef{tmpfile}\hlopt{.}\hldef{argtypes\ }\hlopt{=\ {[}{]}}\hspace*{\fill}\\
+\hldef{\textunderscore libc}\hlopt{.}\hldef{tmpfile}\hlopt{.}\hldef{restype}\hldef{\ \ }\hldef{}\hlopt{=\ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore void\textunderscore p}\hspace*{\fill}\\
+\hldef{\textunderscore libc}\hlopt{.}\hldef{fwrite}\hlopt{.}\hldef{argtypes}\hldef{\ \ }\hldef{}\hlopt{=\ {[}}\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore void\textunderscore p}\hlopt{,\ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore size\textunderscore t}\hlopt{,\ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore size\textunderscore t}\hlopt{,\ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore void\textunderscore p}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{\textunderscore libc}\hlopt{.}\hldef{fwrite}\hlopt{.}\hldef{restype}\hldef{\ \ \ }\hldef{}\hlopt{=\ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore size\textunderscore t}\hspace*{\fill}\\
+\hldef{\textunderscore libc}\hlopt{.}\hldef{fflush}\hlopt{.}\hldef{argtypes}\hldef{\ \ }\hldef{}\hlopt{=\ {[}}\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore void\textunderscore p}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{\textunderscore libc}\hlopt{.}\hldef{fflush}\hlopt{.}\hldef{restype}\hldef{\ \ \ }\hldef{}\hlopt{=\ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore int}\hspace*{\fill}\\
+\hldef{\textunderscore libc}\hlopt{.}\hldef{fseek}\hlopt{.}\hldef{argtypes}\hldef{\ \ \ }\hldef{}\hlopt{=\ {[}}\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore void\textunderscore p}\hlopt{,\ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore long}\hlopt{,\ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore int}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{\textunderscore libc}\hlopt{.}\hldef{fseek}\hlopt{.}\hldef{restype}\hldef{\ \ \ \ }\hldef{}\hlopt{=\ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore int}\hldef{\ \ }\hldef{}\hlslc{\#\ SEEK\textunderscore SET\ =\ 0}\hldef{}\hspace*{\fill}
+\mbox{}
+\normalfont
+\end{kframe}
+\end{knitrout}
+\end{minipage}
+\end{center}
+
+
+\newpage
+\section{GMP functions}
+\begin{center}
+\begin{minipage}[m]{15cm}
+\begin{knitrout}\small
+\definecolor{shadecolor}{rgb}{0.969, 0.969, 0.969}\color{fgcolor}\begin{kframe}
+\noindent
+\ttfamily
+\hldef{}\hlslc{\#\ Function:\ void\ mpf\textunderscore init2\ (mpf\textunderscore t\ x,\ mp\textunderscore bitcnt\textunderscore t\ prec)\ }\hspace*{\fill}\\
+\hldef{\textunderscore libgmp}\hlnum{.\textunderscore \textunderscore }\hldef{gmpf}\hlnum{\textunderscore }\hldef{init}\hlnum{2}\hldef{}\hlopt{.}\hldef{argtypes\ }\hlopt{=\ {[}}\hldef{ctypes}\hlopt{.}\hldef{}\hlkwd{POINTER}\hldef{}\hlopt{(}\hldef{mpf\textunderscore t}\hlopt{),\ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore ulong}\hlopt{{]}\ }\hspace*{\fill}\\
+\hldef{}\hlslc{\#\ Function:\ void\ mpf\textunderscore set\textunderscore d\ (mpf\textunderscore t\ rop,\ double\ op)\ }\hspace*{\fill}\\
+\hldef{\textunderscore libgmp}\hlnum{.\textunderscore \textunderscore }\hldef{gmpf}\hlnum{\textunderscore }\hldef{set}\hlnum{\textunderscore }\hldef{d}\hlopt{.}\hldef{argtypes\ }\hlopt{=\ {[}}\hldef{ctypes}\hlopt{.}\hldef{}\hlkwd{POINTER}\hldef{}\hlopt{(}\hldef{mpf\textunderscore t}\hlopt{),\ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore double}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hlslc{\#\ Function:\ void\ mpf\textunderscore add\ (mpf\textunderscore t\ rop,\ const\ mpf\textunderscore t\ op1,\ const\ mpf\textunderscore t\ op2)\ :\ Set\ rop\ to\ op1\ +\ op2}\hspace*{\fill}\\
+\hldef{\textunderscore libgmp}\hlnum{.\textunderscore \textunderscore }\hldef{gmpf}\hlnum{\textunderscore }\hldef{add}\hlopt{.}\hldef{argtypes\ }\hlopt{=\ {[}}\hldef{ctypes}\hlopt{.}\hldef{}\hlkwd{POINTER}\hldef{}\hlopt{(}\hldef{mpf\textunderscore t}\hlopt{),\ }\hldef{ctypes}\hlopt{.}\hldef{}\hlkwd{POINTER}\hldef{}\hlopt{(}\hldef{mpf\textunderscore t}\hlopt{),}\hldef{ctypes}\hlopt{.}\hldef{}\hlkwd{POINTER}\hldef{}\hlopt{(}\hldef{mpf\textunderscore t}\hlopt{){]}}\hspace*{\fill}\\
+\hldef{}\hlslc{\#\ Function:\ void\ mpf\textunderscore clear\ (mpf\textunderscore t\ x)\ :\ Free\ the\ space\ occupied\ by\ x.\ }\hspace*{\fill}\\
+\hldef{\textunderscore libgmp}\hlnum{.\textunderscore \textunderscore }\hldef{gmpf}\hlnum{\textunderscore }\hldef{clear}\hlopt{.}\hldef{argtypes\ }\hlopt{=\ {[}}\hldef{ctypes}\hlopt{.}\hldef{}\hlkwd{POINTER}\hldef{}\hlopt{(}\hldef{mpf\textunderscore t}\hlopt{){]}}\hspace*{\fill}\\
+\hldef{}\hlslc{\#\ Function:\ char\ {*}\ mpf\textunderscore get\textunderscore str\ (char\ {*}str,\ mp\textunderscore exp\textunderscore t\ {*}expptr,\ int\ base,\ size\textunderscore t\ n\textunderscore digits,\ const\ mpf\textunderscore t\ op)}\hspace*{\fill}\\
+\hldef{}\hlslc{\#}\hspace*{\fill}\\
+\hldef{}\hlslc{\#\ Convert\ op\ to\ a\ string\ of\ digits\ in\ base\ base.\ }\hspace*{\fill}\\
+\hldef{}\hlslc{\#\ The\ base\ argument\ may\ vary\ from\ 2\ to\ 62\ or\ from\ −2\ to\ −36.\ }\hspace*{\fill}\\
+\hldef{}\hlslc{\#\ Up\ to\ n\textunderscore digits\ digits\ will\ be\ generated.\ }\hspace*{\fill}\\
+\hldef{}\hlslc{\#\ Trailing\ zeros\ are\ not\ returned.\ }\hspace*{\fill}\\
+\hldef{}\hlslc{\#\ No\ more\ digits\ than\ can\ be\ accurately\ represented\ by\ op\ are\ ever\ generated.\ }\hspace*{\fill}\\
+\hldef{}\hlslc{\#\ If\ n\textunderscore digits\ is\ 0\ then\ that\ accurate\ maximum\ number\ of\ digits\ are\ generated.}\hspace*{\fill}\\
+\hldef{}\hlslc{\#\ For\ base\ in\ the\ range\ 2..36,\ digits\ and\ lower{-}case\ letters\ are\ used;\ }\hspace*{\fill}\\
+\hldef{}\hlslc{\#\ for\ −2..−36,\ digits\ and\ upper{-}case\ letters\ are\ used;\ }\hspace*{\fill}\\
+\hldef{}\hlslc{\#\ for\ 37..62,\ digits,\ upper{-}case\ letters,\ and\ lower{-}case\ letters\ (in\ that\ significance\ order)\ are\ used.}\hspace*{\fill}\\
+\hldef{}\hlslc{\#\ If\ str\ is\ NULL,\ the\ result\ string\ is\ allocated\ using\ the\ current\ }\hspace*{\fill}\\
+\hldef{}\hlslc{\#\ allocation\ function\ (see\ Custom\ Allocation).\ }\hspace*{\fill}\\
+\hldef{}\hlslc{\#\ The\ block\ will\ be\ strlen(str)+1\ bytes,\ that\ being\ exactly\ enough\ for\ the\ string\ and\ null{-}terminator.}\hspace*{\fill}\\
+\hldef{}\hlslc{\#\ If\ str\ is\ not\ NULL,\ it\ should\ point\ to\ a\ block\ of\ n\textunderscore digits\ +\ 2\ bytes,\ that\ being\ enough\ for\ the\ mantissa,\ }\hspace*{\fill}\\
+\hldef{}\hlslc{\#\ a\ possible\ minus\ sign,\ and\ a\ null{-}terminator.\ }\hspace*{\fill}\\
+\hldef{}\hlslc{\#\ When\ n\textunderscore digits\ is\ 0\ to\ get\ all\ significant\ digits,\ }\hspace*{\fill}\\
+\hldef{}\hlslc{\#\ an\ application\ won’t\ be\ able\ to\ know\ the\ space\ required,\ and\ str\ should\ be\ NULL\ in\ that\ case.}\hspace*{\fill}\\
+\hldef{}\hlslc{\#\ The\ generated\ string\ is\ a\ fraction,\ with\ an\ implicit\ radix\ point\ }\hspace*{\fill}\\
+\hldef{}\hlslc{\#\ immediately\ to\ the\ left\ of\ the\ first\ digit.\ }\hspace*{\fill}\\
+\hldef{}\hlslc{\#\ The\ applicable\ exponent\ is\ written\ through\ the\ expptr\ pointer.\ }\hspace*{\fill}\\
+\hldef{}\hlslc{\#\ For\ example,\ the\ number\ 3.1416\ would\ be\ returned\ as\ string\ "31416"\ and\ exponent\ 1.}\hspace*{\fill}\\
+\hldef{}\hlslc{\#\ When\ op\ is\ zero,\ an\ empty\ string\ is\ produced\ and\ the\ exponent\ returned\ is\ 0.}\hspace*{\fill}\\
+\hldef{}\hlslc{\#\ A\ pointer\ to\ the\ result\ string\ is\ returned,\ being\ either\ the\ allocated\ block\ or\ the\ given\ str.}\hspace*{\fill}\\
+\hldef{\textunderscore libgmp}\hlnum{.\textunderscore \textunderscore }\hldef{gmpf}\hlnum{\textunderscore }\hldef{get}\hlnum{\textunderscore }\hldef{str}\hlopt{.}\hldef{argtypes\ }\hlopt{=\ {[}}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore char\textunderscore p}\hlopt{,}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ }\hlopt{}\hldef{}\hlslc{\#\ user\ buffer\ (or\ NULL)\ for\ self{-}allocation}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{ctypes}\hlopt{.}\hldef{}\hlkwd{POINTER}\hldef{}\hlopt{(}\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore long}\hlopt{),}\hldef{\ \ \ \ \ \ \ \ }\hlopt{}\hldef{}\hlslc{\#\ exponent\ out}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore int}\hlopt{,}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ }\hlopt{}\hldef{}\hlslc{\#\ base}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore size\textunderscore t}\hlopt{,}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ }\hlopt{}\hldef{}\hlslc{\#\ number\ of\ digits\ (0\ =\ all)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{ctypes}\hlopt{.}\hldef{}\hlkwd{POINTER}\hldef{}\hlopt{(}\hldef{mpf\textunderscore t}\hlopt{)}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ }\hlopt{}\hldef{}\hlslc{\#\ the\ mpf\textunderscore t\ to\ convert}\hspace*{\fill}\\
+\hldef{}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{\textunderscore libgmp}\hlnum{.\textunderscore \textunderscore }\hldef{gmpf}\hlnum{\textunderscore }\hldef{get}\hlnum{\textunderscore }\hldef{str}\hlopt{.}\hldef{restype\ }\hlopt{=\ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore void\textunderscore p}\hspace*{\fill}
+\mbox{}
+\normalfont
+\end{kframe}
+\end{knitrout}
+\end{minipage}
+\end{center}
+
+\newpage
+\section{MPSolve constants}
+\begin{center}
+\begin{minipage}[m]{15cm}
+\begin{knitrout}\small
+\definecolor{shadecolor}{rgb}{0.969, 0.969, 0.969}\color{fgcolor}\begin{kframe}
+\noindent
+\ttfamily
+\hldef{MPS\textunderscore OUTPUT\textunderscore GOAL\textunderscore APPROXIMATE\ }\hlopt{=\ }\hldef{}\hlnum{1}\hspace*{\fill}\\
+\hldef{MPS\textunderscore ALGORITHM\textunderscore SECULAR\textunderscore GA}\hldef{\ \ \ \ }\hldef{}\hlopt{=\ }\hldef{}\hlnum{1}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{MPS\textunderscore STARTING\textunderscore STRATEGY\textunderscore DEFAULT}\hldef{\ \ \ }\hldef{}\hlopt{=\ }\hldef{}\hlnum{0}\hspace*{\fill}\\
+\hldef{MPS\textunderscore STARTING\textunderscore STRATEGY\textunderscore RECURSIVE\ }\hlopt{=\ }\hldef{}\hlnum{1}\hspace*{\fill}\\
+\hldef{MPS\textunderscore STARTING\textunderscore STRATEGY\textunderscore FILE}\hldef{\ \ \ \ \ \ }\hldef{}\hlopt{=\ }\hldef{}\hlnum{2}\hldef{\ \ }\hlnum{}\hldef{}\hlslc{\#\ $<${-}\ what\ we\ need}\hldef{}\hspace*{\fill}
+\mbox{}
+\normalfont
+\end{kframe}
+\end{knitrout}
+\end{minipage}
+\end{center}
+
+\newpage
+\section{MPSolve context}
+\begin{center}
+\begin{minipage}[m]{15cm}
+\begin{knitrout}\small
+\definecolor{shadecolor}{rgb}{0.969, 0.969, 0.969}\color{fgcolor}\begin{kframe}
+\noindent
+\ttfamily
+\hldef{\textunderscore mps}\hlopt{.}\hldef{mps\textunderscore context\textunderscore new}\hlopt{.}\hldef{restype}\hldef{\ \ }\hldef{}\hlopt{=\ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore void\textunderscore p}\hldef{\ \ \ }\hldef{}\hlslc{\#\ create\ context}\hspace*{\fill}\\
+\hldef{\textunderscore mps}\hlopt{.}\hldef{mps\textunderscore context\textunderscore free}\hlopt{.}\hldef{argtypes}\hlopt{=\ {[}}\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore void\textunderscore p}\hlopt{{]}\ }\hldef{}\hlslc{\#\ free\ context}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{\textunderscore mps}\hlopt{.}\hldef{mps\textunderscore context\textunderscore set\textunderscore input\textunderscore prec\ }\hlopt{.}\hldef{argtypes\ }\hlopt{=\ {[}}\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore void\textunderscore p}\hlopt{,\ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore long}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{\textunderscore mps}\hlopt{.}\hldef{mps\textunderscore context\textunderscore set\textunderscore output\textunderscore prec}\hlopt{.}\hldef{argtypes\ }\hlopt{=\ {[}}\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore void\textunderscore p}\hlopt{,\ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore long}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{\textunderscore mps}\hlopt{.}\hldef{mps\textunderscore context\textunderscore set\textunderscore output\textunderscore goal}\hlopt{.}\hldef{argtypes\ }\hlopt{=\ {[}}\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore void\textunderscore p}\hlopt{,\ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore int}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{\textunderscore mps}\hlopt{.}\hldef{mps\textunderscore context\textunderscore select\textunderscore algorithm}\hlopt{.}\hldef{argtypes\ }\hlopt{=\ {[}}\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore void\textunderscore p}\hlopt{,\ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore int}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{\textunderscore mps}\hlopt{.}\hldef{mps\textunderscore context\textunderscore set\textunderscore root\textunderscore stream}\hlopt{.}\hldef{argtypes\ }\hlopt{=\ {[}}\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore void\textunderscore p}\hlopt{,\ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore void\textunderscore p}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{\textunderscore mps}\hlopt{.}\hldef{mps\textunderscore context\textunderscore set\textunderscore root\textunderscore stream}\hlopt{.}\hldef{restype}\hldef{\ \ }\hldef{}\hlopt{=\ }\hldef{}\hlkwa{None}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{\textunderscore mps}\hlopt{.}\hldef{mps\textunderscore context\textunderscore select\textunderscore starting\textunderscore strategy}\hlopt{.}\hldef{argtypes\ }\hlopt{=\ {[}}\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore void\textunderscore p}\hlopt{,\ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore int}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{\textunderscore mps}\hlopt{.}\hldef{mps\textunderscore context\textunderscore select\textunderscore starting\textunderscore strategy}\hlopt{.}\hldef{restype}\hldef{\ \ }\hldef{}\hlopt{=\ }\hldef{}\hlkwa{None}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{\textunderscore mps}\hlopt{.}\hldef{mps\textunderscore context\textunderscore set\textunderscore input\textunderscore poly}\hlopt{.}\hldef{argtypes}\hldef{\ \ }\hldef{}\hlopt{=\ {[}}\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore void\textunderscore p}\hlopt{,\ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore void\textunderscore p}\hlopt{{]}}\hldef{}\hspace*{\fill}
+\mbox{}
+\normalfont
+\end{kframe}
+\end{knitrout}
+\end{minipage}
+\end{center}
+
+\newpage
+\section{MPSolve context root getters}
+\begin{center}
+\begin{minipage}[m]{15cm}
+\begin{knitrout}\small
+\definecolor{shadecolor}{rgb}{0.969, 0.969, 0.969}\color{fgcolor}\begin{kframe}
+\noindent
+\ttfamily
+\hldef{\textunderscore mps}\hlopt{.}\hldef{mps\textunderscore mpsolve}\hlopt{.}\hldef{argtypes}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ }\hldef{}\hlopt{=\ {[}}\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore void\textunderscore p}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{\textunderscore mps}\hlopt{.}\hldef{mps\textunderscore context\textunderscore get\textunderscore degree}\hlopt{.}\hldef{argtypes}\hldef{\ \ \ \ \ \ }\hldef{}\hlopt{=\ {[}}\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore void\textunderscore p}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{\textunderscore mps}\hlopt{.}\hldef{mps\textunderscore context\textunderscore get\textunderscore degree}\hlopt{.}\hldef{restype}\hldef{\ \ \ \ \ \ \ }\hldef{}\hlopt{=\ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore int}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{\textunderscore mps}\hlopt{.}\hldef{mps\textunderscore context\textunderscore get\textunderscore roots\textunderscore d}\hlopt{.}\hldef{argtypes\ }\hlopt{=\ {[}}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore void\textunderscore p}\hlopt{,}\hldef{}\hlslc{\#\ context}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{ctypes}\hlopt{.}\hldef{}\hlkwd{POINTER}\hldef{}\hlopt{(}\hldef{ctypes}\hlopt{.}\hldef{}\hlkwd{POINTER}\hldef{}\hlopt{(}\hldef{Cplx}\hlopt{)),\ }\hldef{}\hlslc{\#\ vector\ of\ Cplx\ float\ structures}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{ctypes}\hlopt{.}\hldef{}\hlkwd{POINTER}\hldef{}\hlopt{(}\hldef{ctypes}\hlopt{.}\hldef{}\hlkwd{POINTER}\hldef{}\hlopt{(}\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore double}\hlopt{))\ }\hldef{}\hlslc{\#\ double\ {*}{*}radii}\hspace*{\fill}\\
+\hldef{}\hlopt{{]}\ }\hspace*{\fill}\\
+\hldef{\textunderscore mps}\hlopt{.}\hldef{mps\textunderscore context\textunderscore get\textunderscore roots\textunderscore d}\hlopt{.}\hldef{restype}\hldef{\ \ }\hldef{}\hlopt{=\ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore int}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{\textunderscore mps}\hlopt{.}\hldef{mps\textunderscore context\textunderscore get\textunderscore roots\textunderscore m}\hlopt{.}\hldef{argtypes\ }\hlopt{=\ {[}}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore void\textunderscore p}\hlopt{,\ }\hldef{}\hlslc{\#\ context}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{ctypes}\hlopt{.}\hldef{}\hlkwd{POINTER}\hldef{}\hlopt{(}\hldef{ctypes}\hlopt{.}\hldef{}\hlkwd{POINTER}\hldef{}\hlopt{(}\hldef{mpc\textunderscore t}\hlopt{)),\ }\hldef{}\hlslc{\#\ vector\ of\ GMP\ complex}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{ctypes}\hlopt{.}\hldef{}\hlkwd{POINTER}\hldef{}\hlopt{(}\hldef{ctypes}\hlopt{.}\hldef{}\hlkwd{POINTER}\hldef{}\hlopt{(}\hldef{rdpe\textunderscore t}\hlopt{))\ }\hldef{}\hlslc{\#\ vector\ of\ radii}\hspace*{\fill}\\
+\hldef{}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{\textunderscore mps}\hlopt{.}\hldef{mps\textunderscore context\textunderscore get\textunderscore roots\textunderscore m}\hlopt{.}\hldef{restype\ }\hlopt{=\ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore int}\hspace*{\fill}
+\mbox{}
+\normalfont
+\end{kframe}
+\end{knitrout}
+\end{minipage}
+\end{center}
+
+\newpage
+\section{MPSolve polynomial setters}
+\begin{center}
+\begin{minipage}[m]{15cm}
+\begin{knitrout}\small
+\definecolor{shadecolor}{rgb}{0.969, 0.969, 0.969}\color{fgcolor}\begin{kframe}
+\noindent
+\ttfamily
+\hldef{}\hspace*{\fill}\\
+\hldef{\textunderscore mps}\hlopt{.}\hldef{mps\textunderscore monomial\textunderscore poly\textunderscore new}\hlopt{.}\hldef{argtypes}\hldef{\ \ }\hldef{}\hlopt{=\ {[}}\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore void\textunderscore p}\hlopt{,\ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore int}\hlopt{{]}\ }\hldef{}\hlslc{\#\ create\ poly}\hspace*{\fill}\\
+\hldef{\textunderscore mps}\hlopt{.}\hldef{mps\textunderscore monomial\textunderscore poly\textunderscore new}\hlopt{.}\hldef{restype}\hldef{\ \ \ }\hldef{}\hlopt{=\ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore void\textunderscore p\ }\hlslc{\#\ free\ poly}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{\textunderscore mps}\hlopt{.}\hldef{mps\textunderscore monomial\textunderscore poly\textunderscore set\textunderscore coefficient\textunderscore d}\hlopt{.}\hldef{argtypes\ }\hlopt{=\ (}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore void\textunderscore p}\hlopt{,\ }\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore void\textunderscore p}\hlopt{,\ }\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore int}\hlopt{,}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore double}\hlopt{,\ }\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore double}\hspace*{\fill}\\
+\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{\textunderscore mps}\hlopt{.}\hldef{mps\textunderscore polynomial\textunderscore free}\hlopt{.}\hldef{argtypes}\hldef{\ \ \ \ }\hldef{}\hlopt{=\ {[}}\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore void\textunderscore p}\hlopt{,\ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore void\textunderscore p}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{\textunderscore mps}\hlopt{.}\hldef{mps\textunderscore monomial\textunderscore poly\textunderscore set\textunderscore coefficient\textunderscore s\ }\hlopt{=\ }\hldef{\textunderscore mps}\hlopt{.}\hldef{mps\textunderscore monomial\textunderscore poly\textunderscore set\textunderscore coefficient\textunderscore s}\hspace*{\fill}\\
+\hldef{\textunderscore mps}\hlopt{.}\hldef{mps\textunderscore monomial\textunderscore poly\textunderscore set\textunderscore coefficient\textunderscore s}\hlopt{.}\hldef{argtypes\ }\hlopt{=\ (}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore void\textunderscore p}\hlopt{,}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ \ }\hlopt{}\hldef{}\hlslc{\#\ ctx}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore void\textunderscore p}\hlopt{,}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ \ }\hlopt{}\hldef{}\hlslc{\#\ poly}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore int}\hlopt{,}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ }\hlopt{}\hldef{}\hlslc{\#\ exponent}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore char\textunderscore p}\hlopt{,}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ \ }\hlopt{}\hldef{}\hlslc{\#\ real\ (ASCII\ string)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore char\textunderscore p}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ \ \ }\hldef{}\hlslc{\#\ real\ (ASCII\ string)}\hspace*{\fill}\\
+\hldef{}\hlopt{)}\hldef{\ \ }\hlopt{}\hspace*{\fill}\\
+\hldef{\textunderscore mps}\hlopt{.}\hldef{mps\textunderscore monomial\textunderscore poly\textunderscore set\textunderscore coefficient\textunderscore s}\hlopt{.}\hldef{restype}\hldef{\ \ }\hldef{}\hlopt{=\ }\hldef{}\hlkwa{None}\hldef{}\hspace*{\fill}
+\mbox{}
+\normalfont
+\end{kframe}
+\end{knitrout}
+\end{minipage}
+\end{center}
+
+\newpage
+\section{MPSolve errors}
+\begin{center}
+\begin{minipage}[m]{15cm}
+\begin{knitrout}\small
+\definecolor{shadecolor}{rgb}{0.969, 0.969, 0.969}\color{fgcolor}\begin{kframe}
+\noindent
+\ttfamily
+\hldef{\textunderscore mps}\hlopt{.}\hldef{mps\textunderscore context\textunderscore has\textunderscore errors}\hlopt{.}\hldef{argtypes\ }\hlopt{=\ {[}}\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore void\textunderscore p}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{\textunderscore mps}\hlopt{.}\hldef{mps\textunderscore context\textunderscore has\textunderscore errors}\hlopt{.}\hldef{restype}\hldef{\ \ }\hldef{}\hlopt{=\ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore int}\hspace*{\fill}\\
+\hldef{\textunderscore mps}\hlopt{.}\hldef{mps\textunderscore context\textunderscore error\textunderscore msg}\hlopt{.}\hldef{argtypes}\hldef{\ \ }\hldef{}\hlopt{=\ {[}}\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore void\textunderscore p}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{\textunderscore mps}\hlopt{.}\hldef{mps\textunderscore context\textunderscore error\textunderscore msg}\hlopt{.}\hldef{restype}\hldef{\ \ \ }\hldef{}\hlopt{=\ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore void\textunderscore p}\hldef{\ \ }\hldef{}\hlslc{\#\ we'll\ free\ it\ with\ libc.free}\hldef{}\hspace*{\fill}
+\mbox{}
+\normalfont
+\end{kframe}
+\end{knitrout}
+\end{minipage}
+\end{center}
+
+
+\newpage
+\section{GMP to {\tt gmpy2} functions}
+\begin{center}
+\begin{minipage}[m]{15cm}
+\begin{knitrout}\small
+\definecolor{shadecolor}{rgb}{0.969, 0.969, 0.969}\color{fgcolor}\begin{kframe}
+\noindent
+\ttfamily
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{mpf\textunderscore to\textunderscore str}\hldef{}\hlopt{(}\hldef{x}\hlopt{:\ }\hldef{mpf\textunderscore t}\hlopt{,\ }\hldef{base}\hlopt{:\ }\hldef{}\hlkwb{int\ }\hldef{}\hlopt{=\ }\hldef{}\hlnum{10}\hldef{}\hlopt{)\ {-}$>$\ }\hldef{}\hlkwb{str}\hldef{}\hlopt{:}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{exp\ }\hlopt{=\ }\hldef{ctypes}\hlopt{.}\hldef{}\hlkwd{c\textunderscore long}\hldef{}\hlopt{()}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{raw\textunderscore ptr\ }\hlopt{=\ }\hldef{\textunderscore libgmp}\hlnum{.\textunderscore \textunderscore }\hldef{gmpf}\hlnum{\textunderscore }\hldef{get}\hlnum{\textunderscore }\hldef{str}\hlopt{(}\hldef{}\hlkwa{None}\hldef{}\hlopt{,}\hldef{ctypes}\hlopt{.}\hldef{}\hlkwd{byref}\hldef{}\hlopt{(}\hldef{exp}\hlopt{),}\hldef{base}\hlopt{,}\hldef{}\hlnum{0}\hldef{}\hlopt{,}\hldef{ctypes}\hlopt{.}\hldef{}\hlkwd{byref}\hldef{}\hlopt{(}\hldef{x}\hlopt{))}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{if\ not\ }\hldef{raw\textunderscore ptr}\hlopt{:\ }\hldef{}\hlkwa{return\ }\hldef{}\hlsng{"0"}\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{mant\textunderscore bytes\ }\hlopt{=\ }\hldef{ctypes}\hlopt{.}\hldef{}\hlkwd{cast}\hldef{}\hlopt{(}\hldef{raw\textunderscore ptr}\hlopt{,\ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore char\textunderscore p}\hlopt{).}\hldef{value}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{mant\textunderscore str}\hldef{\ \ \ }\hldef{}\hlopt{=\ }\hldef{mant\textunderscore bytes}\hlopt{.}\hldef{}\hlkwd{decode}\hldef{}\hlopt{()}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{\textunderscore libc}\hlopt{.}\hldef{}\hlkwd{free}\hldef{}\hlopt{(}\hldef{raw\textunderscore ptr}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{neg\ }\hlopt{=\ }\hldef{mant\textunderscore str}\hlopt{.}\hldef{}\hlkwd{startswith}\hldef{}\hlopt{(}\hldef{}\hlsng{'{-}'}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{if\ }\hldef{neg}\hlopt{:\ }\hldef{mant\textunderscore str\ }\hlopt{=\ }\hldef{mant\textunderscore str}\hlopt{{[}}\hldef{}\hlnum{1}\hldef{}\hlopt{:{]}}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{if\ }\hldef{}\hlkwb{len}\hldef{}\hlopt{(}\hldef{mant\textunderscore str}\hlopt{)\ ==\ }\hldef{}\hlnum{1}\hldef{}\hlopt{:}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{s\ }\hlopt{=\ }\hldef{mant\textunderscore str\ }\hlopt{+\ }\hldef{}\hlsng{".0"}\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{else}\hldef{}\hlopt{:}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{s\ }\hlopt{=\ }\hldef{mant\textunderscore str}\hlopt{{[}}\hldef{}\hlnum{0}\hldef{}\hlopt{{]}\ +\ }\hldef{}\hlsng{"."}\hldef{\ }\hlopt{+\ }\hldef{mant\textunderscore str}\hlopt{{[}}\hldef{}\hlnum{1}\hldef{}\hlopt{:{]}}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{s\ }\hlopt{+=\ }\hldef{f}\hlsng{"e}\hlipl{\{exp.value{-}1\}}\hlsng{"}\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{}\hlsng{"{-}"}\hldef{\ }\hlopt{+\ }\hldef{s\ }\hlkwa{if\ }\hldef{neg\ }\hlkwa{else\ }\hldef{s}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{mpf\textunderscore t\textunderscore to\textunderscore mpfr}\hldef{}\hlopt{(}\hldef{x}\hlopt{:\ }\hldef{mpf\textunderscore t}\hlopt{)\ {-}$>$\ }\hldef{gmpy2}\hlopt{.}\hldef{mpfr}\hlopt{:}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{s\ }\hlopt{=\ }\hldef{}\hlkwd{mpf\textunderscore to\textunderscore str}\hldef{}\hlopt{(}\hldef{x}\hlopt{)}\hldef{\ \ \ \ \ \ \ \ \ }\hlopt{}\hldef{}\hlslc{\#\ e.g.\ "3.1415926535…e0"}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{gmpy2}\hlopt{.}\hldef{}\hlkwd{mpfr}\hldef{}\hlopt{(}\hldef{s}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hlslc{\#\ np\ vec\ to\ mpc}\hspace*{\fill}\\
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{np2mpc}\hldef{}\hlopt{(}\hldef{xs}\hlopt{:\ }\hldef{np}\hlopt{.}\hldef{ndarray}\hlopt{)\ {-}$>$\ }\hldef{}\hlkwb{list}\hldef{}\hlopt{{[}}\hldef{gmpy2}\hlopt{.}\hldef{mpc}\hlopt{{]}:}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{}\hlopt{{[}}\hldef{gmpy2}\hlopt{.}\hldef{}\hlkwd{mpc}\hldef{}\hlopt{(}\hldef{z}\hlopt{.}\hldef{real}\hlopt{,\ }\hldef{z}\hlopt{.}\hldef{imag}\hlopt{)\ }\hldef{}\hlkwa{for\ }\hldef{z\ }\hlkwa{in\ }\hldef{xs}\hlopt{.}\hldef{}\hlkwd{ravel}\hldef{}\hlopt{(){]}}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{mpc2np}\hldef{}\hlopt{(}\hldef{xs}\hlopt{:\ }\hldef{}\hlkwb{list}\hldef{}\hlopt{{[}}\hldef{gmpy2}\hlopt{.}\hldef{mpc}\hlopt{{]})\ {-}$>$\ }\hldef{np}\hlopt{.}\hldef{ndarray}\hlopt{:}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{}\hlopt{{[}}\hldef{}\hlkwb{complex}\hldef{}\hlopt{(}\hldef{r}\hlopt{)\ }\hldef{}\hlkwa{for\ }\hldef{r\ }\hlkwa{in\ }\hldef{xs}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{r2cf}\hldef{}\hlopt{(}\hldef{roots}\hlopt{:\ }\hldef{}\hlkwb{list}\hldef{}\hlopt{{[}}\hldef{gmpy2}\hlopt{.}\hldef{mpc}\hlopt{{]})\ {-}$>$\ }\hldef{}\hlkwb{list}\hldef{}\hlopt{{[}}\hldef{gmpy2}\hlopt{.}\hldef{mpc}\hlopt{{]}:}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{coeffs\ }\hlopt{=\ {[}}\hldef{gmpy2}\hlopt{.}\hldef{}\hlkwd{mpc}\hldef{}\hlopt{(}\hldef{}\hlnum{1}\hldef{}\hlopt{){]}}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{for\ }\hldef{r\ }\hlkwa{in\ }\hldef{roots}\hlopt{:}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{new\textunderscore coeffs\ }\hlopt{=\ {[}}\hldef{gmpy2}\hlopt{.}\hldef{}\hlkwd{mpc}\hldef{}\hlopt{(}\hldef{}\hlnum{0}\hldef{}\hlopt{){]}\ {*}\ (}\hldef{}\hlkwb{len}\hldef{}\hlopt{(}\hldef{coeffs}\hlopt{)\ +\ }\hldef{}\hlnum{1}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlkwa{for\ }\hldef{i}\hlopt{,\ }\hldef{c\ }\hlkwa{in\ }\hldef{}\hlkwb{enumerate}\hldef{}\hlopt{(}\hldef{coeffs}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{new\textunderscore coeffs}\hlopt{{[}}\hldef{i}\hlopt{{]}\ +=\ }\hldef{c}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{new\textunderscore coeffs}\hlopt{{[}}\hldef{i}\hlopt{+}\hldef{}\hlnum{1}\hldef{}\hlopt{{]}\ {-}=\ }\hldef{c\ }\hlopt{{*}\ }\hldef{r}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{coeffs\ }\hlopt{=\ }\hldef{new\textunderscore coeffs}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{coeffs}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{horner\textunderscore mpc}\hldef{}\hlopt{(}\hldef{coeffs}\hlopt{:\ }\hldef{}\hlkwb{list}\hldef{}\hlopt{{[}}\hldef{gmpy2}\hlopt{.}\hldef{mpc}\hlopt{{]},\ }\hldef{x}\hlopt{:\ }\hldef{gmpy2}\hlopt{.}\hldef{mpc}\hlopt{)\ {-}$>$\ }\hldef{gmpy2}\hlopt{.}\hldef{mpc}\hlopt{:}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{if\ not\ }\hldef{coeffs}\hlopt{:\ }\hldef{}\hlkwa{return\ }\hldef{gmpy2}\hlopt{.}\hldef{}\hlkwd{mpc}\hldef{}\hlopt{(}\hldef{}\hlnum{0}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{result\ }\hlopt{=\ }\hldef{coeffs}\hlopt{{[}}\hldef{}\hlnum{0}\hldef{}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{for\ }\hldef{a\ }\hlkwa{in\ }\hldef{coeffs}\hlopt{{[}}\hldef{}\hlnum{1}\hldef{}\hlopt{:{]}:}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{result\ }\hlopt{=\ }\hldef{result\ }\hlopt{{*}\ }\hldef{x\ }\hlopt{+\ }\hldef{a}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{result}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{horner\textunderscore vec\textunderscore mpc}\hldef{}\hlopt{(}\hldef{coeffs}\hlopt{:\ }\hldef{}\hlkwb{list}\hldef{}\hlopt{{[}}\hldef{gmpy2}\hlopt{.}\hldef{mpc}\hlopt{{]},\ }\hldef{xs}\hlopt{:\ }\hldef{}\hlkwb{list}\hldef{}\hlopt{{[}}\hldef{gmpy2}\hlopt{.}\hldef{mpc}\hlopt{{]})\ {-}$>$\ }\hldef{}\hlkwb{list}\hldef{}\hlopt{{[}}\hldef{gmpy2}\hlopt{.}\hldef{mpc}\hlopt{{]}:}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{}\hlopt{{[}}\hldef{}\hlkwd{horner\textunderscore mpc}\hldef{}\hlopt{(}\hldef{coeffs}\hlopt{,\ }\hldef{x}\hlopt{)\ }\hldef{}\hlkwa{for\ }\hldef{x\ }\hlkwa{in\ }\hldef{xs}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{mpc\textunderscore abs}\hldef{}\hlopt{(}\hldef{xs}\hlopt{:\ }\hldef{}\hlkwb{list}\hldef{}\hlopt{{[}}\hldef{gmpy2}\hlopt{.}\hldef{mpc}\hlopt{{]})\ {-}$>$\ }\hldef{}\hlkwb{list}\hldef{}\hlopt{{[}}\hldef{gmpy2}\hlopt{.}\hldef{mpfr}\hlopt{{]}:}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{}\hlopt{{[}}\hldef{gmpy2}\hlopt{.}\hldef{}\hlkwd{sqrt}\hldef{}\hlopt{(}\hldef{z}\hlopt{.}\hldef{real}\hlopt{{*}}\hldef{z}\hlopt{.}\hldef{real\ }\hlopt{+\ }\hldef{z}\hlopt{.}\hldef{imag}\hlopt{{*}}\hldef{z}\hlopt{.}\hldef{imag}\hlopt{)\ }\hldef{}\hlkwa{for\ }\hldef{z\ }\hlkwa{in\ }\hldef{xs}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{mpfr\textunderscore max}\hldef{}\hlopt{(}\hldef{xs}\hlopt{:\ }\hldef{}\hlkwb{list}\hldef{}\hlopt{{[}}\hldef{gmpy2}\hlopt{.}\hldef{mpfr}\hlopt{{]})\ {-}$>$\ }\hldef{gmpy2}\hlopt{.}\hldef{mpfr}\hlopt{:}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{if\ not\ }\hldef{xs}\hlopt{:\ }\hldef{}\hlkwa{return\ }\hldef{gmpy2}\hlopt{.}\hldef{}\hlkwd{mpfr}\hldef{}\hlopt{(}\hldef{}\hlnum{0}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{max\textunderscore val\ }\hlopt{=\ }\hldef{xs}\hlopt{{[}}\hldef{}\hlnum{0}\hldef{}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{for\ }\hldef{v\ }\hlkwa{in\ }\hldef{xs}\hlopt{{[}}\hldef{}\hlnum{1}\hldef{}\hlopt{:{]}:}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlkwa{if\ }\hldef{v\ }\hlopt{$>$\ }\hldef{max\textunderscore val}\hlopt{:\ }\hldef{max\textunderscore val\ }\hlopt{=\ }\hldef{v}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{max\textunderscore val}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{mpc\textunderscore t\textunderscore to\textunderscore mpc}\hldef{}\hlopt{(}\hldef{z}\hlopt{:\ }\hldef{mpc\textunderscore t}\hlopt{)\ {-}$>$\ }\hldef{gmpy2}\hlopt{.}\hldef{mpc}\hlopt{:\ }\hldef{}\hlslc{\#\ convert}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{re\ }\hlopt{=\ }\hldef{}\hlkwd{mpf\textunderscore t\textunderscore to\textunderscore mpfr}\hldef{}\hlopt{(}\hldef{z}\hlopt{.}\hldef{re}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{im\ }\hlopt{=\ }\hldef{}\hlkwd{mpf\textunderscore t\textunderscore to\textunderscore mpfr}\hldef{}\hlopt{(}\hldef{z}\hlopt{.}\hldef{im}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{gmpy2}\hlopt{.}\hldef{}\hlkwd{mpc}\hldef{}\hlopt{(}\hldef{re}\hlopt{,\ }\hldef{im}\hlopt{)}\hldef{}\hspace*{\fill}
+\mbox{}
+\normalfont
+\end{kframe}
+\end{knitrout}
+\end{minipage}
+\end{center}
+
+
+\newpage
+\section{MPSolve Multi-Precision Call}
+\begin{center}
+\begin{minipage}[m]{18cm}
+\begin{knitrout}\small
+\definecolor{shadecolor}{rgb}{0.969, 0.969, 0.969}\color{fgcolor}\begin{kframe}
+\noindent
+\ttfamily
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{mpsolve}\hldef{}\hlopt{(}\hldef{coeffs}\hlopt{,\ }\hldef{precision}\hlopt{=}\hldef{}\hlnum{256}\hldef{}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlslc{\#\ create\ context}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{ctx\ }\hlopt{=\ }\hldef{\textunderscore mps}\hlopt{.}\hldef{}\hlkwd{mps\textunderscore context\textunderscore new}\hldef{}\hlopt{()}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{\textunderscore mps}\hlopt{.}\hldef{}\hlkwd{mps\textunderscore context\textunderscore set\textunderscore output\textunderscore prec}\hldef{}\hlopt{(}\hldef{ctx}\hlopt{,\ }\hldef{precision}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{\textunderscore mps}\hlopt{.}\hldef{}\hlkwd{mps\textunderscore context\textunderscore set\textunderscore output\textunderscore goal}\hldef{}\hlopt{(}\hldef{ctx}\hlopt{,\ }\hldef{MPS\textunderscore OUTPUT\textunderscore GOAL\textunderscore APPROXIMATE}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{\textunderscore mps}\hlopt{.}\hldef{}\hlkwd{mps\textunderscore context\textunderscore select\textunderscore algorithm}\hldef{}\hlopt{(}\hldef{ctx}\hlopt{,\ }\hldef{MPS\textunderscore ALGORITHM\textunderscore SECULAR\textunderscore GA}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{\textunderscore mps}\hlopt{.}\hldef{}\hlkwd{mps\textunderscore context\textunderscore select\textunderscore starting\textunderscore strategy}\hldef{}\hlopt{(}\hldef{ctx}\hlopt{,\ }\hldef{MPS\textunderscore STARTING\textunderscore STRATEGY\textunderscore DEFAULT}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlslc{\#\ create\ poly}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{poly\ }\hlopt{=\ }\hldef{\textunderscore mps}\hlopt{.}\hldef{}\hlkwd{mps\textunderscore monomial\textunderscore poly\textunderscore new}\hldef{}\hlopt{(}\hldef{ctx}\hlopt{,\ }\hldef{}\hlkwb{len}\hldef{}\hlopt{(}\hldef{coeffs}\hlopt{)\ {-}\ }\hldef{}\hlnum{1\ }\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{for\ }\hldef{exp}\hlopt{,\ }\hldef{c\ }\hlkwa{in\ }\hldef{}\hlkwb{enumerate}\hldef{}\hlopt{(}\hldef{coeffs}\hlopt{{[}::{-}}\hldef{}\hlnum{1}\hldef{}\hlopt{{]}):\ }\hldef{}\hlslc{\#\ a0\ first}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{\textunderscore mps}\hlopt{.}\hldef{}\hlkwd{mps\textunderscore monomial\textunderscore poly\textunderscore set\textunderscore coefficient\textunderscore d}\hldef{}\hlopt{(}\hldef{ctx}\hlopt{,\ }\hldef{poly}\hlopt{,\ }\hldef{exp}\hlopt{,\ }\hldef{c}\hlopt{.}\hldef{real}\hlopt{,\ }\hldef{c}\hlopt{.}\hldef{imag}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{\textunderscore mps}\hlopt{.}\hldef{}\hlkwd{mps\textunderscore context\textunderscore set\textunderscore input\textunderscore poly}\hldef{}\hlopt{(}\hldef{ctx}\hlopt{,\ }\hldef{poly}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlslc{\#\ IMPORTANT:\ set\ input\ precision\ {*}after{*}\ input\ poly\ is\ set}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{\textunderscore mps}\hlopt{.}\hldef{}\hlkwd{mps\textunderscore context\textunderscore set\textunderscore input\textunderscore prec}\hldef{}\hlopt{(}\hldef{ctx}\hlopt{,}\hldef{\ \ }\hlopt{}\hldef{precision}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlslc{\#\ solve\ poly}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{\textunderscore mps}\hlopt{.}\hldef{}\hlkwd{mps\textunderscore mpsolve}\hldef{}\hlopt{(}\hldef{ctx}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlslc{\#\ get\ results}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{n\ }\hlopt{=\ }\hldef{\textunderscore mps}\hlopt{.}\hldef{}\hlkwd{mps\textunderscore context\textunderscore get\textunderscore degree}\hldef{}\hlopt{(}\hldef{ctx}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{roots\textunderscore pp\ }\hlopt{=\ }\hldef{ctypes}\hlopt{.}\hldef{}\hlkwd{POINTER}\hldef{}\hlopt{(}\hldef{mpc\textunderscore t}\hlopt{)()\ }\hldef{}\hlslc{\#\ GMP\ multi{-}precision\ complex\ type}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{radii\textunderscore pp\ }\hlopt{=\ }\hldef{ctypes}\hlopt{.}\hldef{}\hlkwd{POINTER}\hldef{}\hlopt{(}\hldef{rdpe\textunderscore t}\hlopt{)()\ }\hldef{}\hlslc{\#\ GMP\ rpde\textunderscore t\ type}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{status\ }\hlopt{=\ }\hldef{\textunderscore mps}\hlopt{.}\hldef{}\hlkwd{mps\textunderscore context\textunderscore get\textunderscore roots\textunderscore m}\hldef{}\hlopt{(}\hldef{ctx}\hlopt{,\ }\hldef{ctypes}\hlopt{.}\hldef{}\hlkwd{byref}\hldef{}\hlopt{(}\hldef{roots\textunderscore pp}\hlopt{),\ }\hldef{ctypes}\hlopt{.}\hldef{}\hlkwd{byref}\hldef{}\hlopt{(}\hldef{radii\textunderscore pp}\hlopt{))}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{if\ }\hldef{status\ }\hlopt{!=\ }\hldef{}\hlnum{0\ }\hldef{}\hlkwa{or\ not\ }\hldef{}\hlkwb{bool}\hldef{}\hlopt{(}\hldef{roots\textunderscore pp}\hlopt{):\ }\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlkwa{raise\ }\hldef{}\hlkwc{RuntimeError}\hldef{}\hlopt{(}\hldef{}\hlsng{"mps\textunderscore context\textunderscore get\textunderscore roots\textunderscore m\ failed"}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{roots\ }\hlopt{=\ {[}}\hldef{}\hlkwa{None}\hldef{}\hlopt{{]}\ {*}\ }\hldef{n}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{radii\ }\hlopt{=\ {[}}\hldef{}\hlkwa{None}\hldef{}\hlopt{{]}\ {*}\ }\hldef{n}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{for\ }\hldef{i\ }\hlkwa{in\ }\hldef{}\hlkwb{range}\hldef{}\hlopt{(}\hldef{n}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{roots}\hlopt{{[}}\hldef{i}\hlopt{{]}\ =\ }\hldef{}\hlkwd{mpc\textunderscore t\textunderscore to\textunderscore mpc}\hldef{}\hlopt{(}\hldef{roots\textunderscore pp}\hlopt{{[}}\hldef{i}\hlopt{{]})}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{rd\ }\hlopt{=\ }\hldef{radii\textunderscore pp}\hlopt{{[}}\hldef{i}\hlopt{{]}{[}}\hldef{}\hlnum{0}\hldef{}\hlopt{{]}}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ }\hlopt{}\hldef{}\hlslc{\#\ RDPE\textunderscore struct}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlslc{\#\ rdpe\ value\ is\ mantissa\ {*}\ 2{*}{*}exponent\ (the\ DPE\ convention)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{radii}\hlopt{{[}}\hldef{i}\hlopt{{]}\ =\ }\hldef{gmpy2}\hlopt{.}\hldef{}\hlkwd{mul\textunderscore 2exp}\hldef{}\hlopt{(}\hldef{gmpy2}\hlopt{.}\hldef{}\hlkwd{mpfr}\hldef{}\hlopt{(}\hldef{rd}\hlopt{.}\hldef{m}\hlopt{),\ }\hldef{}\hlkwb{int}\hldef{}\hlopt{(}\hldef{rd}\hlopt{.}\hldef{e}\hlopt{))}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{for\ }\hldef{i\ }\hlkwa{in\ }\hldef{}\hlkwb{range}\hldef{}\hlopt{(}\hldef{n}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{\textunderscore libgmp}\hlnum{.\textunderscore \textunderscore }\hldef{gmpf}\hlnum{\textunderscore }\hldef{clear}\hlopt{(}\hldef{ctypes}\hlopt{.}\hldef{}\hlkwd{byref}\hldef{}\hlopt{(}\hldef{roots\textunderscore pp}\hlopt{{[}}\hldef{i}\hlopt{{]}.}\hldef{re}\hlopt{))}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{\textunderscore libgmp}\hlnum{.\textunderscore \textunderscore }\hldef{gmpf}\hlnum{\textunderscore }\hldef{clear}\hlopt{(}\hldef{ctypes}\hlopt{.}\hldef{}\hlkwd{byref}\hldef{}\hlopt{(}\hldef{roots\textunderscore pp}\hlopt{{[}}\hldef{i}\hlopt{{]}.}\hldef{im}\hlopt{))}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlslc{\#\ release\ all\ allocated\ memory}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{\textunderscore libc}\hlopt{.}\hldef{}\hlkwd{free}\hldef{}\hlopt{(}\hldef{roots\textunderscore pp}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{\textunderscore libc}\hlopt{.}\hldef{}\hlkwd{free}\hldef{}\hlopt{(}\hldef{radii\textunderscore pp}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{\textunderscore mps}\hlopt{.}\hldef{}\hlkwd{mps\textunderscore polynomial\textunderscore free}\hldef{}\hlopt{(}\hldef{ctx}\hlopt{,\ }\hldef{poly}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{\textunderscore mps}\hlopt{.}\hldef{}\hlkwd{mps\textunderscore context\textunderscore free}\hldef{}\hlopt{(}\hldef{ctx}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlslc{\#\ done}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{roots}\hlopt{,\ }\hldef{radii}\hspace*{\fill}
+\mbox{}
+\normalfont
+\end{kframe}
+\end{knitrout}
+\end{minipage}
+\end{center}
+
+
+\newpage
+\section{MPSolve Test Call}
+\begin{center}
+\begin{minipage}[m]{18cm}
+\begin{knitrout}\small
+\definecolor{shadecolor}{rgb}{0.969, 0.969, 0.969}\color{fgcolor}\begin{kframe}
+\noindent
+\ttfamily
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{show\textunderscore roots}\hldef{}\hlopt{(}\hldef{cf}\hlopt{,}\hldef{roots}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{roots\textunderscore sorted\ }\hlopt{=\ }\hldef{}\hlkwb{sorted}\hldef{}\hlopt{(}\hldef{roots}\hlopt{,\ }\hldef{key}\hlopt{=}\hldef{}\hlkwa{lambda\ }\hldef{z}\hlopt{:\ }\hldef{z}\hlopt{.}\hldef{real}\hlopt{,}\hldef{reverse}\hlopt{=}\hldef{}\hlkwa{True}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{df\ }\hlopt{=\ }\hldef{pd}\hlopt{.}\hldef{}\hlkwd{DataFrame}\hldef{}\hlopt{(\{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlsng{"Real\ Part"}\hldef{}\hlopt{:\ {[}}\hldef{r}\hlopt{.}\hldef{real\ }\hlkwa{for\ }\hldef{r\ }\hlkwa{in\ }\hldef{roots\textunderscore sorted}\hlopt{{]},}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlsng{"Imag\ Part"}\hldef{}\hlopt{:\ {[}}\hldef{r}\hlopt{.}\hldef{imag\ }\hlkwa{for\ }\hldef{r\ }\hlkwa{in\ }\hldef{roots\textunderscore sorted}\hlopt{{]},}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlsng{"Residual"}\hldef{\ }\hlopt{:\ {[}}\hldef{np}\hlopt{.}\hldef{}\hlkwb{abs}\hldef{}\hlopt{(}\hldef{np}\hlopt{.}\hldef{}\hlkwd{polyval}\hldef{}\hlopt{(}\hldef{cf}\hlopt{,\ }\hldef{r}\hlopt{))\ }\hldef{}\hlkwa{for\ }\hldef{r\ }\hlkwa{in\ }\hldef{roots\textunderscore sorted}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlopt{\})}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{print}\hldef{}\hlopt{(}\hldef{df}\hlopt{.}\hldef{}\hlkwd{to\textunderscore string}\hldef{}\hlopt{(}\hldef{index}\hlopt{=}\hldef{}\hlkwa{False}\hldef{}\hlopt{))}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{cf\ }\hlopt{=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{poly}\hldef{}\hlopt{(}\hldef{np}\hlopt{.}\hldef{}\hlkwd{arange}\hldef{}\hlopt{(}\hldef{}\hlnum{1}\hldef{}\hlopt{,}\hldef{}\hlnum{20}\hldef{}\hlopt{))\ }\hldef{}\hlslc{\#\ Wilkinson}\hspace*{\fill}\\
+\hldef{}\hlkwd{show\textunderscore roots}\hldef{}\hlopt{(}\hldef{cf}\hlopt{,}\hldef{}\hlkwd{mpc2np}\hldef{}\hlopt{(}\hldef{}\hlkwd{mpsolve}\hldef{}\hlopt{(}\hldef{cf}\hlopt{,\ }\hldef{precision}\hlopt{=}\hldef{}\hlnum{1024}\hldef{}\hlopt{){[}}\hldef{}\hlnum{0}\hldef{}\hlopt{{]}))}\hldef{}\hspace*{\fill}
+\mbox{}
+\normalfont
+\begin{verbatim}
+##  Real Part     Imag Part     Residual
+##  19.000000  3.180947e-62 4.311661e+10
+##  18.000000  3.264893e-61 3.822413e+10
+##  17.000000  4.445090e-60 1.400384e+10
+##  16.000002 -6.762032e-60 9.380882e+09
+##  14.999995  1.358134e-64 9.957062e+08
+##  14.000010  2.478139e-56 2.448117e+08
+##  12.999985 -8.575573e-62 5.343332e+08
+##  12.000016  2.333122e-62 9.971373e+07
+##  10.999986 -7.133003e-64 1.125024e+08
+##  10.000010  1.739275e-76 1.160144e+06
+##   8.999995  3.379059e-65 7.384144e+06
+##   8.000002  1.142374e-65 2.985952e+06
+##   6.999999  1.245724e-68 9.074720e+05
+##   6.000000  4.261022e-70 5.122240e+05
+##   5.000000  1.548669e-67 2.816000e+04
+##   4.000000  7.508491e-70 6.400000e+03
+##   3.000000  2.914303e-62 3.520000e+02
+##   2.000000  1.279201e-98 4.549957e-84
+##   1.000000 -2.684605e-76 4.800000e+01
+\end{verbatim}
+\noindent
+\ttfamily
+\hldef{}\hlkwd{show\textunderscore roots}\hldef{}\hlopt{(}\hldef{cf}\hlopt{,}\hldef{np}\hlopt{.}\hldef{}\hlkwd{roots}\hldef{}\hlopt{(}\hldef{cf}\hlopt{))}\hldef{}\hspace*{\fill}
+\mbox{}
+\normalfont
+\begin{verbatim}
+##  Real Part  Imag Part     Residual
+##  19.000087        0.0 6.054754e+11
+##  17.999205        0.0 3.210296e+11
+##  17.003270        0.0 1.560237e+11
+##  15.991787        0.0 6.653032e+10
+##  15.013570        0.0 2.624443e+10
+##  13.983881        0.0 1.154664e+10
+##  13.013972        0.0 5.781327e+09
+##  11.991102        0.0 1.399748e+09
+##  11.004375        0.0 6.572589e+08
+##   9.998348        0.0 2.353110e+08
+##   9.000512        0.0 7.548952e+07
+##   7.999865        0.0 2.524427e+07
+##   7.000030        0.0 9.235072e+06
+##   5.999995        0.0 3.896576e+06
+##   5.000001        0.0 1.251472e+06
+##   4.000000        0.0 3.292480e+05
+##   3.000000        0.0 5.918400e+04
+##   2.000000        0.0 7.424000e+03
+##   1.000000        0.0 7.040000e+02
+\end{verbatim}
+\end{kframe}
+\end{knitrout}
+\end{minipage}
+\end{center}
+
+\newpage
+\section{MPSolve Speed}
+\begin{center}
+\begin{minipage}[m]{18cm}
+\begin{knitrout}\small
+\definecolor{shadecolor}{rgb}{0.969, 0.969, 0.969}\color{fgcolor}\begin{kframe}
+\noindent
+\ttfamily
+\hldef{timeit}\hlopt{.}\hldef{}\hlkwd{timeit}\hldef{}\hlopt{(}\hldef{}\hlsng{"mpsolve(cf,\ precision=8196)"}\hldef{}\hlopt{,\ }\hldef{}\hlkwb{globals}\hldef{}\hlopt{=}\hldef{}\hlkwb{globals}\hldef{}\hlopt{(),\ }\hldef{number}\hlopt{=}\hldef{}\hlnum{10}\hldef{}\hlopt{)}\hldef{}\hspace*{\fill}
+\mbox{}
+\normalfont
+\begin{verbatim}
+## 0.06875420780852437
+\end{verbatim}
+\noindent
+\ttfamily
+\hldef{timeit}\hlopt{.}\hldef{}\hlkwd{timeit}\hldef{}\hlopt{(}\hldef{}\hlsng{"mpsolve(cf,\ precision=1024)"}\hldef{}\hlopt{,\ }\hldef{}\hlkwb{globals}\hldef{}\hlopt{=}\hldef{}\hlkwb{globals}\hldef{}\hlopt{(),\ }\hldef{number}\hlopt{=}\hldef{}\hlnum{10}\hldef{}\hlopt{)}\hldef{}\hspace*{\fill}
+\mbox{}
+\normalfont
+\begin{verbatim}
+## 0.05313574988394976
+\end{verbatim}
+\noindent
+\ttfamily
+\hldef{timeit}\hlopt{.}\hldef{}\hlkwd{timeit}\hldef{}\hlopt{(}\hldef{}\hlsng{"mpsolve(cf,\ precision=512)"}\hldef{}\hlopt{,\ }\hldef{}\hlkwb{globals}\hldef{}\hlopt{=}\hldef{}\hlkwb{globals}\hldef{}\hlopt{(),\ }\hldef{number}\hlopt{=}\hldef{}\hlnum{10}\hldef{}\hlopt{)}\hldef{}\hspace*{\fill}
+\mbox{}
+\normalfont
+\begin{verbatim}
+## 0.050580875016748905
+\end{verbatim}
+\noindent
+\ttfamily
+\hldef{timeit}\hlopt{.}\hldef{}\hlkwd{timeit}\hldef{}\hlopt{(}\hldef{}\hlsng{"mpsolve(cf,\ precision=52)"}\hldef{}\hlopt{,\ }\hldef{}\hlkwb{globals}\hldef{}\hlopt{=}\hldef{}\hlkwb{globals}\hldef{}\hlopt{(),\ }\hldef{number}\hlopt{=}\hldef{}\hlnum{10}\hldef{}\hlopt{)}\hldef{}\hspace*{\fill}
+\mbox{}
+\normalfont
+\begin{verbatim}
+## 0.047200458124279976
+\end{verbatim}
+\noindent
+\ttfamily
+\hldef{timeit}\hlopt{.}\hldef{}\hlkwd{timeit}\hldef{}\hlopt{(}\hldef{}\hlsng{"mpsolve(cf,\ precision=10)"}\hldef{}\hlopt{,\ }\hldef{}\hlkwb{globals}\hldef{}\hlopt{=}\hldef{}\hlkwb{globals}\hldef{}\hlopt{(),\ }\hldef{number}\hlopt{=}\hldef{}\hlnum{10}\hldef{}\hlopt{)}\hldef{}\hspace*{\fill}
+\mbox{}
+\normalfont
+\begin{verbatim}
+## 0.0472337082028389
+\end{verbatim}
+\noindent
+\ttfamily
+\hldef{timeit}\hlopt{.}\hldef{}\hlkwd{timeit}\hldef{}\hlopt{(}\hldef{}\hlsng{"np.roots(cf)"}\hldef{}\hlopt{,\ }\hldef{}\hlkwb{globals}\hldef{}\hlopt{=}\hldef{}\hlkwb{globals}\hldef{}\hlopt{(),\ }\hldef{number}\hlopt{=}\hldef{}\hlnum{5}\hldef{}\hlopt{)}\hldef{}\hspace*{\fill}
+\mbox{}
+\normalfont
+\begin{verbatim}
+## 0.0003332081250846386
+\end{verbatim}
+\end{kframe}
+\end{knitrout}
+\end{minipage}
+\end{center}
+
+\newpage
+\section{MPSolve Warm Start Helpers}
+\begin{center}
+\begin{minipage}[m]{18cm}
+\begin{knitrout}\small
+\definecolor{shadecolor}{rgb}{0.969, 0.969, 0.969}\color{fgcolor}\begin{kframe}
+\noindent
+\ttfamily
+\hldef{\textunderscore SEEK\textunderscore SET\ }\hlopt{=\ }\hldef{}\hlnum{0}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{\textunderscore normalize\textunderscore guess\textunderscore line}\hldef{}\hlopt{(}\hldef{g}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{f}\hlsng{"}\hlipl{\{float(g.real):.17g\}\ \{float(g.imag):.17g\}}\hlsng{"}\hldef{}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{\textunderscore lines\textunderscore to\textunderscore tmpFILE}\hldef{}\hlopt{(}\hldef{lines}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlsng{"""Write\ lines\ to\ an\ anonymous\ tmpfile()\ and\ rewind;\ return\ FILE{*}."""}\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{payload\ }\hlopt{=\ (}\hldef{}\hlsng{"}\hlesc{$\backslash$n}\hlsng{"}\hldef{}\hlopt{.}\hldef{}\hlkwd{join}\hldef{}\hlopt{(}\hldef{line}\hlopt{.}\hldef{}\hlkwd{rstrip}\hldef{}\hlopt{(}\hldef{}\hlsng{"}\hlesc{$\backslash$n}\hlsng{"}\hldef{}\hlopt{)\ }\hldef{}\hlkwa{for\ }\hldef{line\ }\hlkwa{in\ }\hldef{lines}\hlopt{)\ +\ }\hldef{}\hlsng{"}\hlesc{$\backslash$n}\hlsng{"}\hldef{}\hlopt{).}\hldef{}\hlkwd{encode}\hldef{}\hlopt{(}\hldef{}\hlsng{"utf{-}8"}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{f\ }\hlopt{=\ }\hldef{\textunderscore libc}\hlopt{.}\hldef{}\hlkwd{tmpfile}\hldef{}\hlopt{()}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{if\ not\ }\hldef{f}\hlopt{:}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlkwa{raise\ }\hldef{}\hlkwc{OSError}\hldef{}\hlopt{(}\hldef{}\hlsng{"tmpfile()\ failed"}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{buf\ }\hlopt{=\ }\hldef{ctypes}\hlopt{.}\hldef{}\hlkwd{create\textunderscore string\textunderscore buffer}\hldef{}\hlopt{(}\hldef{payload}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{wrote\ }\hlopt{=\ }\hldef{\textunderscore libc}\hlopt{.}\hldef{}\hlkwd{fwrite}\hldef{}\hlopt{(}\hldef{ctypes}\hlopt{.}\hldef{}\hlkwd{byref}\hldef{}\hlopt{(}\hldef{buf}\hlopt{),\ }\hldef{}\hlnum{1}\hldef{}\hlopt{,\ }\hldef{}\hlkwb{len}\hldef{}\hlopt{(}\hldef{payload}\hlopt{),\ }\hldef{f}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{if\ }\hldef{wrote\ }\hlopt{!=\ }\hldef{}\hlkwb{len}\hldef{}\hlopt{(}\hldef{payload}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{\textunderscore libc}\hlopt{.}\hldef{}\hlkwd{fclose}\hldef{}\hlopt{(}\hldef{f}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlkwa{raise\ }\hldef{}\hlkwc{OSError}\hldef{}\hlopt{(}\hldef{}\hlsng{"fwrite\ failed"}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{\textunderscore libc}\hlopt{.}\hldef{}\hlkwd{fflush}\hldef{}\hlopt{(}\hldef{f}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{\textunderscore libc}\hlopt{.}\hldef{}\hlkwd{fseek}\hldef{}\hlopt{(}\hldef{f}\hlopt{,\ }\hldef{}\hlnum{0}\hldef{}\hlopt{,\ }\hldef{\textunderscore SEEK\textunderscore SET}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{f}\hlopt{,\ }\hldef{payload}\hldef{\ \ }\hldef{}\hlslc{\#\ return\ payload\ for\ debugging\ on\ error}\hldef{}\hspace*{\fill}
+\mbox{}
+\normalfont
+\end{kframe}
+\end{knitrout}
+\end{minipage}
+\end{center}
+
+\newpage
+\section{MPSolve Warm Start}
+\begin{center}
+\begin{minipage}[m]{18cm}
+\begin{knitrout}\tiny
+\definecolor{shadecolor}{rgb}{0.969, 0.969, 0.969}\color{fgcolor}\begin{kframe}
+\noindent
+\ttfamily
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{mpsolve\textunderscore warm}\hldef{}\hlopt{(}\hldef{coeffs}\hlopt{,\ }\hldef{roots}\hlopt{,\ }\hldef{precision}\hlopt{=}\hldef{}\hlnum{256}\hldef{}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlsng{"""}\hspace*{\fill}\\
+\hlsng{}\hldef{\ \ \ \ }\hlsng{coeffs:\ iterable\ of\ complex{-}like\ numbers,\ highest{-}degree\ last\ (same\ as\ your\ mpsolve)}\hspace*{\fill}\\
+\hlsng{}\hldef{\ \ \ \ }\hlsng{roots:}\hldef{\ \ }\hlsng{list\ of\ strings\ ('(re,\ im)'\ or\ 're\ im')\ or\ complex\ numbers}\hspace*{\fill}\\
+\hlsng{}\hldef{\ \ \ \ }\hlsng{precision:\ bits\ of\ precision\ for\ input\ \&\ output}\hspace*{\fill}\\
+\hlsng{}\hldef{\ \ \ \ }\hlsng{"""}\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlslc{\#\ 1)\ Normalize\ guesses\ to\ the\ two{-}column\ format\ expected\ by\ the\ file\ starter}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{roots\textunderscore lines\ }\hlopt{=\ {[}}\hldef{}\hlkwd{\textunderscore normalize\textunderscore guess\textunderscore line}\hldef{}\hlopt{(}\hldef{g}\hlopt{)\ }\hldef{}\hlkwa{for\ }\hldef{g\ }\hlkwa{in\ }\hldef{roots}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlslc{\#\ 2)\ Build\ a\ seekable\ FILE{*}\ with\ those\ lines}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{roots\textunderscore FILE}\hlopt{,\ }\hldef{payload\ }\hlopt{=\ }\hldef{}\hlkwd{\textunderscore lines\textunderscore to\textunderscore tmpFILE}\hldef{}\hlopt{(}\hldef{roots\textunderscore lines}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlslc{\#\ 3)\ Create\ context\ and\ configure}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{ctx\ }\hlopt{=\ }\hldef{\textunderscore mps}\hlopt{.}\hldef{}\hlkwd{mps\textunderscore context\textunderscore new}\hldef{}\hlopt{()}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{\textunderscore mps}\hlopt{.}\hldef{}\hlkwd{mps\textunderscore context\textunderscore set\textunderscore output\textunderscore prec}\hldef{}\hlopt{(}\hldef{ctx}\hlopt{,\ }\hldef{precision}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{\textunderscore mps}\hlopt{.}\hldef{}\hlkwd{mps\textunderscore context\textunderscore set\textunderscore output\textunderscore goal}\hldef{}\hlopt{(}\hldef{ctx}\hlopt{,\ }\hldef{MPS\textunderscore OUTPUT\textunderscore GOAL\textunderscore APPROXIMATE}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{\textunderscore mps}\hlopt{.}\hldef{}\hlkwd{mps\textunderscore context\textunderscore select\textunderscore algorithm}\hldef{}\hlopt{(}\hldef{ctx}\hlopt{,\ }\hldef{MPS\textunderscore ALGORITHM\textunderscore SECULAR\textunderscore GA}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{\textunderscore mps}\hlopt{.}\hldef{}\hlkwd{mps\textunderscore context\textunderscore select\textunderscore starting\textunderscore strategy}\hldef{}\hlopt{(}\hldef{ctx}\hlopt{,\ }\hldef{MPS\textunderscore STARTING\textunderscore STRATEGY\textunderscore FILE}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlslc{\#\ point\ the\ root{-}stream\ at\ our\ in{-}memory\ file}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{\textunderscore mps}\hlopt{.}\hldef{}\hlkwd{mps\textunderscore context\textunderscore set\textunderscore root\textunderscore stream}\hldef{}\hlopt{(}\hldef{ctx}\hlopt{,\ }\hldef{roots\textunderscore FILE}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlslc{\#\ 4)\ Build\ and\ set\ the\ monomial\ polynomial:\ a0\ first}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{poly\ }\hlopt{=\ }\hldef{\textunderscore mps}\hlopt{.}\hldef{}\hlkwd{mps\textunderscore monomial\textunderscore poly\textunderscore new}\hldef{}\hlopt{(}\hldef{ctx}\hlopt{,\ }\hldef{}\hlkwb{len}\hldef{}\hlopt{(}\hldef{coeffs}\hlopt{)\ {-}\ }\hldef{}\hlnum{1}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{for\ }\hldef{exp}\hlopt{,\ }\hldef{c\ }\hlkwa{in\ }\hldef{}\hlkwb{enumerate}\hldef{}\hlopt{(}\hldef{coeffs}\hlopt{{[}::{-}}\hldef{}\hlnum{1}\hldef{}\hlopt{{]}):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{\textunderscore mps}\hlopt{.}\hldef{}\hlkwd{mps\textunderscore monomial\textunderscore poly\textunderscore set\textunderscore coefficient\textunderscore d}\hldef{}\hlopt{(}\hldef{ctx}\hlopt{,\ }\hldef{poly}\hlopt{,\ }\hldef{exp}\hlopt{,\ }\hldef{}\hlkwb{float}\hldef{}\hlopt{(}\hldef{c}\hlopt{.}\hldef{real}\hlopt{),\ }\hldef{}\hlkwb{float}\hldef{}\hlopt{(}\hldef{c}\hlopt{.}\hldef{imag}\hlopt{))}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{\textunderscore mps}\hlopt{.}\hldef{}\hlkwd{mps\textunderscore context\textunderscore set\textunderscore input\textunderscore poly}\hldef{}\hlopt{(}\hldef{ctx}\hlopt{,\ }\hldef{poly}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlslc{\#\ 5)\ Now\ that\ the\ poly\ is\ in\ the\ context,\ set\ input\ precision}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{\textunderscore mps}\hlopt{.}\hldef{}\hlkwd{mps\textunderscore context\textunderscore set\textunderscore input\textunderscore prec}\hldef{}\hlopt{(}\hldef{ctx}\hlopt{,\ }\hldef{precision}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlslc{\#\ 6)\ Solve}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{\textunderscore mps}\hlopt{.}\hldef{}\hlkwd{mps\textunderscore mpsolve}\hldef{}\hlopt{(}\hldef{ctx}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlslc{\#\ Close\ the\ file\ now\ (MPSolve\ should\ have\ consumed\ it)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{\textunderscore libc}\hlopt{.}\hldef{}\hlkwd{fclose}\hldef{}\hlopt{(}\hldef{roots\textunderscore FILE}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlslc{\#\ 7)\ Error\ handling:\ if\ parsing\ failed,\ show\ the\ first\ bytes\ we\ fed}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{if\ }\hldef{\textunderscore mps}\hlopt{.}\hldef{}\hlkwd{mps\textunderscore context\textunderscore has\textunderscore errors}\hldef{}\hlopt{(}\hldef{ctx}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{msg\textunderscore ptr\ }\hlopt{=\ }\hldef{\textunderscore mps}\hlopt{.}\hldef{}\hlkwd{mps\textunderscore context\textunderscore error\textunderscore msg}\hldef{}\hlopt{(}\hldef{ctx}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlkwa{try}\hldef{}\hlopt{:}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{msg\ }\hlopt{=\ }\hldef{ctypes}\hlopt{.}\hldef{}\hlkwd{cast}\hldef{}\hlopt{(}\hldef{msg\textunderscore ptr}\hlopt{,\ }\hldef{ctypes}\hlopt{.}\hldef{c\textunderscore char\textunderscore p}\hlopt{).}\hldef{value}\hlopt{.}\hldef{}\hlkwd{decode}\hldef{}\hlopt{(}\hldef{}\hlsng{'utf{-}8'}\hldef{}\hlopt{,\ }\hldef{}\hlsng{'replace'}\hldef{}\hlopt{)\ }\hldef{}\hlkwa{if\ }\hldef{msg\textunderscore ptr\ }\hlkwa{else\ }\hldef{}\hlsng{"Unknown\ error"}\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlkwa{finally}\hldef{}\hlopt{:}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{}\hlkwa{if\ }\hldef{msg\textunderscore ptr}\hlopt{:}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ }\hldef{\textunderscore libc}\hlopt{.}\hldef{}\hlkwd{free}\hldef{}\hlopt{(}\hldef{msg\textunderscore ptr}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlslc{\#\ free\ before\ raising}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{\textunderscore mps}\hlopt{.}\hldef{}\hlkwd{mps\textunderscore polynomial\textunderscore free}\hldef{}\hlopt{(}\hldef{ctx}\hlopt{,\ }\hldef{poly}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{\textunderscore mps}\hlopt{.}\hldef{}\hlkwd{mps\textunderscore context\textunderscore free}\hldef{}\hlopt{(}\hldef{ctx}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlslc{\#\ small\ preview\ of\ the\ payload\ for\ debugging}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{preview\ }\hlopt{=\ }\hldef{payload}\hlopt{{[}:}\hldef{}\hlnum{200}\hldef{}\hlopt{{]}.}\hldef{}\hlkwd{decode}\hldef{}\hlopt{(}\hldef{}\hlsng{'utf{-}8'}\hldef{}\hlopt{,\ }\hldef{}\hlsng{'replace'}\hldef{}\hlopt{).}\hldef{}\hlkwd{splitlines}\hldef{}\hlopt{(){[}:}\hldef{}\hlnum{5}\hldef{}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlkwa{raise\ }\hldef{}\hlkwc{RuntimeError}\hldef{}\hlopt{(}\hldef{}\hlsng{"MPSolve\ error:\ "}\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ }\hldef{f}\hlsng{"}\hlipl{\{msg\}}\hlsng{}\hlesc{$\backslash$n}\hlsng{"}\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ }\hldef{}\hlsng{"Roots\ stream\ preview\ (first\ lines):}\hlesc{$\backslash$n}\hldef{\ \ }\hlesc{}\hlsng{"}\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ }\hldef{}\hlopt{+\ }\hldef{}\hlsng{"}\hlesc{$\backslash$n}\hldef{\ \ }\hlesc{}\hlsng{"}\hldef{}\hlopt{.}\hldef{}\hlkwd{join}\hldef{}\hlopt{(}\hldef{preview}\hlopt{))}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlslc{\#\ 8)\ Collect\ results\ (unchanged\ from\ your\ code)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{n\ }\hlopt{=\ }\hldef{\textunderscore mps}\hlopt{.}\hldef{}\hlkwd{mps\textunderscore context\textunderscore get\textunderscore degree}\hldef{}\hlopt{(}\hldef{ctx}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{roots\textunderscore pp\ }\hlopt{=\ }\hldef{ctypes}\hlopt{.}\hldef{}\hlkwd{POINTER}\hldef{}\hlopt{(}\hldef{mpc\textunderscore t}\hlopt{)()}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{radii\textunderscore pp\ }\hlopt{=\ }\hldef{ctypes}\hlopt{.}\hldef{}\hlkwd{POINTER}\hldef{}\hlopt{(}\hldef{rdpe\textunderscore t}\hlopt{)()}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{status\ }\hlopt{=\ }\hldef{\textunderscore mps}\hlopt{.}\hldef{}\hlkwd{mps\textunderscore context\textunderscore get\textunderscore roots\textunderscore m}\hldef{}\hlopt{(}\hldef{ctx}\hlopt{,\ }\hldef{ctypes}\hlopt{.}\hldef{}\hlkwd{byref}\hldef{}\hlopt{(}\hldef{roots\textunderscore pp}\hlopt{),\ }\hldef{ctypes}\hlopt{.}\hldef{}\hlkwd{byref}\hldef{}\hlopt{(}\hldef{radii\textunderscore pp}\hlopt{))}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{if\ }\hldef{status\ }\hlopt{!=\ }\hldef{}\hlnum{0\ }\hldef{}\hlkwa{or\ not\ }\hldef{}\hlkwb{bool}\hldef{}\hlopt{(}\hldef{roots\textunderscore pp}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{\textunderscore mps}\hlopt{.}\hldef{}\hlkwd{mps\textunderscore polynomial\textunderscore free}\hldef{}\hlopt{(}\hldef{ctx}\hlopt{,\ }\hldef{poly}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{\textunderscore mps}\hlopt{.}\hldef{}\hlkwd{mps\textunderscore context\textunderscore free}\hldef{}\hlopt{(}\hldef{ctx}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlkwa{raise\ }\hldef{}\hlkwc{RuntimeError}\hldef{}\hlopt{(}\hldef{}\hlsng{"mps\textunderscore context\textunderscore get\textunderscore roots\textunderscore m\ failed"}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{out\textunderscore roots\ }\hlopt{=\ {[}}\hldef{}\hlkwa{None}\hldef{}\hlopt{{]}\ {*}\ }\hldef{n}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{out\textunderscore radii\ }\hlopt{=\ {[}}\hldef{}\hlkwa{None}\hldef{}\hlopt{{]}\ {*}\ }\hldef{n}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{for\ }\hldef{i\ }\hlkwa{in\ }\hldef{}\hlkwb{range}\hldef{}\hlopt{(}\hldef{n}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{out\textunderscore roots}\hlopt{{[}}\hldef{i}\hlopt{{]}\ =\ }\hldef{}\hlkwd{mpc\textunderscore t\textunderscore to\textunderscore mpc}\hldef{}\hlopt{(}\hldef{roots\textunderscore pp}\hlopt{{[}}\hldef{i}\hlopt{{]})}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{rd\ }\hlopt{=\ }\hldef{radii\textunderscore pp}\hlopt{{[}}\hldef{i}\hlopt{{]}{[}}\hldef{}\hlnum{0}\hldef{}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{out\textunderscore radii}\hlopt{{[}}\hldef{i}\hlopt{{]}\ =\ }\hldef{gmpy2}\hlopt{.}\hldef{}\hlkwd{mul\textunderscore 2exp}\hldef{}\hlopt{(}\hldef{gmpy2}\hlopt{.}\hldef{}\hlkwd{mpfr}\hldef{}\hlopt{(}\hldef{rd}\hlopt{.}\hldef{m}\hlopt{),\ }\hldef{}\hlkwb{int}\hldef{}\hlopt{(}\hldef{rd}\hlopt{.}\hldef{e}\hlopt{))}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlslc{\#\ Free\ mpc\ fields\ allocated\ by\ MPSolve}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{for\ }\hldef{i\ }\hlkwa{in\ }\hldef{}\hlkwb{range}\hldef{}\hlopt{(}\hldef{n}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{\textunderscore libgmp}\hlnum{.\textunderscore \textunderscore }\hldef{gmpf}\hlnum{\textunderscore }\hldef{clear}\hlopt{(}\hldef{ctypes}\hlopt{.}\hldef{}\hlkwd{byref}\hldef{}\hlopt{(}\hldef{roots\textunderscore pp}\hlopt{{[}}\hldef{i}\hlopt{{]}.}\hldef{re}\hlopt{))}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{\textunderscore libgmp}\hlnum{.\textunderscore \textunderscore }\hldef{gmpf}\hlnum{\textunderscore }\hldef{clear}\hlopt{(}\hldef{ctypes}\hlopt{.}\hldef{}\hlkwd{byref}\hldef{}\hlopt{(}\hldef{roots\textunderscore pp}\hlopt{{[}}\hldef{i}\hlopt{{]}.}\hldef{im}\hlopt{))}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlslc{\#\ Release\ arrays\ \&\ context}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{\textunderscore libc}\hlopt{.}\hldef{}\hlkwd{free}\hldef{}\hlopt{(}\hldef{roots\textunderscore pp}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{\textunderscore libc}\hlopt{.}\hldef{}\hlkwd{free}\hldef{}\hlopt{(}\hldef{radii\textunderscore pp}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{\textunderscore mps}\hlopt{.}\hldef{}\hlkwd{mps\textunderscore polynomial\textunderscore free}\hldef{}\hlopt{(}\hldef{ctx}\hlopt{,\ }\hldef{poly}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{\textunderscore mps}\hlopt{.}\hldef{}\hlkwd{mps\textunderscore context\textunderscore free}\hldef{}\hlopt{(}\hldef{ctx}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{out\textunderscore roots}\hlopt{,\ }\hldef{out\textunderscore radii}\hspace*{\fill}
+\mbox{}
+\normalfont
+\end{kframe}
+\end{knitrout}
+\end{minipage}
+\end{center}
+
+\newpage
+\section{MPSolve Warm Start Test}
+\begin{center}
+\begin{minipage}[m]{18cm}
+\begin{knitrout}\small
+\definecolor{shadecolor}{rgb}{0.969, 0.969, 0.969}\color{fgcolor}\begin{kframe}
+\noindent
+\ttfamily
+\hldef{cf\ }\hlopt{=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{poly}\hldef{}\hlopt{(}\hldef{np}\hlopt{.}\hldef{}\hlkwd{arange}\hldef{}\hlopt{(}\hldef{}\hlnum{1}\hldef{}\hlopt{,}\hldef{}\hlnum{20}\hldef{}\hlopt{)).}\hldef{}\hlkwd{astype}\hldef{}\hlopt{(}\hldef{np}\hlopt{.}\hldef{complex128}\hlopt{)\ }\hldef{}\hlslc{\#\ Wilkinson}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{zmp}\hlopt{,}\hldef{r\ }\hlopt{=\ }\hldef{}\hlkwd{mpsolve}\hldef{}\hlopt{(}\hldef{cf}\hlopt{,\ }\hldef{precision}\hlopt{=}\hldef{}\hlnum{1024}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{z}\hlopt{=}\hldef{}\hlkwd{mpc2np}\hldef{}\hlopt{(}\hldef{zmp}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hlkwa{print}\hldef{}\hlopt{(}\hldef{f}\hlsng{"}\hlipl{\{timeit.timeit("mpsolve(cf,\ precision=1024)",\ globals=globals(),\ number=10)\}}\hlsng{"}\hldef{}\hlopt{)}\hldef{}\hspace*{\fill}
+\mbox{}
+\normalfont
+\begin{verbatim}
+## 0.05288608418777585
+\end{verbatim}
+\noindent
+\ttfamily
+\hldef{}\hlkwa{print}\hldef{}\hlopt{(}\hldef{f}\hlsng{"}\hlipl{\{timeit.timeit("mpsolve\textunderscore warm(cf,\ z,\ precision=1024)",\ globals=globals(),\ number=10)\}}\hlsng{"}\hldef{}\hlopt{)}\hldef{}\hspace*{\fill}
+\mbox{}
+\normalfont
+\begin{verbatim}
+## 0.027977874968200922
+\end{verbatim}
+\end{kframe}
+\end{knitrout}
+\end{minipage}
+\end{center}
+
+\newpage
+\section{MPSolve Manifold Calculation}
+\begin{center}
+\begin{minipage}[m]{18cm}
+
+\end{minipage}
+\end{center}
+
+\end{document}

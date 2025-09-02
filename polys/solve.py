@@ -5,6 +5,30 @@
 from . import polystate as ps
 import numpy as np
 from numba import njit 
+from . import mpsolve 
+
+# conservative bounds for the double path you use in mps_monomial_poly_set_coefficient_d
+_DBL_MAX_SAFE = 1e300        # < 1.797e308 to leave headroom
+_DBL_MIN_SAFE = 1e-300       # treat tinies as zero
+
+
+def _poly_ok(a: np.ndarray) -> bool:
+    a = np.asarray(a, dtype=np.complex128)
+
+    # 1) finite
+    if not np.isfinite(a).all():
+        return False
+
+    # 2) non-empty and leading coeff not (absolutely) tiny/zero
+    if a.size == 0 or np.abs(a[0]) <= _DBL_MIN_SAFE:
+        return False
+
+    # 3) magnitude within safe double range
+    maxabs = float(np.max(np.abs(a)))
+    if maxabs > _DBL_MAX_SAFE:
+        return False
+
+    return True
 
 def circle_guess(n, radius=1.0):
     theta = np.linspace(0, 2*np.pi, n, endpoint=False)
@@ -57,6 +81,36 @@ def solve(cf):
   except:     
     return np.zeros(len(cf)-1, dtype=complex)
 
+def mps4(cf):
+    if  _poly_ok(cf):
+        return mpsolve.mpsolve(cf,precision=4)
+    return np.zeros(len(cf)-1, dtype=complex)
+
+def mps64(cf):
+    if  _poly_ok(cf):
+        return mpsolve.mpsolve(cf,precision=64)
+    return np.zeros(len(cf)-1, dtype=complex)
+
+def mps128(cf):
+    if  _poly_ok(cf):
+        return mpsolve.mpsolve(cf,precision=128)
+    return np.zeros(len(cf)-1, dtype=complex)
+
+def mps256(cf):
+    if  _poly_ok(cf):
+        return mpsolve.mpsolve(cf,precision=256)
+    return np.zeros(len(cf)-1, dtype=complex)
+
+def mps512(cf):
+    if  _poly_ok(cf):
+        return mpsolve.mpsolve(cf,precision=512)
+    return np.zeros(len(cf)-1, dtype=complex)
+
+def mps1024(cf):
+    if  _poly_ok(cf):
+        return mpsolve.mpsolve(cf,precision=1024)
+    return np.zeros(len(cf)-1, dtype=complex)
+  
 def none(cf):
   return cf
 

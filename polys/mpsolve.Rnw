@@ -1,0 +1,699 @@
+\documentclass{article}
+\usepackage[portrait, headheight = 0cm, margin=0.25cm, top = 0.25cm]{geometry} 
+\usepackage{graphicx}
+\usepackage[dvipsnames,table]{xcolor}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{pdfpages}
+\usepackage[export]{adjustbox} 
+\usepackage{booktabs}
+\usepackage{tikz}
+\usetikzlibrary{shadings,arrows.meta,positioning,calc,intersections}
+\usepackage{hyperref}
+
+<<,cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+fns = list.files("figure/*.pdf")
+@
+
+<<,cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+require(glue)
+require(qpdf)
+nglue<-function(
+  ...,
+  .sep = "",
+  .envir = parent.frame(), 
+  .open = "{", 
+  .close = "}", 
+  .na = "NA", 
+  .transformer = identity_transformer
+){
+  as.character(glue(
+    ...,
+    .sep=.sep,
+    .envir=.envir,
+    .open="@[",
+    .close="]@",
+    .na="NA",
+    .transformer = .transformer
+  ))
+}
+
+make_full_directory<-function(x){
+  os_type<-.Platform$OS.type
+  if(os_type=="windows")return(paste0(gsub("\\\\","/",normalizePath(getwd())),"/",x))
+  paste0(normalizePath(getwd()),"\\",x)
+}
+
+make_pdf_page<-function(
+    fn,
+    pages=1,
+    height="10cm",
+    width="10cm",
+    minipage=TRUE,
+    valign="B"
+){
+   fname<-gsub("\\","/",tempfile(pattern = "pdf",tmpdir=make_full_directory("figure"),fileext=".pdf"),fixed=TRUE)
+   pdf_subset(fn, pages = pages, output = fname)
+   latex<-nglue(
+    if(minipage){"\\begin{minipage}[t][@[height]@][t]{@[width]@}\n"}else(""),
+    "\\includegraphics[height=@[height]@,width=@[width]@,valign=@[valign]@]{@[fname]@}\n",
+    if(minipage){"\\end{minipage}\n"}else{""},
+    .sep="\n",
+    height=height,
+    width=width,
+    fname=fname
+  )
+  latex
+}
+
+
+
+@
+
+
+<<setup_py, include=FALSE>>=
+library(reticulate)
+use_virtualenv("/Users/nicknassuphis/pypolys/.venv", required = TRUE)
+@
+
+<<,  include=FALSE, engine='python'>>=
+import argparse
+import timeit
+import numpy as np
+import pandas as pd
+from numba import njit, prange
+import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.use("Agg")
+@
+
+
+
+\title{
+\vskip 1cm
+{\bf\huge {\tt MPSolve}}
+\vskip 5mm
+{\bf\huge for}
+\vskip 5mm
+{\bf\huge Polynomial Manifolds}
+\vskip 1cm
+\begin{center}
+\includegraphics[width=15cm, height=15cm]{myresultplot_white_sml.png}
+\end{center}
+\vskip 1cm
+}
+\author{Wigerich}
+
+\begin{document}
+\maketitle
+
+\newpage
+\tableofcontents
+
+\newpage
+\section{Objective}
+
+\begin{itemize}
+    \item {\tt MPSolve} with warm start
+\end{itemize}
+
+\newpage
+\section{load {\tt mpslib} and dependencies}
+
+\begin{center}
+\begin{minipage}[m]{15cm}
+<<, engine='python', size="small">>=
+import os
+import numpy as np
+import ctypes, ctypes.util
+import gmpy2
+import timeit
+
+# libmps is MPSolve
+_mps_path = "/usr/local/lib/libmps.dylib"
+if not os.path.exists(_mps_path): 
+    raise FileNotFoundError(f"MPSolve not found at {_mps_path}")
+_mps = ctypes.CDLL(_mps_path, mode=ctypes.RTLD_GLOBAL)
+
+# GMP multiprecision to interpret results
+_libgmp = ctypes.CDLL(ctypes.util.find_library("gmp"))
+
+# C libraries for malloc and file I/O
+_libc   = ctypes.CDLL(ctypes.util.find_library("c"))
+
+@ 
+\end{minipage}
+\end{center}
+
+\newpage
+\section{data structures}
+\begin{center}
+\begin{minipage}[m]{15cm}
+<<, engine='python', size="small">>=
+
+# --- MP mpf_t ---------------------------------------------
+class mpf_t(ctypes.Structure):
+    _fields_ = [
+        ('_mp_prec', ctypes.c_int),
+        ('_mp_size', ctypes.c_int),
+        ('_mp_exp', ctypes.c_long),
+        ('_mp_d', ctypes.POINTER(ctypes.c_ulong))
+    ]
+
+# --- float complex ----------------------------------------
+class Cplx(ctypes.Structure): 
+    _fields_ = [("real", ctypes.c_double),("imag", ctypes.c_double)]
+    def __complex__(self):
+        return complex(self.real, self.imag)
+
+# --- MPSolve's custom mpc_t using GMP mpf_t ---------------
+class mpc_t(ctypes.Structure): 
+    _fields_ = [ 
+        ("re", mpf_t),
+        ("im", mpf_t)
+    ]
+
+# --- rdpe_t: "double mantissa + long exponent" ------------
+class RDPE_struct(ctypes.Structure):
+    _fields_ = [("m", ctypes.c_double), ("e", ctypes.c_long)]
+
+# In the C headers: typedef __rdpe_struct rdpe_t[1];
+# Mirror that "array-of-1" trick in ctypes:
+rdpe_t = RDPE_struct * 1
+@ 
+\end{minipage}
+\end{center}
+
+\newpage
+\section{C functions}
+\begin{center}
+\begin{minipage}[m]{15cm}
+<<, engine='python', size="small">>=
+# --- libc mem management helpers
+_libc.free.argtypes = [ctypes.c_void_p]
+
+# --- libc FILE* helpers
+_libc.fopen.argtypes  = [ctypes.c_char_p, ctypes.c_char_p]
+_libc.fopen.restype   = ctypes.c_void_p
+_libc.fclose.argtypes = [ctypes.c_void_p]
+_libc.fclose.restype  = ctypes.c_int
+_libc.fdopen.argtypes  = [ctypes.c_int, ctypes.c_char_p]
+_libc.fdopen.restype   = ctypes.c_void_p
+
+# (optional but handy if you try the tmpfile fallback below)
+_libc.tmpfile.argtypes = []
+_libc.tmpfile.restype  = ctypes.c_void_p
+_libc.fwrite.argtypes  = [ctypes.c_void_p, ctypes.c_size_t, ctypes.c_size_t, ctypes.c_void_p]
+_libc.fwrite.restype   = ctypes.c_size_t
+_libc.fflush.argtypes  = [ctypes.c_void_p]
+_libc.fflush.restype   = ctypes.c_int
+_libc.fseek.argtypes   = [ctypes.c_void_p, ctypes.c_long, ctypes.c_int]
+_libc.fseek.restype    = ctypes.c_int  # SEEK_SET = 0
+
+@ 
+\end{minipage}
+\end{center}
+
+
+\newpage
+\section{GMP functions}
+\begin{center}
+\begin{minipage}[m]{15cm}
+<<, engine='python', size="small">>=
+# Function: void mpf_init2 (mpf_t x, mp_bitcnt_t prec) 
+_libgmp.__gmpf_init2.argtypes = [ctypes.POINTER(mpf_t), ctypes.c_ulong] 
+# Function: void mpf_set_d (mpf_t rop, double op) 
+_libgmp.__gmpf_set_d.argtypes = [ctypes.POINTER(mpf_t), ctypes.c_double]
+# Function: void mpf_add (mpf_t rop, const mpf_t op1, const mpf_t op2) : Set rop to op1 + op2
+_libgmp.__gmpf_add.argtypes = [ctypes.POINTER(mpf_t), ctypes.POINTER(mpf_t),ctypes.POINTER(mpf_t)]
+# Function: void mpf_clear (mpf_t x) : Free the space occupied by x. 
+_libgmp.__gmpf_clear.argtypes = [ctypes.POINTER(mpf_t)]
+# Function: char * mpf_get_str (char *str, mp_exp_t *expptr, int base, size_t n_digits, const mpf_t op)
+#
+# Convert op to a string of digits in base base. 
+# The base argument may vary from 2 to 62 or from −2 to −36. 
+# Up to n_digits digits will be generated. 
+# Trailing zeros are not returned. 
+# No more digits than can be accurately represented by op are ever generated. 
+# If n_digits is 0 then that accurate maximum number of digits are generated.
+# For base in the range 2..36, digits and lower-case letters are used; 
+# for −2..−36, digits and upper-case letters are used; 
+# for 37..62, digits, upper-case letters, and lower-case letters (in that significance order) are used.
+# If str is NULL, the result string is allocated using the current 
+# allocation function (see Custom Allocation). 
+# The block will be strlen(str)+1 bytes, that being exactly enough for the string and null-terminator.
+# If str is not NULL, it should point to a block of n_digits + 2 bytes, that being enough for the mantissa, 
+# a possible minus sign, and a null-terminator. 
+# When n_digits is 0 to get all significant digits, 
+# an application won’t be able to know the space required, and str should be NULL in that case.
+# The generated string is a fraction, with an implicit radix point 
+# immediately to the left of the first digit. 
+# The applicable exponent is written through the expptr pointer. 
+# For example, the number 3.1416 would be returned as string "31416" and exponent 1.
+# When op is zero, an empty string is produced and the exponent returned is 0.
+# A pointer to the result string is returned, being either the allocated block or the given str.
+_libgmp.__gmpf_get_str.argtypes = [
+    ctypes.c_char_p,                      # user buffer (or NULL) for self-allocation
+    ctypes.POINTER(ctypes.c_long),        # exponent out
+    ctypes.c_int,                         # base
+    ctypes.c_size_t,                      # number of digits (0 = all)
+    ctypes.POINTER(mpf_t)                 # the mpf_t to convert
+]
+_libgmp.__gmpf_get_str.restype = ctypes.c_void_p
+@ 
+\end{minipage}
+\end{center}
+
+\newpage
+\section{MPSolve constants}
+\begin{center}
+\begin{minipage}[m]{15cm}
+<<, engine='python', size="small">>=
+MPS_OUTPUT_GOAL_APPROXIMATE = 1
+MPS_ALGORITHM_SECULAR_GA    = 1
+
+MPS_STARTING_STRATEGY_DEFAULT   = 0
+MPS_STARTING_STRATEGY_RECURSIVE = 1
+MPS_STARTING_STRATEGY_FILE      = 2  # <- what we need
+@ 
+\end{minipage}
+\end{center}
+
+\newpage
+\section{MPSolve context}
+\begin{center}
+\begin{minipage}[m]{15cm}
+<<, engine='python', size="small">>=
+_mps.mps_context_new.restype  = ctypes.c_void_p   # create context
+_mps.mps_context_free.argtypes= [ctypes.c_void_p] # free context
+
+_mps.mps_context_set_input_prec .argtypes = [ctypes.c_void_p, ctypes.c_long]
+_mps.mps_context_set_output_prec.argtypes = [ctypes.c_void_p, ctypes.c_long]
+_mps.mps_context_set_output_goal.argtypes = [ctypes.c_void_p, ctypes.c_int]
+_mps.mps_context_select_algorithm.argtypes = [ctypes.c_void_p, ctypes.c_int]
+
+_mps.mps_context_set_root_stream.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+_mps.mps_context_set_root_stream.restype  = None
+
+_mps.mps_context_select_starting_strategy.argtypes = [ctypes.c_void_p, ctypes.c_int]
+_mps.mps_context_select_starting_strategy.restype  = None
+
+_mps.mps_context_set_input_poly.argtypes  = [ctypes.c_void_p, ctypes.c_void_p]
+
+@ 
+\end{minipage}
+\end{center}
+
+\newpage
+\section{MPSolve context root getters}
+\begin{center}
+\begin{minipage}[m]{15cm}
+<<, engine='python', size="small">>=
+_mps.mps_mpsolve.argtypes                 = [ctypes.c_void_p]
+
+_mps.mps_context_get_degree.argtypes      = [ctypes.c_void_p]
+_mps.mps_context_get_degree.restype       = ctypes.c_int
+
+_mps.mps_context_get_roots_d.argtypes = [
+    ctypes.c_void_p,# context
+    ctypes.POINTER(ctypes.POINTER(Cplx)), # vector of Cplx float structures
+    ctypes.POINTER(ctypes.POINTER(ctypes.c_double)) # double **radii
+] 
+_mps.mps_context_get_roots_d.restype  = ctypes.c_int
+
+_mps.mps_context_get_roots_m.argtypes = [
+    ctypes.c_void_p, # context
+    ctypes.POINTER(ctypes.POINTER(mpc_t)), # vector of GMP complex
+    ctypes.POINTER(ctypes.POINTER(rdpe_t)) # vector of radii
+]
+_mps.mps_context_get_roots_m.restype = ctypes.c_int
+
+@ 
+\end{minipage}
+\end{center}
+
+\newpage
+\section{MPSolve polynomial setters}
+\begin{center}
+\begin{minipage}[m]{15cm}
+<<, engine='python', size="small">>=
+
+_mps.mps_monomial_poly_new.argtypes  = [ctypes.c_void_p, ctypes.c_int] # create poly
+_mps.mps_monomial_poly_new.restype   = ctypes.c_void_p # free poly
+
+_mps.mps_monomial_poly_set_coefficient_d.argtypes = (
+    ctypes.c_void_p, 
+    ctypes.c_void_p, 
+    ctypes.c_int,
+    ctypes.c_double, 
+    ctypes.c_double
+)
+_mps.mps_polynomial_free.argtypes    = [ctypes.c_void_p, ctypes.c_void_p]
+
+_mps.mps_monomial_poly_set_coefficient_s = _mps.mps_monomial_poly_set_coefficient_s
+_mps.mps_monomial_poly_set_coefficient_s.argtypes = (
+        ctypes.c_void_p,             # ctx
+        ctypes.c_void_p,             # poly
+        ctypes.c_int,                # exponent
+        ctypes.c_char_p,             # real (ASCII string)
+        ctypes.c_char_p              # real (ASCII string)
+)  
+_mps.mps_monomial_poly_set_coefficient_s.restype  = None
+
+@ 
+\end{minipage}
+\end{center}
+
+\newpage
+\section{MPSolve errors}
+\begin{center}
+\begin{minipage}[m]{15cm}
+<<, engine='python', size="small">>=
+_mps.mps_context_has_errors.argtypes = [ctypes.c_void_p]
+_mps.mps_context_has_errors.restype  = ctypes.c_int
+_mps.mps_context_error_msg.argtypes  = [ctypes.c_void_p]
+_mps.mps_context_error_msg.restype   = ctypes.c_void_p  # we'll free it with libc.free
+@ 
+\end{minipage}
+\end{center}
+
+
+\newpage
+\section{GMP to {\tt gmpy2} functions}
+\begin{center}
+\begin{minipage}[m]{15cm}
+<<, engine='python', size="small">>=
+def mpf_to_str(x: mpf_t, base: int = 10) -> str:
+    exp = ctypes.c_long()
+    raw_ptr = _libgmp.__gmpf_get_str(None,ctypes.byref(exp),base,0,ctypes.byref(x))
+    if not raw_ptr: return "0"
+    mant_bytes = ctypes.cast(raw_ptr, ctypes.c_char_p).value
+    mant_str   = mant_bytes.decode()
+    _libc.free(raw_ptr)
+    neg = mant_str.startswith('-')
+    if neg: mant_str = mant_str[1:]
+    if len(mant_str) == 1:
+        s = mant_str + ".0"
+    else:
+        s = mant_str[0] + "." + mant_str[1:]
+    s += f"e{exp.value-1}"
+    return "-" + s if neg else s
+
+def mpf_t_to_mpfr(x: mpf_t) -> gmpy2.mpfr:
+    s = mpf_to_str(x)         # e.g. "3.1415926535…e0"
+    return gmpy2.mpfr(s)
+
+# np vec to mpc
+def np2mpc(xs: np.ndarray) -> list[gmpy2.mpc]:
+    return [gmpy2.mpc(z.real, z.imag) for z in xs.ravel()]
+
+def mpc2np(xs: list[gmpy2.mpc]) -> np.ndarray:
+    return [complex(r) for r in xs]
+
+def r2cf(roots: list[gmpy2.mpc]) -> list[gmpy2.mpc]:
+    coeffs = [gmpy2.mpc(1)]
+    for r in roots:
+        new_coeffs = [gmpy2.mpc(0)] * (len(coeffs) + 1)
+        for i, c in enumerate(coeffs):
+            new_coeffs[i] += c
+            new_coeffs[i+1] -= c * r
+        coeffs = new_coeffs
+    return coeffs
+
+def horner_mpc(coeffs: list[gmpy2.mpc], x: gmpy2.mpc) -> gmpy2.mpc:
+    if not coeffs: return gmpy2.mpc(0)
+    result = coeffs[0]
+    for a in coeffs[1:]:
+        result = result * x + a
+    return result
+
+def horner_vec_mpc(coeffs: list[gmpy2.mpc], xs: list[gmpy2.mpc]) -> list[gmpy2.mpc]:
+    return [horner_mpc(coeffs, x) for x in xs]
+
+def mpc_abs(xs: list[gmpy2.mpc]) -> list[gmpy2.mpfr]:
+    return [gmpy2.sqrt(z.real*z.real + z.imag*z.imag) for z in xs]
+
+def mpfr_max(xs: list[gmpy2.mpfr]) -> gmpy2.mpfr:
+    if not xs: return gmpy2.mpfr(0)
+    max_val = xs[0]
+    for v in xs[1:]:
+        if v > max_val: max_val = v
+    return max_val
+
+def mpc_t_to_mpc(z: mpc_t) -> gmpy2.mpc: # convert
+    re = mpf_t_to_mpfr(z.re)
+    im = mpf_t_to_mpfr(z.im)
+    return gmpy2.mpc(re, im)
+@ 
+\end{minipage}
+\end{center}
+
+
+\newpage
+\section{MPSolve Multi-Precision Call}
+\begin{center}
+\begin{minipage}[m]{18cm}
+<<, engine='python', size="small">>=
+def mpsolve(coeffs, precision=256):
+
+    # create context
+    ctx = _mps.mps_context_new()
+    _mps.mps_context_set_output_prec(ctx, precision)
+    _mps.mps_context_set_output_goal(ctx, MPS_OUTPUT_GOAL_APPROXIMATE)
+    _mps.mps_context_select_algorithm(ctx, MPS_ALGORITHM_SECULAR_GA)
+    _mps.mps_context_select_starting_strategy(ctx, MPS_STARTING_STRATEGY_DEFAULT)
+
+    # create poly
+    poly = _mps.mps_monomial_poly_new(ctx, len(coeffs) - 1 )
+    for exp, c in enumerate(coeffs[::-1]): # a0 first
+        _mps.mps_monomial_poly_set_coefficient_d(ctx, poly, exp, c.real, c.imag)
+    _mps.mps_context_set_input_poly(ctx, poly)
+
+    # IMPORTANT: set input precision *after* input poly is set
+    _mps.mps_context_set_input_prec(ctx,  precision)
+
+    # solve poly
+    _mps.mps_mpsolve(ctx)
+
+    # get results
+    n = _mps.mps_context_get_degree(ctx)
+    roots_pp = ctypes.POINTER(mpc_t)() # GMP multi-precision complex type
+    radii_pp = ctypes.POINTER(rdpe_t)() # GMP rpde_t type
+    status = _mps.mps_context_get_roots_m(ctx, ctypes.byref(roots_pp), ctypes.byref(radii_pp))
+    if status != 0 or not bool(roots_pp): 
+        raise RuntimeError("mps_context_get_roots_m failed")
+        
+    roots = [None] * n
+    radii = [None] * n
+    for i in range(n):
+        roots[i] = mpc_t_to_mpc(roots_pp[i])
+        rd = radii_pp[i][0]                    # RDPE_struct
+        # rdpe value is mantissa * 2**exponent (the DPE convention)
+        radii[i] = gmpy2.mul_2exp(gmpy2.mpfr(rd.m), int(rd.e))
+    for i in range(n):
+        _libgmp.__gmpf_clear(ctypes.byref(roots_pp[i].re))
+        _libgmp.__gmpf_clear(ctypes.byref(roots_pp[i].im))
+
+    # release all allocated memory
+    _libc.free(roots_pp)
+    _libc.free(radii_pp)
+    _mps.mps_polynomial_free(ctx, poly)
+    _mps.mps_context_free(ctx)
+
+    # done
+    return roots, radii
+@ 
+\end{minipage}
+\end{center}
+
+
+\newpage
+\section{MPSolve Test Call}
+\begin{center}
+\begin{minipage}[m]{18cm}
+<<, engine='python', size="small">>=
+def show_roots(cf,roots):
+    roots_sorted = sorted(roots, key=lambda z: z.real,reverse=True)
+    df = pd.DataFrame({
+        "Real Part": [r.real for r in roots_sorted],
+        "Imag Part": [r.imag for r in roots_sorted],
+        "Residual" : [np.abs(np.polyval(cf, r)) for r in roots_sorted]
+    })
+    print(df.to_string(index=False))
+
+cf = np.poly(np.arange(1,20)) # Wilkinson
+show_roots(cf,mpc2np(mpsolve(cf, precision=1024)[0]))
+show_roots(cf,np.roots(cf))
+@ 
+\end{minipage}
+\end{center}
+
+\newpage
+\section{MPSolve Speed}
+\begin{center}
+\begin{minipage}[m]{18cm}
+<<, engine='python', size="small">>=
+timeit.timeit("mpsolve(cf, precision=8196)", globals=globals(), number=10)
+timeit.timeit("mpsolve(cf, precision=1024)", globals=globals(), number=10)
+timeit.timeit("mpsolve(cf, precision=512)", globals=globals(), number=10)
+timeit.timeit("mpsolve(cf, precision=52)", globals=globals(), number=10)
+timeit.timeit("mpsolve(cf, precision=10)", globals=globals(), number=10)
+timeit.timeit("np.roots(cf)", globals=globals(), number=5)
+@ 
+\end{minipage}
+\end{center}
+
+\newpage
+\section{MPSolve Warm Start Helpers}
+\begin{center}
+\begin{minipage}[m]{18cm}
+<<, engine='python', size="small">>=
+_SEEK_SET = 0
+
+def _normalize_guess_line(g):
+    return f"{float(g.real):.17g} {float(g.imag):.17g}"
+
+def _lines_to_tmpFILE(lines):
+    """Write lines to an anonymous tmpfile() and rewind; return FILE*."""
+    payload = ("\n".join(line.rstrip("\n") for line in lines) + "\n").encode("utf-8")
+    f = _libc.tmpfile()
+    if not f:
+        raise OSError("tmpfile() failed")
+    buf = ctypes.create_string_buffer(payload)
+    wrote = _libc.fwrite(ctypes.byref(buf), 1, len(payload), f)
+    if wrote != len(payload):
+        _libc.fclose(f)
+        raise OSError("fwrite failed")
+    _libc.fflush(f)
+    _libc.fseek(f, 0, _SEEK_SET)
+    return f, payload  # return payload for debugging on error
+
+@ 
+\end{minipage}
+\end{center}
+
+\newpage
+\section{MPSolve Warm Start}
+\begin{center}
+\begin{minipage}[m]{18cm}
+<<, engine='python', size="tiny">>=
+def mpsolve_warm(coeffs, roots, precision=256):
+    """
+    coeffs: iterable of complex-like numbers, highest-degree last (same as your mpsolve)
+    roots:  list of strings ('(re, im)' or 're im') or complex numbers
+    precision: bits of precision for input & output
+    """
+    # 1) Normalize guesses to the two-column format expected by the file starter
+    roots_lines = [_normalize_guess_line(g) for g in roots]
+
+    # 2) Build a seekable FILE* with those lines
+    roots_FILE, payload = _lines_to_tmpFILE(roots_lines)
+
+    # 3) Create context and configure
+    ctx = _mps.mps_context_new()
+
+    _mps.mps_context_set_output_prec(ctx, precision)
+    _mps.mps_context_set_output_goal(ctx, MPS_OUTPUT_GOAL_APPROXIMATE)
+
+    _mps.mps_context_select_algorithm(ctx, MPS_ALGORITHM_SECULAR_GA)
+    _mps.mps_context_select_starting_strategy(ctx, MPS_STARTING_STRATEGY_FILE)
+
+    # point the root-stream at our in-memory file
+    _mps.mps_context_set_root_stream(ctx, roots_FILE)
+
+    # 4) Build and set the monomial polynomial: a0 first
+    poly = _mps.mps_monomial_poly_new(ctx, len(coeffs) - 1)
+    for exp, c in enumerate(coeffs[::-1]):
+        _mps.mps_monomial_poly_set_coefficient_d(ctx, poly, exp, float(c.real), float(c.imag))
+    _mps.mps_context_set_input_poly(ctx, poly)
+
+    # 5) Now that the poly is in the context, set input precision
+    _mps.mps_context_set_input_prec(ctx, precision)
+
+    # 6) Solve
+    _mps.mps_mpsolve(ctx)
+
+    # Close the file now (MPSolve should have consumed it)
+    _libc.fclose(roots_FILE)
+
+    # 7) Error handling: if parsing failed, show the first bytes we fed
+    if _mps.mps_context_has_errors(ctx):
+        msg_ptr = _mps.mps_context_error_msg(ctx)
+        try:
+            msg = ctypes.cast(msg_ptr, ctypes.c_char_p).value.decode('utf-8', 'replace') if msg_ptr else "Unknown error"
+        finally:
+            if msg_ptr:
+                _libc.free(msg_ptr)
+
+        # free before raising
+        _mps.mps_polynomial_free(ctx, poly)
+        _mps.mps_context_free(ctx)
+
+        # small preview of the payload for debugging
+        preview = payload[:200].decode('utf-8', 'replace').splitlines()[:5]
+        raise RuntimeError("MPSolve error: "
+                           f"{msg}\n"
+                           "Roots stream preview (first lines):\n  "
+                           + "\n  ".join(preview))
+
+    # 8) Collect results (unchanged from your code)
+    n = _mps.mps_context_get_degree(ctx)
+    roots_pp = ctypes.POINTER(mpc_t)()
+    radii_pp = ctypes.POINTER(rdpe_t)()
+    status = _mps.mps_context_get_roots_m(ctx, ctypes.byref(roots_pp), ctypes.byref(radii_pp))
+    if status != 0 or not bool(roots_pp):
+        _mps.mps_polynomial_free(ctx, poly)
+        _mps.mps_context_free(ctx)
+        raise RuntimeError("mps_context_get_roots_m failed")
+
+    out_roots = [None] * n
+    out_radii = [None] * n
+    for i in range(n):
+        out_roots[i] = mpc_t_to_mpc(roots_pp[i])
+        rd = radii_pp[i][0]
+        out_radii[i] = gmpy2.mul_2exp(gmpy2.mpfr(rd.m), int(rd.e))
+
+    # Free mpc fields allocated by MPSolve
+    for i in range(n):
+        _libgmp.__gmpf_clear(ctypes.byref(roots_pp[i].re))
+        _libgmp.__gmpf_clear(ctypes.byref(roots_pp[i].im))
+
+    # Release arrays & context
+    _libc.free(roots_pp)
+    _libc.free(radii_pp)
+    _mps.mps_polynomial_free(ctx, poly)
+    _mps.mps_context_free(ctx)
+
+    return out_roots, out_radii
+@ 
+\end{minipage}
+\end{center}
+
+\newpage
+\section{MPSolve Warm Start Test}
+\begin{center}
+\begin{minipage}[m]{18cm}
+<<, engine='python', size="small">>=
+cf = np.poly(np.arange(1,20)).astype(np.complex128) # Wilkinson
+
+zmp,r = mpsolve(cf, precision=1024)
+z=mpc2np(zmp)
+
+print(f"{timeit.timeit("mpsolve(cf, precision=1024)", globals=globals(), number=10)}")
+print(f"{timeit.timeit("mpsolve_warm(cf, z, precision=1024)", globals=globals(), number=10)}")
+
+@ 
+\end{minipage}
+\end{center}
+
+\newpage
+\section{MPSolve Manifold Calculation}
+\begin{center}
+\begin{minipage}[m]{18cm}
+<<, engine='python', size="small">>=
+@ 
+\end{minipage}
+\end{center}
+
+\end{document}
