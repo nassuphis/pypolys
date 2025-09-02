@@ -1,0 +1,1331 @@
+\documentclass{article}\usepackage[]{graphicx}\usepackage[dvipsnames,table]{xcolor}
+% maxwidth is the original width if it is less than linewidth
+% otherwise use linewidth (to make sure the graphics do not exceed the margin)
+\makeatletter
+\def\maxwidth{ %
+  \ifdim\Gin@nat@width>\linewidth
+    \linewidth
+  \else
+    \Gin@nat@width
+  \fi
+}
+\makeatother
+
+\definecolor{fgcolor}{rgb}{0.345, 0.345, 0.345}
+\newcommand{\hlnum}[1]{\textcolor[rgb]{0.686,0.059,0.569}{#1}}%
+\newcommand{\hlsng}[1]{\textcolor[rgb]{0.192,0.494,0.8}{#1}}%
+\newcommand{\hlcom}[1]{\textcolor[rgb]{0.678,0.584,0.686}{\textit{#1}}}%
+\newcommand{\hlopt}[1]{\textcolor[rgb]{0,0,0}{#1}}%
+\newcommand{\hldef}[1]{\textcolor[rgb]{0.345,0.345,0.345}{#1}}%
+\newcommand{\hlkwa}[1]{\textcolor[rgb]{0.161,0.373,0.58}{\textbf{#1}}}%
+\newcommand{\hlkwb}[1]{\textcolor[rgb]{0.69,0.353,0.396}{#1}}%
+\newcommand{\hlkwc}[1]{\textcolor[rgb]{0.333,0.667,0.333}{#1}}%
+\newcommand{\hlkwd}[1]{\textcolor[rgb]{0.737,0.353,0.396}{\textbf{#1}}}%
+\let\hlipl\hlkwb
+
+\usepackage{framed}
+\makeatletter
+\newenvironment{kframe}{%
+ \def\at@end@of@kframe{}%
+ \ifinner\ifhmode%
+  \def\at@end@of@kframe{\end{minipage}}%
+  \begin{minipage}{\columnwidth}%
+ \fi\fi%
+ \def\FrameCommand##1{\hskip\@totalleftmargin \hskip-\fboxsep
+ \colorbox{shadecolor}{##1}\hskip-\fboxsep
+     % There is no \\@totalrightmargin, so:
+     \hskip-\linewidth \hskip-\@totalleftmargin \hskip\columnwidth}%
+ \MakeFramed {\advance\hsize-\width
+   \@totalleftmargin\z@ \linewidth\hsize
+   \@setminipage}}%
+ {\par\unskip\endMakeFramed%
+ \at@end@of@kframe}
+\makeatother
+
+\definecolor{shadecolor}{rgb}{.97, .97, .97}
+\definecolor{messagecolor}{rgb}{0, 0, 0}
+\definecolor{warningcolor}{rgb}{1, 0, 1}
+\definecolor{errorcolor}{rgb}{1, 0, 0}
+\newenvironment{knitrout}{}{} % an empty environment to be redefined in TeX
+
+\let\hlesc\hldef \let\hlpps\hldef \let\hllin\hldef \let\hlslc\hlcom \let\hlppc\hlcom
+\usepackage{alltt}
+\usepackage[portrait, headheight = 0cm, margin=0.25cm, top = 0.25cm]{geometry} 
+\usepackage{graphicx}
+\usepackage[dvipsnames,table]{xcolor}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{pdfpages}
+\usepackage[export]{adjustbox} 
+\usepackage{booktabs}
+\usepackage{tikz}
+\usetikzlibrary{shadings,arrows.meta,positioning,calc,intersections}
+\usepackage{hyperref}
+
+
+
+
+
+
+
+
+
+
+
+
+\title{
+\vskip 5mm
+{\bf\huge Chebyshev Representation}
+\vskip 5mm
+{\bf\huge for}
+\vskip 5mm
+{\bf\huge Polynomial Manifolds:}
+\vskip 5mm
+{\bf\huge Benchmarks \& Stability}
+\vskip 1cm
+\begin{center}
+\includegraphics[width=15cm, height=15cm]{myplot1.png}
+\end{center}
+\vskip 1cm
+}
+\author{Wigerich}
+\IfFileExists{upquote.sty}{\usepackage{upquote}}{}
+\begin{document}
+\maketitle
+
+\newpage
+\tableofcontents
+
+\newpage
+\section{Aberth Solver}
+\subsection{Conversions}
+
+\begin{center}
+\begin{tabular}{c}
+\begin{tabular}{m{10cm}m{10cm}}
+\toprule
+Helpers & Conversion Functions \\
+\midrule
+\begin{minipage}[m]{10cm}
+\begin{knitrout}\tiny
+\definecolor{shadecolor}{rgb}{0.969, 0.969, 0.969}\color{fgcolor}\begin{kframe}
+\noindent
+\ttfamily
+\hldef{}\hlkwb{@njit}\hldef{}\hlopt{(}\hldef{fastmath}\hlopt{=}\hldef{}\hlkwa{True}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{\textunderscore poly\textunderscore add}\hldef{}\hlopt{(}\hldef{p}\hlopt{,\ }\hldef{q}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{m}\hlopt{,\ }\hldef{n\ }\hlopt{=\ }\hldef{p}\hlopt{.}\hldef{shape}\hlopt{{[}}\hldef{}\hlnum{0}\hldef{}\hlopt{{]},\ }\hldef{q}\hlopt{.}\hldef{shape}\hlopt{{[}}\hldef{}\hlnum{0}\hldef{}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{r\ }\hlopt{=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{zeros}\hldef{}\hlopt{(}\hldef{}\hlkwb{max}\hldef{}\hlopt{(}\hldef{m}\hlopt{,\ }\hldef{n}\hlopt{),\ }\hldef{dtype}\hlopt{=}\hldef{p}\hlopt{.}\hldef{dtype}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{r}\hlopt{{[}:}\hldef{m}\hlopt{{]}\ +=\ }\hldef{p}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{r}\hlopt{{[}:}\hldef{n}\hlopt{{]}\ +=\ }\hldef{q}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{r}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hlkwb{@njit}\hldef{}\hlopt{(}\hldef{fastmath}\hlopt{=}\hldef{}\hlkwa{True}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{\textunderscore poly\textunderscore sub}\hldef{}\hlopt{(}\hldef{p}\hlopt{,\ }\hldef{q}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{m}\hlopt{,\ }\hldef{n\ }\hlopt{=\ }\hldef{p}\hlopt{.}\hldef{shape}\hlopt{{[}}\hldef{}\hlnum{0}\hldef{}\hlopt{{]},\ }\hldef{q}\hlopt{.}\hldef{shape}\hlopt{{[}}\hldef{}\hlnum{0}\hldef{}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{r\ }\hlopt{=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{zeros}\hldef{}\hlopt{(}\hldef{}\hlkwb{max}\hldef{}\hlopt{(}\hldef{m}\hlopt{,\ }\hldef{n}\hlopt{),\ }\hldef{dtype}\hlopt{=}\hldef{p}\hlopt{.}\hldef{dtype}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{r}\hlopt{{[}:}\hldef{m}\hlopt{{]}\ +=\ }\hldef{p}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{r}\hlopt{{[}:}\hldef{n}\hlopt{{]}\ {-}=\ }\hldef{q}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{r}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hlkwb{@njit}\hldef{}\hlopt{(}\hldef{fastmath}\hlopt{=}\hldef{}\hlkwa{True}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{\textunderscore poly\textunderscore scale}\hldef{}\hlopt{(}\hldef{p}\hlopt{,\ }\hldef{s}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{r\ }\hlopt{=\ }\hldef{p}\hlopt{.}\hldef{}\hlkwd{copy}\hldef{}\hlopt{()}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{r\ }\hlopt{{*}=\ }\hldef{s}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{r}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hlkwb{@njit}\hldef{}\hlopt{(}\hldef{fastmath}\hlopt{=}\hldef{}\hlkwa{True}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{\textunderscore poly\textunderscore mul\textunderscore linear}\hldef{}\hlopt{(}\hldef{p}\hlopt{,\ }\hldef{alpha}\hlopt{,\ }\hldef{beta}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlsng{"""}\hspace*{\fill}\\
+\hlsng{}\hldef{\ \ \ \ }\hlsng{Multiply\ p(y)\ by\ (beta\ +\ alpha{*}y).\ Ascending\ coeffs.}\hspace*{\fill}\\
+\hlsng{}\hldef{\ \ \ \ }\hlsng{"""}\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{m\ }\hlopt{=\ }\hldef{p}\hlopt{.}\hldef{shape}\hlopt{{[}}\hldef{}\hlnum{0}\hldef{}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{r\ }\hlopt{=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{zeros}\hldef{}\hlopt{(}\hldef{m}\hlopt{+}\hldef{}\hlnum{1}\hldef{}\hlopt{,\ }\hldef{dtype}\hlopt{=}\hldef{p}\hlopt{.}\hldef{dtype}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{r}\hlopt{{[}}\hldef{}\hlnum{0}\hldef{}\hlopt{{]}\ =\ }\hldef{beta\ }\hlopt{{*}\ }\hldef{p}\hlopt{{[}}\hldef{}\hlnum{0}\hldef{}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{for\ }\hldef{j\ }\hlkwa{in\ }\hldef{}\hlkwb{range}\hldef{}\hlopt{(}\hldef{}\hlnum{1}\hldef{}\hlopt{,\ }\hldef{m}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{r}\hlopt{{[}}\hldef{j}\hlopt{{]}\ =\ }\hldef{alpha\ }\hlopt{{*}\ }\hldef{p}\hlopt{{[}}\hldef{j}\hlopt{{-}}\hldef{}\hlnum{1}\hldef{}\hlopt{{]}\ +\ }\hldef{beta\ }\hlopt{{*}\ }\hldef{p}\hlopt{{[}}\hldef{j}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{r}\hlopt{{[}}\hldef{m}\hlopt{{]}\ =\ }\hldef{alpha\ }\hlopt{{*}\ }\hldef{p}\hlopt{{[}}\hldef{m}\hlopt{{-}}\hldef{}\hlnum{1}\hldef{}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{r}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hlkwb{@njit}\hldef{}\hlopt{(}\hldef{fastmath}\hlopt{=}\hldef{}\hlkwa{True}\hldef{}\hlopt{)}\hldef{\ \ \ \ }\hlopt{}\hspace*{\fill}\\
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{\textunderscore x\textunderscore times\textunderscore cheb}\hldef{}\hlopt{(}\hldef{c}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlsng{"""Multiply\ Chebyshev\ series\ c(y)\ by\ y:\ returns\ d(y)=y{*}c(y).\ c,d\ len\ n+1."""}\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{n\ }\hlopt{=\ }\hldef{c}\hlopt{.}\hldef{shape}\hlopt{{[}}\hldef{}\hlnum{0}\hldef{}\hlopt{{]}\ {-}\ }\hldef{}\hlnum{1}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{d\ }\hlopt{=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{zeros\textunderscore like}\hldef{}\hlopt{(}\hldef{c}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{if\ }\hldef{n\ }\hlopt{$>$=\ }\hldef{}\hlnum{1}\hldef{}\hlopt{:}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{d}\hlopt{{[}}\hldef{}\hlnum{0}\hldef{}\hlopt{{]}\ =\ }\hldef{}\hlnum{0.5\ }\hldef{}\hlopt{{*}\ }\hldef{c}\hlopt{{[}}\hldef{}\hlnum{1}\hldef{}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{d}\hlopt{{[}}\hldef{}\hlnum{1}\hldef{}\hlopt{{]}\ =\ }\hldef{c}\hlopt{{[}}\hldef{}\hlnum{0}\hldef{}\hlopt{{]}\ +\ }\hldef{}\hlnum{0.5\ }\hldef{}\hlopt{{*}\ (}\hldef{c}\hlopt{{[}}\hldef{}\hlnum{2}\hldef{}\hlopt{{]}\ }\hldef{}\hlkwa{if\ }\hldef{n\ }\hlopt{$>$=\ }\hldef{}\hlnum{2\ }\hldef{}\hlkwa{else\ }\hldef{}\hlnum{0.0}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlkwa{for\ }\hldef{j\ }\hlkwa{in\ }\hldef{}\hlkwb{range}\hldef{}\hlopt{(}\hldef{}\hlnum{2}\hldef{}\hlopt{,\ }\hldef{n}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{d}\hlopt{{[}}\hldef{j}\hlopt{{]}\ =\ }\hldef{}\hlnum{0.5\ }\hldef{}\hlopt{{*}\ (}\hldef{c}\hlopt{{[}}\hldef{j}\hlopt{{-}}\hldef{}\hlnum{1}\hldef{}\hlopt{{]}\ +\ }\hldef{c}\hlopt{{[}}\hldef{j}\hlopt{+}\hldef{}\hlnum{1}\hldef{}\hlopt{{]})}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{d}\hlopt{{[}}\hldef{n}\hlopt{{]}\ =\ }\hldef{}\hlnum{0.5\ }\hldef{}\hlopt{{*}\ }\hldef{c}\hlopt{{[}}\hldef{n}\hlopt{{-}}\hldef{}\hlnum{1}\hldef{}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{else}\hldef{}\hlopt{:}\hldef{\ \ }\hlopt{}\hldef{}\hlslc{\#\ n\ ==\ 0}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{d}\hlopt{{[}}\hldef{}\hlnum{1}\hldef{}\hlopt{{-}}\hldef{}\hlnum{1}\hldef{}\hlopt{{]}\ =\ }\hldef{}\hlnum{0.0}\hldef{\ \ }\hlnum{}\hldef{}\hlslc{\#\ no{-}op;\ scalar\ series\ times\ y\ is\ 0\ in\ degree{-}0\ truncation}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{d}\hspace*{\fill}
+\mbox{}
+\normalfont
+\end{kframe}
+\end{knitrout}
+\end{minipage}
+&
+\begin{minipage}[m]{10cm}
+\begin{knitrout}\tiny
+\definecolor{shadecolor}{rgb}{0.969, 0.969, 0.969}\color{fgcolor}\begin{kframe}
+\noindent
+\ttfamily
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hlkwb{@njit}\hldef{}\hlopt{(}\hldef{fastmath}\hlopt{=}\hldef{}\hlkwa{True}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{power\textunderscore to\textunderscore cheb}\hldef{}\hlopt{(}\hldef{p}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlsng{"""}\hspace*{\fill}\\
+\hlsng{}\hldef{\ \ \ \ }\hlsng{Convert\ power\ basis\ p(y)\ =\ sum\textunderscore }\hlipl{\{m=0\}}\hlsng{\textasciicircum n\ p{[}m{]}{*}y\textasciicircum m\ (ascending)\ to\ Chebyshev\ coeffs\ a\textunderscore k.}\hspace*{\fill}\\
+\hlsng{}\hldef{\ \ \ \ }\hlsng{Returns\ a\ of\ length\ n+1\ such\ that\ p(y)\ =\ sum\ a{[}k{]}\ T\textunderscore k(y).}\hspace*{\fill}\\
+\hlsng{}\hldef{\ \ \ \ }\hlsng{"""}\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{n\ }\hlopt{=\ }\hldef{p}\hlopt{.}\hldef{shape}\hlopt{{[}}\hldef{}\hlnum{0}\hldef{}\hlopt{{]}\ {-}\ }\hldef{}\hlnum{1}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{a\ }\hlopt{=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{zeros}\hldef{}\hlopt{(}\hldef{n}\hlopt{+}\hldef{}\hlnum{1}\hldef{}\hlopt{,\ }\hldef{dtype}\hlopt{=}\hldef{p}\hlopt{.}\hldef{dtype}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlslc{\#\ X\ =\ Chebyshev\ series\ for\ y\textasciicircum m;\ start\ with\ m=0\ =$>$\ 1\ =\ T0}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{X\ }\hlopt{=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{zeros}\hldef{}\hlopt{(}\hldef{n}\hlopt{+}\hldef{}\hlnum{1}\hldef{}\hlopt{,\ }\hldef{dtype}\hlopt{=}\hldef{p}\hlopt{.}\hldef{dtype}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{X}\hlopt{{[}}\hldef{}\hlnum{0}\hldef{}\hlopt{{]}\ =\ }\hldef{}\hlnum{1.0\ }\hldef{}\hlopt{+\ }\hldef{}\hlnum{0}\hldef{j}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{a\ }\hlopt{+=\ }\hldef{p}\hlopt{{[}}\hldef{}\hlnum{0}\hldef{}\hlopt{{]}\ {*}\ }\hldef{X}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{for\ }\hldef{m\ }\hlkwa{in\ }\hldef{}\hlkwb{range}\hldef{}\hlopt{(}\hldef{}\hlnum{1}\hldef{}\hlopt{,\ }\hldef{n}\hlopt{+}\hldef{}\hlnum{1}\hldef{}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{X\ }\hlopt{=\ }\hldef{}\hlkwd{\textunderscore x\textunderscore times\textunderscore cheb}\hldef{}\hlopt{(}\hldef{X}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{a\ }\hlopt{+=\ }\hldef{p}\hlopt{{[}}\hldef{m}\hlopt{{]}\ {*}\ }\hldef{X}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{a}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hlkwb{@njit}\hldef{}\hlopt{(}\hldef{fastmath}\hlopt{=}\hldef{}\hlkwa{True}\hldef{}\hlopt{)}\hldef{\ \ \ \ }\hlopt{}\hspace*{\fill}\\
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{cheb\textunderscore to\textunderscore power}\hldef{}\hlopt{(}\hldef{a}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlsng{"""}\hspace*{\fill}\\
+\hlsng{}\hldef{\ \ \ \ }\hlsng{Convert\ Chebyshev\ coeffs\ a(y)\ to\ power\ basis\ (ascending).\ Works\ by\ building\ y\textasciicircum m\ via}\hspace*{\fill}\\
+\hlsng{}\hldef{\ \ \ \ }\hlsng{the\ inverse\ of\ \textunderscore x\textunderscore times\textunderscore cheb\ through\ a\ recurrence\ (stable\ for\ modest\ n).}\hspace*{\fill}\\
+\hlsng{}\hldef{\ \ \ \ }\hlsng{"""}\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{n\ }\hlopt{=\ }\hldef{a}\hlopt{.}\hldef{shape}\hlopt{{[}}\hldef{}\hlnum{0}\hldef{}\hlopt{{]}\ {-}\ }\hldef{}\hlnum{1}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlslc{\#\ Build\ T\textunderscore k(y)\ in\ power\ basis\ progressively\ and\ accumulate\ a\textunderscore k\ {*}\ T\textunderscore k(y)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlslc{\#\ T0\ =\ 1\ ;\ T1\ =\ y\ ;\ T\textunderscore \{k+1\}\ =\ 2y\ T\textunderscore k\ {-}\ T\textunderscore \{k{-}1\}}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{P\textunderscore prev\ }\hlopt{=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{zeros}\hldef{}\hlopt{(}\hldef{}\hlnum{1}\hldef{}\hlopt{,\ }\hldef{dtype}\hlopt{=}\hldef{a}\hlopt{.}\hldef{dtype}\hlopt{)}\hldef{\ \ }\hlopt{}\hldef{}\hlslc{\#\ T\textunderscore \{{-}1\}\ (unused\ placeholder)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{P0\ }\hlopt{=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{zeros}\hldef{}\hlopt{(}\hldef{}\hlnum{1}\hldef{}\hlopt{,\ }\hldef{dtype}\hlopt{=}\hldef{a}\hlopt{.}\hldef{dtype}\hlopt{)}\hldef{\ \ \ \ \ \ }\hlopt{}\hldef{}\hlslc{\#\ T0}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{P0}\hlopt{{[}}\hldef{}\hlnum{0}\hldef{}\hlopt{{]}\ =\ }\hldef{}\hlnum{1.0\ }\hldef{}\hlopt{+\ }\hldef{}\hlnum{0}\hldef{j}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{poly\ }\hlopt{=\ }\hldef{a}\hlopt{{[}}\hldef{}\hlnum{0}\hldef{}\hlopt{{]}\ {*}\ }\hldef{P0}\hlopt{.}\hldef{}\hlkwd{copy}\hldef{}\hlopt{()}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{if\ }\hldef{n\ }\hlopt{$>$=\ }\hldef{}\hlnum{1}\hldef{}\hlopt{:}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{P1\ }\hlopt{=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{zeros}\hldef{}\hlopt{(}\hldef{}\hlnum{2}\hldef{}\hlopt{,\ }\hldef{dtype}\hlopt{=}\hldef{a}\hlopt{.}\hldef{dtype}\hlopt{)}\hldef{\ \ }\hlopt{}\hldef{}\hlslc{\#\ T1\ =\ y}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{P1}\hlopt{{[}}\hldef{}\hlnum{1}\hldef{}\hlopt{{]}\ =\ }\hldef{}\hlnum{1.0\ }\hldef{}\hlopt{+\ }\hldef{}\hlnum{0}\hldef{j}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlslc{\#\ poly\ +=\ a1{*}T1}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{poly\ }\hlopt{=\ }\hldef{}\hlkwd{\textunderscore poly\textunderscore add}\hldef{}\hlopt{(}\hldef{poly}\hlopt{,\ }\hldef{}\hlkwd{\textunderscore poly\textunderscore scale}\hldef{}\hlopt{(}\hldef{P1}\hlopt{,\ }\hldef{a}\hlopt{{[}}\hldef{}\hlnum{1}\hldef{}\hlopt{{]}))}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlkwa{for\ }\hldef{k\ }\hlkwa{in\ }\hldef{}\hlkwb{range}\hldef{}\hlopt{(}\hldef{}\hlnum{1}\hldef{}\hlopt{,\ }\hldef{n}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{}\hlslc{\#\ T\textunderscore \{k+1\}\ =\ 2y\ T\textunderscore k\ {-}\ T\textunderscore \{k{-}1\}}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{Pkm1\ }\hlopt{=\ }\hldef{P0}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{Pk}\hldef{\ \ \ }\hldef{}\hlopt{=\ }\hldef{P1}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{Pk\textunderscore y\ }\hlopt{=\ }\hldef{}\hlkwd{\textunderscore poly\textunderscore mul\textunderscore linear}\hldef{}\hlopt{(}\hldef{Pk}\hlopt{,\ }\hldef{alpha}\hlopt{=}\hldef{}\hlnum{1.0}\hldef{}\hlopt{,\ }\hldef{beta}\hlopt{=}\hldef{}\hlnum{0.0}\hldef{}\hlopt{)}\hldef{\ \ }\hlopt{}\hldef{}\hlslc{\#\ multiply\ by\ y}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{Pkp1\ }\hlopt{=\ }\hldef{}\hlkwd{\textunderscore poly\textunderscore sub}\hldef{}\hlopt{(}\hldef{}\hlkwd{\textunderscore poly\textunderscore scale}\hldef{}\hlopt{(}\hldef{Pk\textunderscore y}\hlopt{,\ }\hldef{}\hlnum{2.0}\hldef{}\hlopt{),\ }\hldef{Pkm1}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{poly\ }\hlopt{=\ }\hldef{}\hlkwd{\textunderscore poly\textunderscore add}\hldef{}\hlopt{(}\hldef{poly}\hlopt{,\ }\hldef{}\hlkwd{\textunderscore poly\textunderscore scale}\hldef{}\hlopt{(}\hldef{Pkp1}\hlopt{,\ }\hldef{a}\hlopt{{[}}\hldef{k}\hlopt{+}\hldef{}\hlnum{1}\hldef{}\hlopt{{]}))}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{P0}\hlopt{,\ }\hldef{P1\ }\hlopt{=\ }\hldef{Pk}\hlopt{,\ }\hldef{Pkp1}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{poly}\hspace*{\fill}
+\mbox{}
+\normalfont
+\end{kframe}
+\end{knitrout}
+
+\end{minipage}
+\\
+\bottomrule
+\end{tabular}
+\end{tabular}
+\end{center}
+
+
+\newpage
+\subsection{Domain Mapping and Evaluation}
+
+\begin{center}
+\begin{tabular}{c}
+\begin{tabular}{m{10cm}m{10cm}}
+\toprule
+Eval Poly & Eval PolyDer \\
+\midrule
+\begin{minipage}[m]{10cm}
+\begin{knitrout}\tiny
+\definecolor{shadecolor}{rgb}{0.969, 0.969, 0.969}\color{fgcolor}\begin{kframe}
+\noindent
+\ttfamily
+\hldef{}\hlkwb{@njit}\hldef{}\hlopt{(}\hldef{fastmath}\hlopt{=}\hldef{}\hlkwa{True}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{cheb\textunderscore eval\textunderscore y}\hldef{}\hlopt{(}\hldef{a}\hlopt{,\ }\hldef{y}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlsng{"""}\hspace*{\fill}\\
+\hlsng{}\hldef{\ \ \ \ }\hlsng{Clenshaw\ for\ Chebyshev\ series\ sum\ a{[}k{]}\ T\textunderscore k(y)\ at\ scalar\ y\ (complex\ ok).}\hspace*{\fill}\\
+\hlsng{}\hldef{\ \ \ \ }\hlsng{"""}\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{n\ }\hlopt{=\ }\hldef{a}\hlopt{.}\hldef{shape}\hlopt{{[}}\hldef{}\hlnum{0}\hldef{}\hlopt{{]}\ {-}\ }\hldef{}\hlnum{1}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{b1\ }\hlopt{=\ }\hldef{}\hlnum{0.0\ }\hldef{}\hlopt{+\ }\hldef{}\hlnum{0}\hldef{j}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{b2\ }\hlopt{=\ }\hldef{}\hlnum{0.0\ }\hldef{}\hlopt{+\ }\hldef{}\hlnum{0}\hldef{j}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{for\ }\hldef{k\ }\hlkwa{in\ }\hldef{}\hlkwb{range}\hldef{}\hlopt{(}\hldef{n}\hlopt{,\ {-}}\hldef{}\hlnum{1}\hldef{}\hlopt{,\ {-}}\hldef{}\hlnum{1}\hldef{}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{b0\ }\hlopt{=\ }\hldef{}\hlnum{2.0\ }\hldef{}\hlopt{{*}\ }\hldef{y\ }\hlopt{{*}\ }\hldef{b1\ }\hlopt{{-}\ }\hldef{b2\ }\hlopt{+\ }\hldef{a}\hlopt{{[}}\hldef{k}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{b2\ }\hlopt{=\ }\hldef{b1}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{b1\ }\hlopt{=\ }\hldef{b0}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{b0\ }\hlopt{{-}\ }\hldef{y\ }\hlopt{{*}\ }\hldef{b2}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hlkwb{@njit}\hldef{}\hlopt{(}\hldef{fastmath}\hlopt{=}\hldef{}\hlkwa{True}\hldef{}\hlopt{)}\hldef{\ \ \ \ }\hlopt{}\hspace*{\fill}\\
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{cheb\textunderscore eval\textunderscore on\textunderscore domain}\hldef{}\hlopt{(}\hldef{a}\hlopt{,\ }\hldef{x}\hlopt{,\ }\hldef{A}\hlopt{,\ }\hldef{B}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlsng{"""}\hspace*{\fill}\\
+\hlsng{}\hldef{\ \ \ \ }\hlsng{Evaluate\ Chebyshev\ series\ on\ domain\ {[}A,B{]}.\ a\ are\ coeffs\ wrt\ T\textunderscore k(y),\ y\ =\ affine(x).}\hspace*{\fill}\\
+\hlsng{}\hldef{\ \ \ \ }\hlsng{"""}\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{y\ }\hlopt{=\ (}\hldef{}\hlnum{2.0\ }\hldef{}\hlopt{{*}\ }\hldef{x\ }\hlopt{{-}\ (}\hldef{A\ }\hlopt{+\ }\hldef{B}\hlopt{))\ /\ (}\hldef{B\ }\hlopt{{-}\ }\hldef{A}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{}\hlkwd{cheb\textunderscore eval\textunderscore y}\hldef{}\hlopt{(}\hldef{a}\hlopt{,\ }\hldef{y}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hlkwb{@njit}\hldef{}\hlopt{(}\hldef{fastmath}\hlopt{=}\hldef{}\hlkwa{True}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{cheb\textunderscore derivative\textunderscore coeffs\textunderscore y}\hldef{}\hlopt{(}\hldef{a}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlsng{"""}\hspace*{\fill}\\
+\hlsng{}\hldef{\ \ \ \ }\hlsng{Derivative\ wrt\ y:\ if\ f(y)=sum\ a\textunderscore k\ T\textunderscore k(y),\ returns\ coeffs\ d\ such\ that\ f'(y)=sum\ d\textunderscore k\ T\textunderscore k(y).}\hspace*{\fill}\\
+\hlsng{}\hldef{\ \ \ \ }\hlsng{"""}\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{n\ }\hlopt{=\ }\hldef{a}\hlopt{.}\hldef{shape}\hlopt{{[}}\hldef{}\hlnum{0}\hldef{}\hlopt{{]}\ {-}\ }\hldef{}\hlnum{1}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{if\ }\hldef{n\ }\hlopt{==\ }\hldef{}\hlnum{0}\hldef{}\hlopt{:}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{zeros\textunderscore like}\hldef{}\hlopt{(}\hldef{a}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{d\ }\hlopt{=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{zeros\textunderscore like}\hldef{}\hlopt{(}\hldef{a}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{d}\hlopt{{[}}\hldef{n}\hlopt{{-}}\hldef{}\hlnum{1}\hldef{}\hlopt{{]}\ =\ }\hldef{}\hlnum{2.0\ }\hldef{}\hlopt{{*}\ }\hldef{n\ }\hlopt{{*}\ }\hldef{a}\hlopt{{[}}\hldef{n}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{for\ }\hldef{k\ }\hlkwa{in\ }\hldef{}\hlkwb{range}\hldef{}\hlopt{(}\hldef{n}\hlopt{{-}}\hldef{}\hlnum{2}\hldef{}\hlopt{,\ {-}}\hldef{}\hlnum{1}\hldef{}\hlopt{,\ {-}}\hldef{}\hlnum{1}\hldef{}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlslc{\#\ d{[}k{]}\ =\ d{[}k+2{]}\ +\ 2{*}(k+1){*}a{[}k+1{]}}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{d}\hlopt{{[}}\hldef{k}\hlopt{{]}\ =\ (}\hldef{d}\hlopt{{[}}\hldef{k}\hlopt{+}\hldef{}\hlnum{2}\hldef{}\hlopt{{]}\ }\hldef{}\hlkwa{if\ }\hldef{}\hlopt{(}\hldef{k}\hlopt{+}\hldef{}\hlnum{2}\hldef{}\hlopt{)\ $<$=\ (}\hldef{n}\hlopt{{-}}\hldef{}\hlnum{1}\hldef{}\hlopt{)\ }\hldef{}\hlkwa{else\ }\hldef{}\hlnum{0.0}\hldef{}\hlopt{)\ +\ }\hldef{}\hlnum{2.0\ }\hldef{}\hlopt{{*}\ (}\hldef{k}\hlopt{+}\hldef{}\hlnum{1}\hldef{}\hlopt{)\ {*}\ }\hldef{a}\hlopt{{[}}\hldef{k}\hlopt{+}\hldef{}\hlnum{1}\hldef{}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{d}\hlopt{{[}}\hldef{}\hlnum{0}\hldef{}\hlopt{{]}\ {*}=\ }\hldef{}\hlnum{0.5}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{d}\hspace*{\fill}
+\mbox{}
+\normalfont
+\end{kframe}
+\end{knitrout}
+\end{minipage}
+&
+\begin{minipage}[m]{10cm}
+\begin{knitrout}\tiny
+\definecolor{shadecolor}{rgb}{0.969, 0.969, 0.969}\color{fgcolor}\begin{kframe}
+\noindent
+\ttfamily
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hlkwb{@njit}\hldef{}\hlopt{(}\hldef{fastmath}\hlopt{=}\hldef{}\hlkwa{True}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{cheb\textunderscore eval\textunderscore deriv\textunderscore on\textunderscore domain\textunderscore pre}\hldef{}\hlopt{(}\hldef{a}\hlopt{,\ }\hldef{ap\textunderscore y}\hlopt{,\ }\hldef{x}\hlopt{,\ }\hldef{A}\hlopt{,\ }\hldef{B}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlsng{"""}\hspace*{\fill}\\
+\hlsng{}\hldef{\ \ \ \ }\hlsng{Evaluate\ f(x)\ and\ f'(x)\ for\ Chebyshev\ coeffs\ a\ on\ domain\ {[}A,B{]},\ using\ precomputed\ ap\textunderscore y.}\hspace*{\fill}\\
+\hlsng{}\hldef{\ \ \ \ }\hlsng{"""}\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{y\ }\hlopt{=\ (}\hldef{}\hlnum{2.0}\hldef{}\hlopt{{*}}\hldef{x\ }\hlopt{{-}\ (}\hldef{A\ }\hlopt{+\ }\hldef{B}\hlopt{))\ /\ (}\hldef{B\ }\hlopt{{-}\ }\hldef{A}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{fy\ }\hlopt{=\ }\hldef{}\hlkwd{cheb\textunderscore eval\textunderscore y}\hldef{}\hlopt{(}\hldef{a}\hlopt{,\ }\hldef{y}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{df\textunderscore dy\ }\hlopt{=\ }\hldef{}\hlkwd{cheb\textunderscore eval\textunderscore y}\hldef{}\hlopt{(}\hldef{ap\textunderscore y}\hlopt{,\ }\hldef{y}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{df\textunderscore dx\ }\hlopt{=\ (}\hldef{}\hlnum{2.0\ }\hldef{}\hlopt{/\ (}\hldef{B\ }\hlopt{{-}\ }\hldef{A}\hlopt{))\ {*}\ }\hldef{df\textunderscore dy}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{fy}\hlopt{,\ }\hldef{df\textunderscore dx}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hlkwb{@njit}\hldef{}\hlopt{(}\hldef{fastmath}\hlopt{=}\hldef{}\hlkwa{True}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{cheb\textunderscore eval\textunderscore deriv\textunderscore batch}\hldef{}\hlopt{(}\hldef{a}\hlopt{,\ }\hldef{ap\textunderscore y}\hlopt{,\ }\hldef{z}\hlopt{,\ }\hldef{A}\hlopt{,\ }\hldef{B}\hlopt{,\ }\hldef{out\textunderscore p}\hlopt{,\ }\hldef{out\textunderscore dp}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlsng{"""}\hspace*{\fill}\\
+\hlsng{}\hldef{\ \ \ \ }\hlsng{Compute\ p(z\textunderscore j)\ and\ p'(z\textunderscore j)\ for\ all\ j\ at\ once,\ using\ two\ Clenshaw\ recurrences.}\hspace*{\fill}\\
+\hlsng{}\hldef{\ \ \ \ }\hlsng{a:\ Chebyshev\ coeffs\ on\ {[}A,B{]},\ ap\textunderscore y:\ derivative\ coeffs\ wrt\ y.}\hspace*{\fill}\\
+\hlsng{}\hldef{\ \ \ \ }\hlsng{out\textunderscore p,\ out\textunderscore dp:\ preallocated\ complex128\ arrays\ len\ m.}\hspace*{\fill}\\
+\hlsng{}\hldef{\ \ \ \ }\hlsng{"""}\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{m\ }\hlopt{=\ }\hldef{z}\hlopt{.}\hldef{shape}\hlopt{{[}}\hldef{}\hlnum{0}\hldef{}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{n\ }\hlopt{=\ }\hldef{a}\hlopt{.}\hldef{shape}\hlopt{{[}}\hldef{}\hlnum{0}\hldef{}\hlopt{{]}\ {-}\ }\hldef{}\hlnum{1}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlslc{\#\ y\ mapping}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{y\ }\hlopt{=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{empty}\hldef{}\hlopt{(}\hldef{m}\hlopt{,\ }\hldef{dtype}\hlopt{=}\hldef{np}\hlopt{.}\hldef{complex128}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{s\ }\hlopt{=\ }\hldef{}\hlnum{2.0\ }\hldef{}\hlopt{/\ (}\hldef{B\ }\hlopt{{-}\ }\hldef{A}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{c\ }\hlopt{=\ (}\hldef{A\ }\hlopt{+\ }\hldef{B}\hlopt{)\ /\ (}\hldef{B\ }\hlopt{{-}\ }\hldef{A}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{for\ }\hldef{j\ }\hlkwa{in\ }\hldef{}\hlkwb{range}\hldef{}\hlopt{(}\hldef{m}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{y}\hlopt{{[}}\hldef{j}\hlopt{{]}\ =\ }\hldef{s\ }\hlopt{{*}\ }\hldef{z}\hlopt{{[}}\hldef{j}\hlopt{{]}\ {-}\ }\hldef{c}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlslc{\#\ Clenshaw\ for\ p}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{b1\ }\hlopt{=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{zeros}\hldef{}\hlopt{(}\hldef{m}\hlopt{,\ }\hldef{dtype}\hlopt{=}\hldef{np}\hlopt{.}\hldef{complex128}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{b2\ }\hlopt{=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{zeros}\hldef{}\hlopt{(}\hldef{m}\hlopt{,\ }\hldef{dtype}\hlopt{=}\hldef{np}\hlopt{.}\hldef{complex128}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlslc{\#\ Clenshaw\ for\ dp/dy}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{d1\ }\hlopt{=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{zeros}\hldef{}\hlopt{(}\hldef{m}\hlopt{,\ }\hldef{dtype}\hlopt{=}\hldef{np}\hlopt{.}\hldef{complex128}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{d2\ }\hlopt{=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{zeros}\hldef{}\hlopt{(}\hldef{m}\hlopt{,\ }\hldef{dtype}\hlopt{=}\hldef{np}\hlopt{.}\hldef{complex128}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{for\ }\hldef{k\ }\hlkwa{in\ }\hldef{}\hlkwb{range}\hldef{}\hlopt{(}\hldef{n}\hlopt{,\ {-}}\hldef{}\hlnum{1}\hldef{}\hlopt{,\ {-}}\hldef{}\hlnum{1}\hldef{}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{ak\ }\hlopt{=\ }\hldef{a}\hlopt{{[}}\hldef{k}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{apk\ }\hlopt{=\ }\hldef{ap\textunderscore y}\hlopt{{[}}\hldef{k}\hlopt{{]}\ }\hldef{}\hlkwa{if\ }\hldef{k\ }\hlopt{$<$=\ }\hldef{n}\hlopt{{-}}\hldef{}\hlnum{1\ }\hldef{}\hlkwa{else\ }\hldef{}\hlnum{0.0}\hldef{j}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlkwa{for\ }\hldef{j\ }\hlkwa{in\ }\hldef{}\hlkwb{range}\hldef{}\hlopt{(}\hldef{m}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{yj\ }\hlopt{=\ }\hldef{y}\hlopt{{[}}\hldef{j}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{b0\ }\hlopt{=\ }\hldef{}\hlnum{2.0}\hldef{}\hlopt{{*}}\hldef{yj}\hlopt{{*}}\hldef{b1}\hlopt{{[}}\hldef{j}\hlopt{{]}\ {-}\ }\hldef{b2}\hlopt{{[}}\hldef{j}\hlopt{{]}\ +\ }\hldef{ak}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{d0\ }\hlopt{=\ }\hldef{}\hlnum{2.0}\hldef{}\hlopt{{*}}\hldef{yj}\hlopt{{*}}\hldef{d1}\hlopt{{[}}\hldef{j}\hlopt{{]}\ {-}\ }\hldef{d2}\hlopt{{[}}\hldef{j}\hlopt{{]}\ +\ }\hldef{apk}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{b2}\hlopt{{[}}\hldef{j}\hlopt{{]}\ =\ }\hldef{b1}\hlopt{{[}}\hldef{j}\hlopt{{]};\ }\hldef{b1}\hlopt{{[}}\hldef{j}\hlopt{{]}\ =\ }\hldef{b0}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{d2}\hlopt{{[}}\hldef{j}\hlopt{{]}\ =\ }\hldef{d1}\hlopt{{[}}\hldef{j}\hlopt{{]};\ }\hldef{d1}\hlopt{{[}}\hldef{j}\hlopt{{]}\ =\ }\hldef{d0}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{for\ }\hldef{j\ }\hlkwa{in\ }\hldef{}\hlkwb{range}\hldef{}\hlopt{(}\hldef{m}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{out\textunderscore p}\hlopt{{[}}\hldef{j}\hlopt{{]}}\hldef{\ \ }\hlopt{=\ }\hldef{b1}\hlopt{{[}}\hldef{j}\hlopt{{]}\ {-}\ }\hldef{y}\hlopt{{[}}\hldef{j}\hlopt{{]}{*}}\hldef{b2}\hlopt{{[}}\hldef{j}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{df\textunderscore dy}\hldef{\ \ \ \ \ }\hldef{}\hlopt{=\ }\hldef{d1}\hlopt{{[}}\hldef{j}\hlopt{{]}\ {-}\ }\hldef{y}\hlopt{{[}}\hldef{j}\hlopt{{]}{*}}\hldef{d2}\hlopt{{[}}\hldef{j}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{out\textunderscore dp}\hlopt{{[}}\hldef{j}\hlopt{{]}\ =\ (}\hldef{}\hlnum{2.0}\hldef{}\hlopt{/(}\hldef{B\ }\hlopt{{-}\ }\hldef{A}\hlopt{))\ {*}\ }\hldef{df\textunderscore dy}\hldef{\ \ \ }\hldef{}\hlslc{\#\ chain\ rule}\hldef{}\hspace*{\fill}
+\mbox{}
+\normalfont
+\end{kframe}
+\end{knitrout}
+\end{minipage}
+\\
+\bottomrule
+\end{tabular}
+\end{tabular}
+\end{center}
+
+
+\newpage
+\subsection{Build Chebyshev coeffs on $\left[A,B\right] $ from roots or power coeffs}
+
+\begin{center}
+\begin{tabular}{c}
+\begin{tabular}{m{10cm}m{10cm}}
+\toprule
+Helpers & Wilkinson \\
+\midrule
+\begin{minipage}[m]{10cm}
+\begin{knitrout}\tiny
+\definecolor{shadecolor}{rgb}{0.969, 0.969, 0.969}\color{fgcolor}\begin{kframe}
+\noindent
+\ttfamily
+\hldef{}\hlkwb{@njit}\hldef{}\hlopt{(}\hldef{fastmath}\hlopt{=}\hldef{}\hlkwa{True}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{poly\textunderscore from\textunderscore roots}\hldef{}\hlopt{(}\hldef{roots}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlsng{"""}\hspace*{\fill}\\
+\hlsng{}\hldef{\ \ \ \ }\hlsng{Build\ ascending\ power\ coeffs\ for\ p(x)=prod\ (x\ {-}\ r\textunderscore i).\ Complex{-}safe,\ no\ np.convolve.}\hspace*{\fill}\\
+\hlsng{}\hldef{\ \ \ \ }\hlsng{"""}\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{m\ }\hlopt{=\ }\hldef{}\hlkwb{len}\hldef{}\hlopt{(}\hldef{roots}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{c\ }\hlopt{=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{zeros}\hldef{}\hlopt{(}\hldef{m}\hlopt{+}\hldef{}\hlnum{1}\hldef{}\hlopt{,\ }\hldef{dtype}\hlopt{=}\hldef{np}\hlopt{.}\hldef{complex128}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{c}\hlopt{{[}}\hldef{}\hlnum{0}\hldef{}\hlopt{{]}\ =\ }\hldef{}\hlnum{1.0\ }\hldef{}\hlopt{+\ }\hldef{}\hlnum{0}\hldef{j}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{deg\ }\hlopt{=\ }\hldef{}\hlnum{0}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{for\ }\hldef{r\ }\hlkwa{in\ }\hldef{roots}\hlopt{:}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlslc{\#\ multiply\ by\ (x\ {-}\ r)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{d\ }\hlopt{=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{zeros}\hldef{}\hlopt{(}\hldef{deg}\hlopt{+}\hldef{}\hlnum{2}\hldef{}\hlopt{,\ }\hldef{dtype}\hlopt{=}\hldef{np}\hlopt{.}\hldef{complex128}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{d}\hlopt{{[}}\hldef{}\hlnum{0}\hldef{}\hlopt{{]}\ =\ {-}}\hldef{r\ }\hlopt{{*}\ }\hldef{c}\hlopt{{[}}\hldef{}\hlnum{0}\hldef{}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlkwa{for\ }\hldef{j\ }\hlkwa{in\ }\hldef{}\hlkwb{range}\hldef{}\hlopt{(}\hldef{}\hlnum{1}\hldef{}\hlopt{,\ }\hldef{deg}\hlopt{+}\hldef{}\hlnum{1}\hldef{}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{d}\hlopt{{[}}\hldef{j}\hlopt{{]}\ =\ }\hldef{c}\hlopt{{[}}\hldef{j}\hlopt{{-}}\hldef{}\hlnum{1}\hldef{}\hlopt{{]}\ {-}\ }\hldef{r\ }\hlopt{{*}\ }\hldef{c}\hlopt{{[}}\hldef{j}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{d}\hlopt{{[}}\hldef{deg}\hlopt{+}\hldef{}\hlnum{1}\hldef{}\hlopt{{]}\ =\ }\hldef{c}\hlopt{{[}}\hldef{deg}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{c\ }\hlopt{=\ }\hldef{d}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{deg\ }\hlopt{+=\ }\hldef{}\hlnum{1}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{c}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hlkwb{@njit}\hldef{}\hlopt{(}\hldef{fastmath}\hlopt{=}\hldef{}\hlkwa{True}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{\textunderscore poly\textunderscore mul\textunderscore linear}\hldef{}\hlopt{(}\hldef{p}\hlopt{,\ }\hldef{alpha}\hlopt{,\ }\hldef{beta}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlsng{"""}\hspace*{\fill}\\
+\hlsng{}\hldef{\ \ \ \ }\hlsng{Multiply\ p(y)\ by\ (beta\ +\ alpha{*}y).\ Ascending\ coeffs.}\hspace*{\fill}\\
+\hlsng{}\hldef{\ \ \ \ }\hlsng{"""}\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{m\ }\hlopt{=\ }\hldef{p}\hlopt{.}\hldef{shape}\hlopt{{[}}\hldef{}\hlnum{0}\hldef{}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{r\ }\hlopt{=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{zeros}\hldef{}\hlopt{(}\hldef{m}\hlopt{+}\hldef{}\hlnum{1}\hldef{}\hlopt{,\ }\hldef{dtype}\hlopt{=}\hldef{p}\hlopt{.}\hldef{dtype}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{r}\hlopt{{[}}\hldef{}\hlnum{0}\hldef{}\hlopt{{]}\ =\ }\hldef{beta\ }\hlopt{{*}\ }\hldef{p}\hlopt{{[}}\hldef{}\hlnum{0}\hldef{}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{for\ }\hldef{j\ }\hlkwa{in\ }\hldef{}\hlkwb{range}\hldef{}\hlopt{(}\hldef{}\hlnum{1}\hldef{}\hlopt{,\ }\hldef{m}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{r}\hlopt{{[}}\hldef{j}\hlopt{{]}\ =\ }\hldef{alpha\ }\hlopt{{*}\ }\hldef{p}\hlopt{{[}}\hldef{j}\hlopt{{-}}\hldef{}\hlnum{1}\hldef{}\hlopt{{]}\ +\ }\hldef{beta\ }\hlopt{{*}\ }\hldef{p}\hlopt{{[}}\hldef{j}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{r}\hlopt{{[}}\hldef{m}\hlopt{{]}\ =\ }\hldef{alpha\ }\hlopt{{*}\ }\hldef{p}\hlopt{{[}}\hldef{m}\hlopt{{-}}\hldef{}\hlnum{1}\hldef{}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{r}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hlkwb{@njit}\hldef{}\hlopt{(}\hldef{fastmath}\hlopt{=}\hldef{}\hlkwa{True}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{compose\textunderscore linear}\hldef{}\hlopt{(}\hldef{p}\hlopt{,\ }\hldef{alpha}\hlopt{,\ }\hldef{beta}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlsng{"""}\hspace*{\fill}\\
+\hlsng{}\hldef{\ \ \ \ }\hlsng{q(y)\ =\ p(alpha{*}y\ +\ beta),\ where\ p\ is\ ascending\ power\ coeffs\ in\ x.}\hspace*{\fill}\\
+\hlsng{}\hldef{\ \ \ \ }\hlsng{Correct\ Horner:\ start\ from\ top\ coeff,\ then\ n\ multiplies.}\hspace*{\fill}\\
+\hlsng{}\hldef{\ \ \ \ }\hlsng{"""}\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{n\ }\hlopt{=\ }\hldef{p}\hlopt{.}\hldef{shape}\hlopt{{[}}\hldef{}\hlnum{0}\hldef{}\hlopt{{]}\ {-}\ }\hldef{}\hlnum{1}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{q\ }\hlopt{=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{array}\hldef{}\hlopt{({[}}\hldef{p}\hlopt{{[}}\hldef{n}\hlopt{{]}{]},\ }\hldef{dtype}\hlopt{=}\hldef{p}\hlopt{.}\hldef{dtype}\hlopt{)}\hldef{\ \ }\hlopt{}\hldef{}\hlslc{\#\ start\ with\ highest\ coeff}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{for\ }\hldef{i\ }\hlkwa{in\ }\hldef{}\hlkwb{range}\hldef{}\hlopt{(}\hldef{n}\hlopt{{-}}\hldef{}\hlnum{1}\hldef{}\hlopt{,\ {-}}\hldef{}\hlnum{1}\hldef{}\hlopt{,\ {-}}\hldef{}\hlnum{1}\hldef{}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{q\ }\hlopt{=\ }\hldef{}\hlkwd{\textunderscore poly\textunderscore mul\textunderscore linear}\hldef{}\hlopt{(}\hldef{q}\hlopt{,\ }\hldef{alpha}\hlopt{,\ }\hldef{beta}\hlopt{)}\hldef{\ \ }\hlopt{}\hldef{}\hlslc{\#\ q\ $<${-}\ (beta\ +\ alpha{*}y){*}q}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{q}\hlopt{{[}}\hldef{}\hlnum{0}\hldef{}\hlopt{{]}\ +=\ }\hldef{p}\hlopt{{[}}\hldef{i}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{q}\hspace*{\fill}
+\mbox{}
+\normalfont
+\end{kframe}
+\end{knitrout}
+\end{minipage}
+&
+\begin{minipage}[m]{10cm}
+\begin{knitrout}\tiny
+\definecolor{shadecolor}{rgb}{0.969, 0.969, 0.969}\color{fgcolor}\begin{kframe}
+\noindent
+\ttfamily
+\hldef{}\hlkwb{@njit}\hldef{}\hlopt{(}\hldef{fastmath}\hlopt{=}\hldef{}\hlkwa{True}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{cheb\textunderscore from\textunderscore power\textunderscore on\textunderscore domain}\hldef{}\hlopt{(}\hldef{p\textunderscore x}\hlopt{,\ }\hldef{A}\hlopt{,\ }\hldef{B}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlsng{"""}\hspace*{\fill}\\
+\hlsng{}\hldef{\ \ \ \ }\hlsng{Given\ power\ coeffs\ p\textunderscore x\ (ascending\ in\ x),\ return\ Chebyshev\ coeffs\ a\ for\ domain\ {[}A,B{]}.}\hspace*{\fill}\\
+\hlsng{}\hldef{\ \ \ \ }\hlsng{"""}\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{alpha\ }\hlopt{=\ }\hldef{}\hlnum{0.5\ }\hldef{}\hlopt{{*}\ (}\hldef{B\ }\hlopt{{-}\ }\hldef{A}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{beta}\hldef{\ \ }\hldef{}\hlopt{=\ }\hldef{}\hlnum{0.5\ }\hldef{}\hlopt{{*}\ (}\hldef{A\ }\hlopt{+\ }\hldef{B}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{q\textunderscore y\ }\hlopt{=\ }\hldef{}\hlkwd{compose\textunderscore linear}\hldef{}\hlopt{(}\hldef{p\textunderscore x}\hlopt{,\ }\hldef{alpha}\hlopt{,\ }\hldef{beta}\hlopt{)}\hldef{\ \ }\hlopt{}\hldef{}\hlslc{\#\ q(y)\ =\ p(alpha{*}y\ +\ beta)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{a\ }\hlopt{=\ }\hldef{}\hlkwd{power\textunderscore to\textunderscore cheb}\hldef{}\hlopt{(}\hldef{q\textunderscore y}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{a}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hlkwb{@njit}\hldef{}\hlopt{(}\hldef{fastmath}\hlopt{=}\hldef{}\hlkwa{True}\hldef{}\hlopt{)}\hldef{\ \ \ \ }\hlopt{}\hspace*{\fill}\\
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{wilkinson\textunderscore cheb\textunderscore array}\hldef{}\hlopt{(}\hldef{n}\hlopt{,\ }\hldef{pad}\hlopt{=}\hldef{}\hlnum{0.5}\hldef{}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlsng{"""}\hspace*{\fill}\\
+\hlsng{}\hldef{\ \ \ \ }\hlsng{Chebyshev\ coeffs\ (arrays\ only)\ for\ Wilkinson's\ poly\ with\ roots\ 1..n\ on\ {[}A,B{]}={[}1{-}pad,\ n+pad{]}.}\hspace*{\fill}\\
+\hlsng{}\hldef{\ \ \ \ }\hlsng{"""}\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{roots\ }\hlopt{=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{arange}\hldef{}\hlopt{(}\hldef{}\hlnum{1}\hldef{}\hlopt{,\ }\hldef{n}\hlopt{+}\hldef{}\hlnum{1}\hldef{}\hlopt{,\ }\hldef{dtype}\hlopt{=}\hldef{np}\hlopt{.}\hldef{float64}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{p\textunderscore x\ }\hlopt{=\ }\hldef{}\hlkwd{poly\textunderscore from\textunderscore roots}\hldef{}\hlopt{(}\hldef{roots}\hlopt{)}\hldef{\ \ }\hlopt{}\hldef{}\hlslc{\#\ ascending\ power\ coeffs\ in\ x}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{A}\hlopt{,\ }\hldef{B\ }\hlopt{=\ }\hldef{}\hlnum{1.0\ }\hldef{}\hlopt{{-}\ }\hldef{pad}\hlopt{,\ }\hldef{n\ }\hlopt{+\ }\hldef{pad}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{a\ }\hlopt{=\ }\hldef{}\hlkwd{cheb\textunderscore from\textunderscore power\textunderscore on\textunderscore domain}\hldef{}\hlopt{(}\hldef{p\textunderscore x}\hlopt{,\ }\hldef{A}\hlopt{,\ }\hldef{B}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{a}\hlopt{,\ }\hldef{A}\hlopt{,\ }\hldef{B}\hspace*{\fill}
+\mbox{}
+\normalfont
+\end{kframe}
+\end{knitrout}
+
+\end{minipage}
+\\
+\bottomrule
+\end{tabular}
+\end{tabular}
+\end{center}
+
+
+\newpage
+\subsection{Aberth–Ehrlich in Chebyshev basis (arrays only)}
+
+\begin{center}
+\begin{tabular}{c}
+\begin{tabular}{m{10cm}m{10cm}}
+\toprule
+Aberth & Examples \\
+\midrule
+\begin{minipage}[m]{10cm}
+\begin{knitrout}\tiny
+\definecolor{shadecolor}{rgb}{0.969, 0.969, 0.969}\color{fgcolor}\begin{kframe}
+\noindent
+\ttfamily
+\hldef{}\hlkwb{@njit}\hldef{}\hlopt{(}\hldef{fastmath}\hlopt{=}\hldef{}\hlkwa{True}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{cheb\textunderscore nodes\textunderscore initial\textunderscore guess}\hldef{}\hlopt{(}\hldef{n}\hlopt{,\ }\hldef{A}\hlopt{,\ }\hldef{B}\hlopt{,\ }\hldef{jitter}\hlopt{=}\hldef{}\hlnum{1e{-}12}\hldef{}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlsng{"""}\hspace*{\fill}\\
+\hlsng{}\hldef{\ \ \ \ }\hlsng{Chebyshev\ nodes\ on\ {[}A,B{]}\ with\ tiny\ imaginary\ jitter\ to\ break\ symmetry.}\hspace*{\fill}\\
+\hlsng{}\hldef{\ \ \ \ }\hlsng{Returns\ complex128\ array\ of\ length\ n.}\hspace*{\fill}\\
+\hlsng{}\hldef{\ \ \ \ }\hlsng{"""}\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{k\ }\hlopt{=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{arange}\hldef{}\hlopt{(}\hldef{}\hlnum{1}\hldef{}\hlopt{,\ }\hldef{n}\hlopt{+}\hldef{}\hlnum{1}\hldef{}\hlopt{,\ }\hldef{dtype}\hlopt{=}\hldef{np}\hlopt{.}\hldef{float64}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{nodes\ }\hlopt{=\ }\hldef{}\hlnum{0.5}\hldef{}\hlopt{{*}(}\hldef{A}\hlopt{+}\hldef{B}\hlopt{)\ +\ }\hldef{}\hlnum{0.5}\hldef{}\hlopt{{*}(}\hldef{B}\hlopt{{-}}\hldef{A}\hlopt{){*}}\hldef{np}\hlopt{.}\hldef{}\hlkwd{cos}\hldef{}\hlopt{((}\hldef{}\hlnum{2.0}\hldef{}\hlopt{{*}}\hldef{k\ }\hlopt{{-}\ }\hldef{}\hlnum{1.0}\hldef{}\hlopt{){*}}\hldef{np}\hlopt{.}\hldef{pi}\hlopt{/(}\hldef{}\hlnum{2.0}\hldef{}\hlopt{{*}}\hldef{n}\hlopt{))}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{z0\ }\hlopt{=\ }\hldef{nodes}\hlopt{.}\hldef{}\hlkwd{astype}\hldef{}\hlopt{(}\hldef{np}\hlopt{.}\hldef{complex128}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{z0\ }\hlopt{+=\ }\hldef{}\hlnum{1}\hldef{j}\hlopt{{*}}\hldef{jitter}\hlopt{{*}(}\hldef{}\hlnum{1.0\ }\hldef{}\hlopt{+\ }\hldef{}\hlnum{0.1}\hldef{}\hlopt{{*}}\hldef{k}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{z0}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hlkwb{@njit}\hldef{}\hlopt{(}\hldef{fastmath}\hlopt{=}\hldef{}\hlkwa{True}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{aberth\textunderscore cheb\textunderscore array}\hldef{}\hlopt{(}\hldef{a}\hlopt{,\ }\hldef{A}\hlopt{,\ }\hldef{B}\hlopt{,\ }\hldef{z0}\hlopt{,\ }\hldef{maxiter}\hlopt{=}\hldef{}\hlnum{200}\hldef{}\hlopt{,\ }\hldef{tol}\hlopt{=}\hldef{}\hlnum{1e{-}14}\hldef{}\hlopt{,\ }\hldef{step\textunderscore cap\textunderscore factor}\hlopt{=}\hldef{}\hlnum{0.25}\hldef{}\hlopt{,\ }\hldef{eps}\hlopt{=}\hldef{}\hlnum{1e{-}30}\hldef{}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{n\ }\hlopt{=\ }\hldef{a}\hlopt{.}\hldef{shape}\hlopt{{[}}\hldef{}\hlnum{0}\hldef{}\hlopt{{]}\ {-}\ }\hldef{}\hlnum{1}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{if\ }\hldef{n\ }\hlopt{$<$=\ }\hldef{}\hlnum{0}\hldef{}\hlopt{:}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{empty}\hldef{}\hlopt{(}\hldef{}\hlnum{0}\hldef{}\hlopt{,\ }\hldef{dtype}\hlopt{=}\hldef{np}\hlopt{.}\hldef{complex128}\hlopt{),\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{int64}\hldef{}\hlopt{(}\hldef{}\hlnum{0}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{if\ }\hldef{z0\ }\hlkwa{is\ None\ or\ }\hldef{}\hlkwb{len}\hldef{}\hlopt{(}\hldef{z0}\hlopt{)\ !=\ }\hldef{n}\hlopt{:}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{empty}\hldef{}\hlopt{(}\hldef{}\hlnum{0}\hldef{}\hlopt{,\ }\hldef{dtype}\hlopt{=}\hldef{np}\hlopt{.}\hldef{complex128}\hlopt{),\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{int64}\hldef{}\hlopt{(}\hldef{}\hlnum{0}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{z\ }\hlopt{=\ }\hldef{z0}\hlopt{.}\hldef{}\hlkwd{copy}\hldef{}\hlopt{()}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{ap\textunderscore y\ }\hlopt{=\ }\hldef{}\hlkwd{cheb\textunderscore derivative\textunderscore coeffs\textunderscore y}\hldef{}\hlopt{(}\hldef{a}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{W\ }\hlopt{=\ }\hldef{B\ }\hlopt{{-}\ }\hldef{A}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{cap\ }\hlopt{=\ }\hldef{step\textunderscore cap\textunderscore factor\ }\hlopt{{*}\ }\hldef{W}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlslc{\#\ hoisted\ work\ arrays}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{pz}\hldef{\ \ }\hldef{}\hlopt{=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{empty}\hldef{}\hlopt{(}\hldef{n}\hlopt{,\ }\hldef{dtype}\hlopt{=}\hldef{np}\hlopt{.}\hldef{complex128}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{dpz\ }\hlopt{=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{empty}\hldef{}\hlopt{(}\hldef{n}\hlopt{,\ }\hldef{dtype}\hlopt{=}\hldef{np}\hlopt{.}\hldef{complex128}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{S}\hldef{\ \ \ }\hldef{}\hlopt{=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{empty}\hldef{}\hlopt{(}\hldef{n}\hlopt{,\ }\hldef{dtype}\hlopt{=}\hldef{np}\hlopt{.}\hldef{complex128}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{dz}\hldef{\ \ }\hldef{}\hlopt{=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{empty}\hldef{}\hlopt{(}\hldef{n}\hlopt{,\ }\hldef{dtype}\hlopt{=}\hldef{np}\hlopt{.}\hldef{complex128}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{iters\ }\hlopt{=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{int64}\hldef{}\hlopt{(}\hldef{}\hlnum{0}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{for\ }\hldef{t\ }\hlkwa{in\ }\hldef{}\hlkwb{range}\hldef{}\hlopt{(}\hldef{maxiter}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{iters\ }\hlopt{=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{int64}\hldef{}\hlopt{(}\hldef{t}\hlopt{+}\hldef{}\hlnum{1}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlslc{\#\ batch\ eval\ p\ and\ p'}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlkwd{cheb\textunderscore eval\textunderscore deriv\textunderscore batch}\hldef{}\hlopt{(}\hldef{a}\hlopt{,\ }\hldef{ap\textunderscore y}\hlopt{,\ }\hldef{z}\hlopt{,\ }\hldef{A}\hlopt{,\ }\hldef{B}\hlopt{,\ }\hldef{pz}\hlopt{,\ }\hldef{dpz}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlslc{\#\ tiny{-}derivative\ guard}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlkwa{for\ }\hldef{j\ }\hlkwa{in\ }\hldef{}\hlkwb{range}\hldef{}\hlopt{(}\hldef{n}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{}\hlkwa{if\ }\hldef{}\hlkwb{abs}\hldef{}\hlopt{(}\hldef{dpz}\hlopt{{[}}\hldef{j}\hlopt{{]})\ $<$\ }\hldef{eps\ }\hlopt{{*}\ }\hldef{}\hlkwb{max}\hldef{}\hlopt{(}\hldef{}\hlnum{1.0}\hldef{}\hlopt{,\ }\hldef{}\hlkwb{abs}\hldef{}\hlopt{(}\hldef{pz}\hlopt{{[}}\hldef{j}\hlopt{{]})):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ }\hldef{dpz}\hlopt{{[}}\hldef{j}\hlopt{{]}\ =\ }\hldef{dpz}\hlopt{{[}}\hldef{j}\hlopt{{]}\ +\ }\hldef{eps}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlslc{\#\ Newton\ ratios}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlkwa{for\ }\hldef{j\ }\hlkwa{in\ }\hldef{}\hlkwb{range}\hldef{}\hlopt{(}\hldef{n}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{pzj\ }\hlopt{=\ }\hldef{pz}\hlopt{{[}}\hldef{j}\hlopt{{]};\ }\hldef{dpzj\ }\hlopt{=\ }\hldef{dpz}\hlopt{{[}}\hldef{j}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{pz}\hlopt{{[}}\hldef{j}\hlopt{{]}\ =\ }\hldef{pzj\ }\hlopt{/\ }\hldef{dpzj}\hldef{\ \ }\hldef{}\hlslc{\#\ reuse\ pz\ as\ ratio\ buffer}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlslc{\#\ harmonic\ sums\ S\textunderscore j\ =\ sum\textunderscore \{k!=j\}\ 1/(z\textunderscore j\ {-}\ z\textunderscore k)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlkwa{for\ }\hldef{j\ }\hlkwa{in\ }\hldef{}\hlkwb{range}\hldef{}\hlopt{(}\hldef{n}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{zj\ }\hlopt{=\ }\hldef{z}\hlopt{{[}}\hldef{j}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{ssum\ }\hlopt{=\ }\hldef{}\hlnum{0.0\ }\hldef{}\hlopt{+\ }\hldef{}\hlnum{0.0}\hldef{j}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{}\hlkwa{for\ }\hldef{k\ }\hlkwa{in\ }\hldef{}\hlkwb{range}\hldef{}\hlopt{(}\hldef{n}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ }\hldef{}\hlkwa{if\ }\hldef{k\ }\hlopt{!=\ }\hldef{j}\hlopt{:}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ }\hldef{ssum\ }\hlopt{+=\ }\hldef{}\hlnum{1.0\ }\hldef{}\hlopt{/\ (}\hldef{zj\ }\hlopt{{-}\ }\hldef{z}\hlopt{{[}}\hldef{k}\hlopt{{]})}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{S}\hlopt{{[}}\hldef{j}\hlopt{{]}\ =\ }\hldef{ssum}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlslc{\#\ Aberth\ step\ with\ cap}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlkwa{for\ }\hldef{j\ }\hlkwa{in\ }\hldef{}\hlkwb{range}\hldef{}\hlopt{(}\hldef{n}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{denom\ }\hlopt{=\ }\hldef{}\hlnum{1.0\ }\hldef{}\hlopt{{-}\ }\hldef{pz}\hlopt{{[}}\hldef{j}\hlopt{{]}{*}}\hldef{S}\hlopt{{[}}\hldef{j}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{step\ }\hlopt{=\ }\hldef{pz}\hlopt{{[}}\hldef{j}\hlopt{{]}\ /\ }\hldef{denom}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{mj\ }\hlopt{=\ }\hldef{}\hlkwb{abs}\hldef{}\hlopt{(}\hldef{step}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{}\hlkwa{if\ }\hldef{mj\ }\hlopt{$>$\ }\hldef{cap}\hlopt{:}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ }\hldef{step\ }\hlopt{{*}=\ (}\hldef{cap\ }\hlopt{/\ }\hldef{mj}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{dz}\hlopt{{[}}\hldef{j}\hlopt{{]}\ =\ }\hldef{step}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlslc{\#\ update}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlkwa{for\ }\hldef{j\ }\hlkwa{in\ }\hldef{}\hlkwb{range}\hldef{}\hlopt{(}\hldef{n}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{z}\hlopt{{[}}\hldef{j}\hlopt{{]}\ {-}=\ }\hldef{dz}\hlopt{{[}}\hldef{j}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlslc{\#\ relative\ convergence}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{rel\ }\hlopt{=\ }\hldef{}\hlnum{0.0}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlkwa{for\ }\hldef{j\ }\hlkwa{in\ }\hldef{}\hlkwb{range}\hldef{}\hlopt{(}\hldef{n}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{zj\ }\hlopt{=\ }\hldef{z}\hlopt{{[}}\hldef{j}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{step\textunderscore rel\ }\hlopt{=\ }\hldef{}\hlkwb{abs}\hldef{}\hlopt{(}\hldef{dz}\hlopt{{[}}\hldef{j}\hlopt{{]})\ /\ }\hldef{}\hlkwb{max}\hldef{}\hlopt{(}\hldef{}\hlnum{1.0}\hldef{}\hlopt{,\ }\hldef{}\hlkwb{abs}\hldef{}\hlopt{(}\hldef{zj}\hlopt{))}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{}\hlkwa{if\ }\hldef{step\textunderscore rel\ }\hlopt{$>$\ }\hldef{rel}\hlopt{:}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ }\hldef{rel\ }\hlopt{=\ }\hldef{step\textunderscore rel}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlkwa{if\ }\hldef{rel\ }\hlopt{$<$\ }\hldef{tol}\hlopt{:}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{}\hlkwa{break}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{z}\hlopt{,\ }\hldef{iters}\hspace*{\fill}
+\mbox{}
+\normalfont
+\end{kframe}
+\end{knitrout}
+\end{minipage}
+&
+\begin{minipage}[m]{10cm}
+\begin{knitrout}\tiny
+\definecolor{shadecolor}{rgb}{0.969, 0.969, 0.969}\color{fgcolor}\begin{kframe}
+\noindent
+\ttfamily
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{show\textunderscore roots}\hldef{}\hlopt{(}\hldef{roots}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{roots\textunderscore sorted\ }\hlopt{=\ }\hldef{}\hlkwb{sorted}\hldef{}\hlopt{(}\hldef{roots}\hlopt{,\ }\hldef{key}\hlopt{=}\hldef{}\hlkwa{lambda\ }\hldef{z}\hlopt{:\ }\hldef{z}\hlopt{.}\hldef{real}\hlopt{,}\hldef{reverse}\hlopt{=}\hldef{}\hlkwa{True}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{df\ }\hlopt{=\ }\hldef{pd}\hlopt{.}\hldef{}\hlkwd{DataFrame}\hldef{}\hlopt{(\{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlsng{"Real\ Part"}\hldef{}\hlopt{:\ {[}}\hldef{}\hlkwb{round}\hldef{}\hlopt{(}\hldef{r}\hlopt{.}\hldef{real}\hlopt{,\ }\hldef{}\hlnum{3}\hldef{}\hlopt{)\ }\hldef{}\hlkwa{for\ }\hldef{r\ }\hlkwa{in\ }\hldef{roots\textunderscore sorted}\hlopt{{]},}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlsng{"Imag\ Part"}\hldef{}\hlopt{:\ {[}}\hldef{}\hlkwb{round}\hldef{}\hlopt{(}\hldef{r}\hlopt{.}\hldef{imag}\hlopt{,\ }\hldef{}\hlnum{15}\hldef{}\hlopt{)\ }\hldef{}\hlkwa{for\ }\hldef{r\ }\hlkwa{in\ }\hldef{roots\textunderscore sorted}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlopt{\})}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{print}\hldef{}\hlopt{(}\hldef{df}\hlopt{.}\hldef{}\hlkwd{to\textunderscore string}\hldef{}\hlopt{(}\hldef{index}\hlopt{=}\hldef{}\hlkwa{False}\hldef{}\hlopt{))}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hlslc{\#\ Example:\ Wilkinson\ n=15\ on\ a\ safely\ scaled\ domain}\hspace*{\fill}\\
+\hldef{n\ }\hlopt{=\ }\hldef{}\hlnum{20}\hspace*{\fill}\\
+\hldef{cp}\hlopt{,\ }\hldef{A}\hlopt{,\ }\hldef{B\ }\hlopt{=\ }\hldef{}\hlkwd{wilkinson\textunderscore cheb\textunderscore array}\hldef{}\hlopt{(}\hldef{n}\hlopt{,\ }\hldef{pad}\hlopt{=}\hldef{}\hlnum{0.5}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{guess\ }\hlopt{=\ }\hldef{}\hlkwd{cheb\textunderscore nodes\textunderscore initial\textunderscore guess}\hldef{}\hlopt{(}\hldef{n}\hlopt{,\ }\hldef{A}\hlopt{,\ }\hldef{B}\hlopt{)}\hspace*{\fill}\\
+\hldef{cr}\hlopt{,\ }\hldef{niter\ }\hlopt{=\ }\hldef{}\hlkwd{aberth\textunderscore cheb\textunderscore array}\hldef{}\hlopt{(}\hldef{cp}\hlopt{,\ }\hldef{A}\hlopt{,\ }\hldef{B}\hlopt{,\ }\hldef{guess}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hlkwa{print}\hldef{}\hlopt{(}\hldef{f}\hlsng{"iterations:\ }\hlipl{\{niter\}}\hlsng{"}\hldef{}\hlopt{)}\hldef{}\hspace*{\fill}
+\mbox{}
+\normalfont
+\begin{verbatim}
+## iterations: 200
+\end{verbatim}
+\noindent
+\ttfamily
+\hldef{}\hlkwd{show\textunderscore roots}\hldef{}\hlopt{(}\hldef{cr}\hlopt{)}\hldef{}\hspace*{\fill}
+\mbox{}
+\normalfont
+\begin{verbatim}
+##  Real Part  Imag Part
+##     20.000        0.0
+##     19.000       -0.0
+##     18.000       -0.0
+##     16.999       -0.0
+##     16.003        0.0
+##     14.996        0.0
+##     14.004       -0.0
+##     12.996        0.0
+##     12.002        0.0
+##     10.999       -0.0
+##     10.000       -0.0
+##      9.000        0.0
+##      8.000        0.0
+##      7.000       -0.0
+##      6.000        0.0
+##      5.000        0.0
+##      4.000       -0.0
+##      3.000        0.0
+##      2.000        0.0
+##      1.000        0.0
+\end{verbatim}
+\noindent
+\ttfamily
+\hldef{pp\ }\hlopt{=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{poly}\hldef{}\hlopt{(}\hldef{np}\hlopt{.}\hldef{}\hlkwd{arange}\hldef{}\hlopt{(}\hldef{}\hlnum{1}\hldef{}\hlopt{,\ }\hldef{n}\hlopt{+}\hldef{}\hlnum{1}\hldef{}\hlopt{,\ }\hldef{dtype}\hlopt{=}\hldef{np}\hlopt{.}\hldef{complex128}\hlopt{))}\hspace*{\fill}\\
+\hldef{pr\ }\hlopt{=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{roots}\hldef{}\hlopt{(}\hldef{pp}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hlkwd{show\textunderscore roots}\hldef{}\hlopt{(}\hldef{pr}\hlopt{)}\hldef{}\hspace*{\fill}
+\mbox{}
+\normalfont
+\begin{verbatim}
+##  Real Part  Imag Part
+##     20.000        0.0
+##     18.999        0.0
+##     18.006        0.0
+##     16.984        0.0
+##     16.028        0.0
+##     14.962        0.0
+##     14.039        0.0
+##     12.968        0.0
+##     12.023        0.0
+##     10.987        0.0
+##     10.006        0.0
+##      8.998        0.0
+##      8.001        0.0
+##      7.000        0.0
+##      6.000        0.0
+##      5.000        0.0
+##      4.000        0.0
+##      3.000        0.0
+##      2.000        0.0
+##      1.000        0.0
+\end{verbatim}
+\noindent
+\ttfamily
+\hldef{tpp}\hlopt{=}\hldef{timeit}\hlopt{.}\hldef{}\hlkwd{timeit}\hldef{}\hlopt{(}\hldef{}\hlsng{"np.roots(pp)"}\hldef{}\hlopt{,\ }\hldef{}\hlkwb{globals}\hldef{}\hlopt{=}\hldef{}\hlkwb{globals}\hldef{}\hlopt{(),\ }\hldef{number}\hlopt{=}\hldef{}\hlnum{100}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{tcp}\hlopt{=}\hldef{timeit}\hlopt{.}\hldef{}\hlkwd{timeit}\hldef{}\hlopt{(}\hldef{}\hlsng{"aberth\textunderscore cheb\textunderscore array(cp,\ A,\ B,\ guess)"}\hldef{}\hlopt{,\ }\hldef{}\hlkwb{globals}\hldef{}\hlopt{=}\hldef{}\hlkwb{globals}\hldef{}\hlopt{(),\ }\hldef{number}\hlopt{=}\hldef{}\hlnum{100}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hlkwa{print}\hldef{}\hlopt{(}\hldef{f}\hlsng{"}\hlipl{\{tcp/tpp:.2f\}}\hlsng{x\ slower\ than\ np.roots"}\hldef{}\hlopt{)}\hldef{}\hspace*{\fill}
+\mbox{}
+\normalfont
+\begin{verbatim}
+## 6.48x slower than np.roots
+\end{verbatim}
+\end{kframe}
+\end{knitrout}
+
+\end{minipage}
+\\
+\bottomrule
+\end{tabular}
+\end{tabular}
+\end{center}
+
+\newpage
+\section{Poly Manifold benchmarks}
+\subsection{Tile Scanners, Pertubators}
+\begin{center}
+\begin{tabular}{c}
+\begin{tabular}{m{10cm}m{10cm}}
+\toprule
+Chebyshev & np.roots \\
+\midrule
+\begin{minipage}[m]{10cm}
+\begin{knitrout}\tiny
+\definecolor{shadecolor}{rgb}{0.969, 0.969, 0.969}\color{fgcolor}\begin{kframe}
+\noindent
+\ttfamily
+\hldef{}\hlkwb{@njit}\hspace*{\fill}\\
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{tile\textunderscore job}\hldef{}\hlopt{(}\hldef{cf}\hlopt{,\ }\hldef{A}\hlopt{,\ }\hldef{B}\hlopt{,\ }\hldef{s\textunderscore start}\hlopt{,\ }\hldef{s\textunderscore end}\hlopt{,\ }\hldef{t\textunderscore start}\hlopt{,\ }\hldef{t\textunderscore end}\hlopt{,\ }\hldef{n\textunderscore points}\hlopt{,\ }\hldef{perturb}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{degree\ }\hlopt{=\ }\hldef{cf}\hlopt{.}\hldef{shape}\hlopt{{[}}\hldef{}\hlnum{0}\hldef{}\hlopt{{]}\ {-}\ }\hldef{}\hlnum{1}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{steps}\hldef{\ \ }\hldef{}\hlopt{=\ }\hldef{}\hlkwb{int}\hldef{}\hlopt{(}\hldef{np}\hlopt{.}\hldef{}\hlkwd{sqrt}\hldef{}\hlopt{(}\hldef{n\textunderscore points}\hlopt{))}\hldef{\ \ \ }\hlopt{}\hldef{}\hlslc{\#\ assume\ perfect\ square}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{s\textunderscore step\ }\hlopt{=\ (}\hldef{s\textunderscore end\ }\hlopt{{-}\ }\hldef{s\textunderscore start}\hlopt{)\ /\ }\hldef{steps}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{t\textunderscore step\ }\hlopt{=\ (}\hldef{t\textunderscore end\ }\hlopt{{-}\ }\hldef{t\textunderscore start}\hlopt{)\ /\ }\hldef{steps}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{out\ }\hlopt{=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{empty}\hldef{}\hlopt{((}\hldef{n\textunderscore points\ }\hlopt{{*}\ }\hldef{degree}\hlopt{,\ }\hldef{}\hlnum{4}\hldef{}\hlopt{),\ }\hldef{dtype}\hlopt{=}\hldef{np}\hlopt{.}\hldef{float64}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{guess\ }\hlopt{=\ }\hldef{}\hlkwd{cheb\textunderscore nodes\textunderscore initial\textunderscore guess}\hldef{}\hlopt{(}\hldef{degree}\hlopt{,\ }\hldef{A}\hlopt{,\ }\hldef{B}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{prev\textunderscore guess\ }\hlopt{=\ }\hldef{guess}\hlopt{.}\hldef{}\hlkwd{copy}\hldef{}\hlopt{()}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{idx\ }\hlopt{=\ }\hldef{}\hlnum{0}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{i\ }\hlopt{=\ }\hldef{}\hlnum{0}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{j\ }\hlopt{=\ }\hldef{}\hlnum{0}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{dj\ }\hlopt{=\ }\hldef{}\hlnum{1}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{tot\textunderscore niter\ }\hlopt{=\ }\hldef{}\hlnum{0}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{for\ }\hldef{k\ }\hlkwa{in\ }\hldef{}\hlkwb{range}\hldef{}\hlopt{(}\hldef{n\textunderscore points}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{s\ }\hlopt{=\ }\hldef{s\textunderscore start\ }\hlopt{+\ }\hldef{i\ }\hlopt{{*}\ }\hldef{s\textunderscore step}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{t\ }\hlopt{=\ }\hldef{t\textunderscore start\ }\hlopt{+\ }\hldef{j\ }\hlopt{{*}\ }\hldef{t\textunderscore step}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{local\textunderscore cf\ }\hlopt{=\ }\hldef{}\hlkwd{perturb}\hldef{}\hlopt{(}\hldef{cf}\hlopt{,\ }\hldef{s}\hlopt{,\ }\hldef{t}\hlopt{)}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ }\hlopt{}\hldef{}\hlslc{\#\ must\ be\ @njit}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{roots}\hlopt{,\ }\hldef{niter\ }\hlopt{=\ }\hldef{}\hlkwd{aberth\textunderscore cheb\textunderscore array}\hldef{}\hlopt{(}\hldef{local\textunderscore cf}\hlopt{,\ }\hldef{A}\hlopt{,\ }\hldef{B}\hlopt{,\ }\hldef{guess}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{tot\textunderscore niter\ }\hlopt{+=\ }\hldef{niter}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlkwa{for\ }\hldef{r\ }\hlkwa{in\ }\hldef{}\hlkwb{range}\hldef{}\hlopt{(}\hldef{degree}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{z\ }\hlopt{=\ }\hldef{roots}\hlopt{{[}}\hldef{r}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{out}\hlopt{{[}}\hldef{idx}\hlopt{,\ }\hldef{}\hlnum{0}\hldef{}\hlopt{{]}\ =\ }\hldef{z}\hlopt{.}\hldef{real}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{out}\hlopt{{[}}\hldef{idx}\hlopt{,\ }\hldef{}\hlnum{1}\hldef{}\hlopt{{]}\ =\ }\hldef{z}\hlopt{.}\hldef{imag}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{out}\hlopt{{[}}\hldef{idx}\hlopt{,\ }\hldef{}\hlnum{2}\hldef{}\hlopt{{]}\ =\ }\hldef{s}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{out}\hlopt{{[}}\hldef{idx}\hlopt{,\ }\hldef{}\hlnum{3}\hldef{}\hlopt{{]}\ =\ }\hldef{t}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{idx\ }\hlopt{+=\ }\hldef{}\hlnum{1}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{guess\ }\hlopt{=\ }\hldef{roots\ }\hlopt{+\ (}\hldef{roots\ }\hlopt{{-}\ }\hldef{prev\textunderscore guess}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{prev\textunderscore guess\ }\hlopt{=\ }\hldef{roots}\hlopt{.}\hldef{}\hlkwd{copy}\hldef{}\hlopt{()}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{j\ }\hlopt{+=\ }\hldef{dj}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlkwa{if\ }\hldef{j\ }\hlopt{==\ }\hldef{steps\ }\hlkwa{or\ }\hldef{j\ }\hlopt{$<$\ }\hldef{}\hlnum{0}\hldef{}\hlopt{:}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{i\ }\hlopt{+=\ }\hldef{}\hlnum{1}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{dj\ }\hlopt{=\ {-}}\hldef{dj}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{j\ }\hlopt{+=\ }\hldef{dj}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{guess\ }\hlopt{=\ }\hldef{roots}\hlopt{.}\hldef{}\hlkwd{copy}\hldef{}\hlopt{()}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{prev\textunderscore guess\ }\hlopt{=\ }\hldef{guess}\hlopt{.}\hldef{}\hlkwd{copy}\hldef{}\hlopt{()}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{out}\hlopt{,\ }\hldef{tot\textunderscore niter}\hspace*{\fill}
+\mbox{}
+\normalfont
+\end{kframe}
+\end{knitrout}
+\end{minipage}
+&
+\begin{minipage}[m]{10cm}
+\begin{knitrout}\tiny
+\definecolor{shadecolor}{rgb}{0.969, 0.969, 0.969}\color{fgcolor}\begin{kframe}
+\noindent
+\ttfamily
+\hldef{}\hlkwb{@njit}\hspace*{\fill}\\
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{perturb\textunderscore 1}\hldef{}\hlopt{(}\hldef{cf}\hlopt{,}\hldef{s}\hlopt{,}\hldef{t}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{PI2\ }\hlopt{=\ }\hldef{}\hlnum{2\ }\hldef{}\hlopt{{*}\ }\hldef{np}\hlopt{.}\hldef{pi}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf\ }\hlopt{=\ }\hldef{cf}\hlopt{.}\hldef{}\hlkwd{copy}\hldef{}\hlopt{()}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf}\hlopt{{[}{-}}\hldef{}\hlnum{2}\hldef{}\hlopt{{]}}\hldef{\ \ }\hlopt{{*}=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{exp}\hldef{}\hlopt{(}\hldef{}\hlnum{1}\hldef{j\ }\hlopt{{*}\ }\hldef{PI2\ }\hlopt{{*}\ }\hldef{t}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf}\hlopt{{[}{-}}\hldef{}\hlnum{3}\hldef{}\hlopt{{]}}\hldef{\ \ }\hlopt{{*}=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{exp}\hldef{}\hlopt{(}\hldef{}\hlnum{1}\hldef{j\ }\hlopt{{*}\ }\hldef{PI2\ }\hlopt{{*}\ }\hldef{s\ }\hlopt{{*}\ }\hldef{t}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf}\hlopt{{[}{-}}\hldef{}\hlnum{6}\hldef{}\hlopt{{]}}\hldef{\ \ }\hlopt{{*}=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{exp}\hldef{}\hlopt{(}\hldef{}\hlnum{1}\hldef{j\ }\hlopt{{*}\ }\hldef{PI2\ }\hlopt{{*}\ (}\hldef{s\ }\hlopt{{-}\ }\hldef{t}\hlopt{))}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf}\hlopt{{[}{-}}\hldef{}\hlnum{10}\hldef{}\hlopt{{]}}\hldef{\ \ }\hlopt{{*}=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{exp}\hldef{}\hlopt{(}\hldef{}\hlnum{1}\hldef{j\ }\hlopt{{*}\ }\hldef{PI2\ }\hlopt{{*}\ (}\hldef{s\ }\hlopt{+\ }\hldef{t}\hlopt{))}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf}\hlopt{{[}}\hldef{}\hlnum{0}\hldef{}\hlopt{{]}\ {*}=\ }\hldef{s\ }\hlopt{{*}\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{exp}\hldef{}\hlopt{(}\hldef{}\hlnum{1}\hldef{j\ }\hlopt{{*}\ }\hldef{PI2\ }\hlopt{{*}\ }\hldef{t}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{perturbed\textunderscore cf}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hlkwb{@njit}\hspace*{\fill}\\
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{perturb\textunderscore 1\textunderscore np}\hldef{}\hlopt{(}\hldef{cf}\hlopt{,}\hldef{s}\hlopt{,}\hldef{t}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{PI2\ }\hlopt{=\ }\hldef{}\hlnum{2\ }\hldef{}\hlopt{{*}\ }\hldef{np}\hlopt{.}\hldef{pi}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf\ }\hlopt{=\ }\hldef{cf}\hlopt{.}\hldef{}\hlkwd{copy}\hldef{}\hlopt{()}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf}\hlopt{{[}}\hldef{}\hlnum{1}\hldef{}\hlopt{{]}}\hldef{\ \ }\hlopt{{*}=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{exp}\hldef{}\hlopt{(}\hldef{}\hlnum{1}\hldef{j\ }\hlopt{{*}\ }\hldef{PI2\ }\hlopt{{*}\ }\hldef{t}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf}\hlopt{{[}}\hldef{}\hlnum{2}\hldef{}\hlopt{{]}}\hldef{\ \ }\hlopt{{*}=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{exp}\hldef{}\hlopt{(}\hldef{}\hlnum{1}\hldef{j\ }\hlopt{{*}\ }\hldef{PI2\ }\hlopt{{*}\ }\hldef{s\ }\hlopt{{*}\ }\hldef{t}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf}\hlopt{{[}}\hldef{}\hlnum{5}\hldef{}\hlopt{{]}}\hldef{\ \ }\hlopt{{*}=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{exp}\hldef{}\hlopt{(}\hldef{}\hlnum{1}\hldef{j\ }\hlopt{{*}\ }\hldef{PI2\ }\hlopt{{*}\ (}\hldef{s\ }\hlopt{{-}\ }\hldef{t}\hlopt{))}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf}\hlopt{{[}}\hldef{}\hlnum{9}\hldef{}\hlopt{{]}}\hldef{\ \ }\hlopt{{*}=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{exp}\hldef{}\hlopt{(}\hldef{}\hlnum{1}\hldef{j\ }\hlopt{{*}\ }\hldef{PI2\ }\hlopt{{*}\ (}\hldef{s\ }\hlopt{+\ }\hldef{t}\hlopt{))}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf}\hlopt{{[}{-}}\hldef{}\hlnum{1}\hldef{}\hlopt{{]}\ {*}=\ }\hldef{s\ }\hlopt{{*}\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{exp}\hldef{}\hlopt{(}\hldef{}\hlnum{1}\hldef{j\ }\hlopt{{*}\ }\hldef{PI2\ }\hlopt{{*}\ }\hldef{t}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{perturbed\textunderscore cf}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{tile\textunderscore job\textunderscore np}\hldef{}\hlopt{(}\hldef{cf\textunderscore desc}\hlopt{,\ }\hldef{s\textunderscore start}\hlopt{,\ }\hldef{s\textunderscore end}\hlopt{,\ }\hldef{t\textunderscore start}\hlopt{,\ }\hldef{t\textunderscore end}\hlopt{,\ }\hldef{n\textunderscore points}\hlopt{,\ }\hldef{perturb}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{degree\ }\hlopt{=\ }\hldef{}\hlkwb{len}\hldef{}\hlopt{(}\hldef{cf\textunderscore desc}\hlopt{)\ {-}\ }\hldef{}\hlnum{1}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{steps}\hldef{\ \ }\hldef{}\hlopt{=\ }\hldef{}\hlkwb{int}\hldef{}\hlopt{(}\hldef{np}\hlopt{.}\hldef{}\hlkwd{sqrt}\hldef{}\hlopt{(}\hldef{n\textunderscore points}\hlopt{))}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{if\ }\hldef{steps\ }\hlopt{{*}\ }\hldef{steps\ }\hlopt{!=\ }\hldef{n\textunderscore points}\hlopt{:}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlkwa{raise\ }\hldef{}\hlkwc{ValueError}\hldef{}\hlopt{(}\hldef{}\hlsng{"n\textunderscore points\ must\ be\ a\ perfect\ square"}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{s\textunderscore step\ }\hlopt{=\ (}\hldef{s\textunderscore end\ }\hlopt{{-}\ }\hldef{s\textunderscore start}\hlopt{)\ /\ }\hldef{steps}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{t\textunderscore step\ }\hlopt{=\ (}\hldef{t\textunderscore end\ }\hlopt{{-}\ }\hldef{t\textunderscore start}\hlopt{)\ /\ }\hldef{steps}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{out\ }\hlopt{=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{empty}\hldef{}\hlopt{((}\hldef{n\textunderscore points\ }\hlopt{{*}\ }\hldef{degree}\hlopt{,\ }\hldef{}\hlnum{4}\hldef{}\hlopt{),\ }\hldef{dtype}\hlopt{=}\hldef{np}\hlopt{.}\hldef{float64}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{idx\ }\hlopt{=\ }\hldef{}\hlnum{0}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{for\ }\hldef{i\ }\hlkwa{in\ }\hldef{}\hlkwb{range}\hldef{}\hlopt{(}\hldef{steps}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{s\ }\hlopt{=\ }\hldef{s\textunderscore start\ }\hlopt{+\ }\hldef{i\ }\hlopt{{*}\ }\hldef{s\textunderscore step}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlkwa{for\ }\hldef{j\ }\hlkwa{in\ }\hldef{}\hlkwb{range}\hldef{}\hlopt{(}\hldef{steps}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{t\ }\hlopt{=\ }\hldef{t\textunderscore start\ }\hlopt{+\ }\hldef{j\ }\hlopt{{*}\ }\hldef{t\textunderscore step}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{local\textunderscore cf\ }\hlopt{=\ }\hldef{}\hlkwd{perturb}\hldef{}\hlopt{(}\hldef{cf\textunderscore desc}\hlopt{,\ }\hldef{s}\hlopt{,\ }\hldef{t}\hlopt{)}\hldef{\ \ \ }\hlopt{}\hldef{}\hlslc{\#\ must\ be\ descending\ power{-}basis\ coeffs}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{roots\ }\hlopt{=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{roots}\hldef{}\hlopt{(}\hldef{local\textunderscore cf}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{}\hlkwa{for\ }\hldef{z\ }\hlkwa{in\ }\hldef{roots}\hlopt{:}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ }\hldef{out}\hlopt{{[}}\hldef{idx}\hlopt{,\ }\hldef{}\hlnum{0}\hldef{}\hlopt{{]}\ =\ }\hldef{z}\hlopt{.}\hldef{real}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ }\hldef{out}\hlopt{{[}}\hldef{idx}\hlopt{,\ }\hldef{}\hlnum{1}\hldef{}\hlopt{{]}\ =\ }\hldef{z}\hlopt{.}\hldef{imag}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ }\hldef{out}\hlopt{{[}}\hldef{idx}\hlopt{,\ }\hldef{}\hlnum{2}\hldef{}\hlopt{{]}\ =\ }\hldef{s}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ }\hldef{out}\hlopt{{[}}\hldef{idx}\hlopt{,\ }\hldef{}\hlnum{3}\hldef{}\hlopt{{]}\ =\ }\hldef{t}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ }\hldef{idx\ }\hlopt{+=\ }\hldef{}\hlnum{1}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{out}\hspace*{\fill}
+\mbox{}
+\normalfont
+\end{kframe}
+\end{knitrout}
+
+\end{minipage}
+\\
+\bottomrule
+\end{tabular}
+\end{tabular}
+\end{center}
+
+\newpage
+\subsection{Benchmarks, Results}
+\begin{center}
+\begin{tabular}{c}
+\begin{tabular}{m{10cm}m{10cm}}
+\toprule
+Output & Tests \\
+\midrule
+\begin{minipage}[m]{10cm}
+\begin{knitrout}\tiny
+\definecolor{shadecolor}{rgb}{0.969, 0.969, 0.969}\color{fgcolor}\begin{kframe}
+\noindent
+\ttfamily
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{plot\textunderscore manifold\textunderscore old}\hldef{}\hlopt{(}\hldef{mat}\hlopt{,\ }\hldef{title}\hlopt{,\ }\hldef{path}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{re}\hlopt{,\ }\hldef{im\ }\hlopt{=\ }\hldef{mat}\hlopt{{[}:,\ }\hldef{}\hlnum{0}\hldef{}\hlopt{{]},\ }\hldef{mat}\hlopt{{[}:,\ }\hldef{}\hlnum{1}\hldef{}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{fig}\hlopt{,\ }\hldef{ax\ }\hlopt{=\ }\hldef{plt}\hlopt{.}\hldef{}\hlkwd{subplots}\hldef{}\hlopt{()}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{ax}\hlopt{.}\hldef{}\hlkwd{scatter}\hldef{}\hlopt{(}\hldef{re}\hlopt{,\ }\hldef{im}\hlopt{,\ }\hldef{s}\hlopt{=}\hldef{}\hlnum{0.5}\hldef{}\hlopt{,\ }\hldef{marker}\hlopt{=}\hldef{}\hlsng{"."}\hldef{}\hlopt{,\ }\hldef{linewidths}\hlopt{=}\hldef{}\hlnum{0}\hldef{}\hlopt{,\ }\hldef{alpha}\hlopt{=}\hldef{}\hlnum{0.6}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{ax}\hlopt{.}\hldef{}\hlkwd{set\textunderscore aspect}\hldef{}\hlopt{(}\hldef{}\hlsng{"equal"}\hldef{}\hlopt{,\ }\hldef{adjustable}\hlopt{=}\hldef{}\hlsng{"box"}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{ax}\hlopt{.}\hldef{}\hlkwd{set\textunderscore xlabel}\hldef{}\hlopt{(}\hldef{}\hlsng{"Re(z)"}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{ax}\hlopt{.}\hldef{}\hlkwd{set\textunderscore ylabel}\hldef{}\hlopt{(}\hldef{}\hlsng{"Im(z)"}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{ax}\hlopt{.}\hldef{}\hlkwd{set\textunderscore title}\hldef{}\hlopt{(}\hldef{title}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{ax}\hlopt{.}\hldef{}\hlkwd{grid}\hldef{}\hlopt{(}\hldef{}\hlkwa{True}\hldef{}\hlopt{,\ }\hldef{linestyle}\hlopt{=}\hldef{}\hlsng{"{-}{-}"}\hldef{}\hlopt{,\ }\hldef{linewidth}\hlopt{=}\hldef{}\hlnum{0.5}\hldef{}\hlopt{,\ }\hldef{alpha}\hlopt{=}\hldef{}\hlnum{0.4}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{fig}\hlopt{.}\hldef{}\hlkwd{tight\textunderscore layout}\hldef{}\hlopt{()}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{fig}\hlopt{.}\hldef{}\hlkwd{savefig}\hldef{}\hlopt{(}\hldef{path}\hlopt{,\ }\hldef{dpi}\hlopt{=}\hldef{}\hlnum{500}\hldef{}\hlopt{,\ }\hldef{bbox\textunderscore inches}\hlopt{=}\hldef{}\hlsng{"tight"}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{plt}\hlopt{.}\hldef{}\hlkwd{close}\hldef{}\hlopt{(}\hldef{fig}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{plot\textunderscore manifold}\hldef{}\hlopt{(}\hldef{mat}\hlopt{,\ }\hldef{title}\hlopt{,\ }\hldef{path}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{re}\hlopt{,\ }\hldef{im\ }\hlopt{=\ }\hldef{mat}\hlopt{{[}:,\ }\hldef{}\hlnum{0}\hldef{}\hlopt{{]},\ }\hldef{mat}\hlopt{{[}:,\ }\hldef{}\hlnum{1}\hldef{}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlslc{\#\ square\ figure}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{fig}\hlopt{,\ }\hldef{ax\ }\hlopt{=\ }\hldef{plt}\hlopt{.}\hldef{}\hlkwd{subplots}\hldef{}\hlopt{(}\hldef{figsize}\hlopt{=(}\hldef{}\hlnum{6}\hldef{}\hlopt{,\ }\hldef{}\hlnum{6}\hldef{}\hlopt{),\ }\hldef{constrained\textunderscore layout}\hlopt{=}\hldef{}\hlkwa{True}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{ax}\hlopt{.}\hldef{}\hlkwd{scatter}\hldef{}\hlopt{(}\hldef{re}\hlopt{,\ }\hldef{im}\hlopt{,\ }\hldef{s}\hlopt{=}\hldef{}\hlnum{0.5}\hldef{}\hlopt{,\ }\hldef{marker}\hlopt{=}\hldef{}\hlsng{"."}\hldef{}\hlopt{,\ }\hldef{linewidths}\hlopt{=}\hldef{}\hlnum{0}\hldef{}\hlopt{,\ }\hldef{alpha}\hlopt{=}\hldef{}\hlnum{0.6}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlslc{\#\ make\ data\ ranges\ square\ around\ the\ center}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{xmin}\hlopt{,\ }\hldef{xmax\ }\hlopt{=\ }\hldef{re}\hlopt{.}\hldef{}\hlkwb{min}\hldef{}\hlopt{(),\ }\hldef{re}\hlopt{.}\hldef{}\hlkwb{max}\hldef{}\hlopt{()}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{ymin}\hlopt{,\ }\hldef{ymax\ }\hlopt{=\ }\hldef{im}\hlopt{.}\hldef{}\hlkwb{min}\hldef{}\hlopt{(),\ }\hldef{im}\hlopt{.}\hldef{}\hlkwb{max}\hldef{}\hlopt{()}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{cx}\hlopt{,\ }\hldef{cy\ }\hlopt{=\ (}\hldef{xmin\ }\hlopt{+\ }\hldef{xmax}\hlopt{)\ /\ }\hldef{}\hlnum{2.0}\hldef{}\hlopt{,\ (}\hldef{ymin\ }\hlopt{+\ }\hldef{ymax}\hlopt{)\ /\ }\hldef{}\hlnum{2.0}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{span\ }\hlopt{=\ }\hldef{}\hlkwb{max}\hldef{}\hlopt{(}\hldef{xmax\ }\hlopt{{-}\ }\hldef{xmin}\hlopt{,\ }\hldef{ymax\ }\hlopt{{-}\ }\hldef{ymin}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{pad\ }\hlopt{=\ }\hldef{}\hlnum{0.05\ }\hldef{}\hlopt{{*}\ }\hldef{span}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{half\ }\hlopt{=\ }\hldef{span\ }\hlopt{/\ }\hldef{}\hlnum{2.0\ }\hldef{}\hlopt{+\ }\hldef{pad}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{ax}\hlopt{.}\hldef{}\hlkwd{set\textunderscore xlim}\hldef{}\hlopt{(}\hldef{cx\ }\hlopt{{-}\ }\hldef{half}\hlopt{,\ }\hldef{cx\ }\hlopt{+\ }\hldef{half}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{ax}\hlopt{.}\hldef{}\hlkwd{set\textunderscore ylim}\hldef{}\hlopt{(}\hldef{cy\ }\hlopt{{-}\ }\hldef{half}\hlopt{,\ }\hldef{cy\ }\hlopt{+\ }\hldef{half}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlslc{\#\ enforce\ 1:1\ aspect}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{ax}\hlopt{.}\hldef{}\hlkwd{set\textunderscore aspect}\hldef{}\hlopt{(}\hldef{}\hlsng{'equal'}\hldef{}\hlopt{,\ }\hldef{adjustable}\hlopt{=}\hldef{}\hlsng{'box'}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{try}\hldef{}\hlopt{:}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{ax}\hlopt{.}\hldef{}\hlkwd{set\textunderscore box\textunderscore aspect}\hldef{}\hlopt{(}\hldef{}\hlnum{1}\hldef{}\hlopt{)}\hldef{\ \ }\hlopt{}\hldef{}\hlslc{\#\ mpl\ $>$=\ 3.3;\ keeps\ axes\ box\ square}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{except\ }\hldef{}\hlkwc{Exception}\hldef{}\hlopt{:}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlkwa{pass}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{ax}\hlopt{.}\hldef{}\hlkwd{set\textunderscore xlabel}\hldef{}\hlopt{(}\hldef{}\hlsng{"Re(z)"}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{ax}\hlopt{.}\hldef{}\hlkwd{set\textunderscore ylabel}\hldef{}\hlopt{(}\hldef{}\hlsng{"Im(z)"}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{ax}\hlopt{.}\hldef{}\hlkwd{set\textunderscore title}\hldef{}\hlopt{(}\hldef{title}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{ax}\hlopt{.}\hldef{}\hlkwd{grid}\hldef{}\hlopt{(}\hldef{}\hlkwa{True}\hldef{}\hlopt{,\ }\hldef{linestyle}\hlopt{=}\hldef{}\hlsng{"{-}{-}"}\hldef{}\hlopt{,\ }\hldef{linewidth}\hlopt{=}\hldef{}\hlnum{0.5}\hldef{}\hlopt{,\ }\hldef{alpha}\hlopt{=}\hldef{}\hlnum{0.4}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlslc{\#\ save\ as\ a\ square\ image;\ avoid\ tight\ bbox\ if\ you\ want\ exact\ pixels}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{fig}\hlopt{.}\hldef{}\hlkwd{savefig}\hldef{}\hlopt{(}\hldef{path}\hlopt{,\ }\hldef{dpi}\hlopt{=}\hldef{}\hlnum{500}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{plt}\hlopt{.}\hldef{}\hlkwd{close}\hldef{}\hlopt{(}\hldef{fig}\hlopt{)}\hldef{}\hspace*{\fill}
+\mbox{}
+\normalfont
+\end{kframe}
+\end{knitrout}
+\end{minipage}
+&
+\begin{minipage}[m]{10cm}
+\begin{knitrout}\tiny
+\definecolor{shadecolor}{rgb}{0.969, 0.969, 0.969}\color{fgcolor}\begin{kframe}
+\noindent
+\ttfamily
+\hldef{cp}\hlopt{,\ }\hldef{A}\hlopt{,\ }\hldef{B\ }\hlopt{=\ }\hldef{}\hlkwd{wilkinson\textunderscore cheb\textunderscore array}\hldef{}\hlopt{(}\hldef{n}\hlopt{,\ }\hldef{pad}\hlopt{=}\hldef{}\hlnum{0.5}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{pp\ }\hlopt{=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{poly}\hldef{}\hlopt{(}\hldef{np}\hlopt{.}\hldef{}\hlkwd{arange}\hldef{}\hlopt{(}\hldef{}\hlnum{1}\hldef{}\hlopt{,\ }\hldef{n}\hlopt{+}\hldef{}\hlnum{1}\hldef{}\hlopt{,\ }\hldef{dtype}\hlopt{=}\hldef{np}\hlopt{.}\hldef{complex128}\hlopt{)).}\hldef{}\hlkwd{astype}\hldef{}\hlopt{(}\hldef{np}\hlopt{.}\hldef{complex128}\hlopt{)}\hspace*{\fill}\\
+\hldef{side\ }\hlopt{=\ }\hldef{}\hlkwb{int}\hldef{}\hlopt{(}\hldef{}\hlnum{256}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{vcr}\hlopt{,\ }\hldef{niter\ }\hlopt{=\ }\hldef{}\hlkwd{tile\textunderscore job}\hldef{}\hlopt{(}\hldef{cp}\hlopt{,}\hldef{A}\hlopt{,}\hldef{B}\hlopt{,}\hldef{}\hlnum{0.0}\hldef{}\hlopt{,}\hldef{}\hlnum{1.0}\hldef{}\hlopt{,}\hldef{}\hlnum{0.0}\hldef{}\hlopt{,}\hldef{}\hlnum{1.0}\hldef{}\hlopt{,}\hldef{side}\hlopt{{*}}\hldef{side}\hlopt{,}\hldef{perturb\textunderscore 1}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hlkwa{print}\hldef{}\hlopt{(}\hldef{f}\hlsng{"}\hlipl{\{niter\}\ }\hlsng{avg:}\hlipl{\{niter/side/side\}}\hlsng{"}\hldef{}\hlopt{)}\hldef{}\hspace*{\fill}
+\mbox{}
+\normalfont
+\begin{verbatim}
+## 192280 avg:2.9339599609375
+\end{verbatim}
+\noindent
+\ttfamily
+\hldef{vpr\ }\hlopt{=\ }\hldef{}\hlkwd{tile\textunderscore job\textunderscore np}\hldef{}\hlopt{(}\hldef{pp}\hlopt{,}\hldef{}\hlnum{0.0}\hldef{}\hlopt{,}\hldef{}\hlnum{1.0}\hldef{}\hlopt{,}\hldef{}\hlnum{0.0}\hldef{}\hlopt{,}\hldef{}\hlnum{1.0}\hldef{}\hlopt{,}\hldef{side}\hlopt{{*}}\hldef{side}\hlopt{,}\hldef{perturb\textunderscore 1\textunderscore np}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hlkwd{plot\textunderscore manifold}\hldef{}\hlopt{(}\hldef{vcr}\hlopt{,\ }\hldef{}\hlsng{"Aberth\ (Chebyshev)"}\hldef{}\hlopt{,\ }\hldef{}\hlsng{"manifold\textunderscore cheb.png"}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hlkwd{plot\textunderscore manifold}\hldef{}\hlopt{(}\hldef{vpr}\hlopt{,\ }\hldef{}\hlsng{"np.roots"}\hldef{}\hlopt{,\ }\hldef{}\hlsng{"manifold\textunderscore numpy.png"}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{sjcp}\hlopt{=}\hldef{f}\hlsng{"tile\textunderscore job(cp,A,B,0.0,1.0,0.0,1.0,}\hlipl{\{side{*}side\}}\hlsng{,perturb\textunderscore 1)"}\hldef{}\hspace*{\fill}\\
+\hldef{tjcp}\hlopt{=}\hldef{timeit}\hlopt{.}\hldef{}\hlkwd{timeit}\hldef{}\hlopt{(}\hldef{sjcp}\hlopt{,}\hldef{}\hlkwb{globals}\hldef{}\hlopt{=}\hldef{}\hlkwb{globals}\hldef{}\hlopt{(),\ }\hldef{number}\hlopt{=}\hldef{}\hlnum{3}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{sjpp}\hlopt{=}\hldef{f}\hlsng{"tile\textunderscore job\textunderscore np(pp,0.0,1.0,0.0,1.0,}\hlipl{\{side{*}side\}}\hlsng{,perturb\textunderscore 1\textunderscore np)"}\hldef{}\hspace*{\fill}\\
+\hldef{tjpp}\hlopt{=}\hldef{timeit}\hlopt{.}\hldef{}\hlkwd{timeit}\hldef{}\hlopt{(}\hldef{sjpp}\hlopt{,\ }\hldef{}\hlkwb{globals}\hldef{}\hlopt{=}\hldef{}\hlkwb{globals}\hldef{}\hlopt{(),\ }\hldef{number}\hlopt{=}\hldef{}\hlnum{3}\hldef{}\hlopt{)}\hldef{}\hspace*{\fill}
+\mbox{}
+\normalfont
+\end{kframe}
+\end{knitrout}
+
+\end{minipage}
+\\
+\bottomrule
+\end{tabular}
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tabular}{cc}
+\includegraphics[width=10cm, height=10cm]{manifold_cheb.png}    
+&
+\includegraphics[width=10cm, height=10cm]{manifold_numpy.png}  
+\end{tabular}    
+\end{center}
+
+\begin{center}
+\begin{itemize}
+    \item scan square of 256 $\times$ 256 $=$ 65,536 points
+    \item {\tt np.roots} manifold calc time: 22.72 seconds
+    \item scanning with warm start calc time: 1 seconds
+    \item speedup : 22.81
+\end{itemize}
+\end{center}
+
+\newpage
+\section{Pertubators}
+\subsection{Pert2, Pert3}
+\begin{center}
+\begin{tabular}{c}
+\begin{tabular}{m{10cm}m{10cm}}
+\toprule
+Pert2 & Pert3 \\
+\midrule
+\begin{minipage}[m]{10cm}
+\begin{knitrout}\tiny
+\definecolor{shadecolor}{rgb}{0.969, 0.969, 0.969}\color{fgcolor}\begin{kframe}
+\noindent
+\ttfamily
+\hldef{}\hlkwb{@njit}\hspace*{\fill}\\
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{perturb\textunderscore 2}\hldef{}\hlopt{(}\hldef{cf}\hlopt{,}\hldef{s}\hlopt{,}\hldef{t}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{PI2\ }\hlopt{=\ }\hldef{}\hlnum{2\ }\hldef{}\hlopt{{*}\ }\hldef{np}\hlopt{.}\hldef{pi}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf\ }\hlopt{=\ }\hldef{cf}\hlopt{.}\hldef{}\hlkwd{copy}\hldef{}\hlopt{()}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf}\hlopt{{[}{-}}\hldef{}\hlnum{2}\hldef{}\hlopt{{]}}\hldef{\ \ }\hlopt{+=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{exp}\hldef{}\hlopt{(}\hldef{}\hlnum{1}\hldef{j\ }\hlopt{{*}\ }\hldef{PI2\ }\hlopt{{*}\ }\hldef{t}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf}\hlopt{{[}{-}}\hldef{}\hlnum{3}\hldef{}\hlopt{{]}}\hldef{\ \ }\hlopt{+=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{exp}\hldef{}\hlopt{(}\hldef{}\hlnum{1}\hldef{j\ }\hlopt{{*}\ }\hldef{PI2\ }\hlopt{{*}\ }\hldef{s\ }\hlopt{{*}\ }\hldef{t}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf}\hlopt{{[}{-}}\hldef{}\hlnum{6}\hldef{}\hlopt{{]}}\hldef{\ \ }\hlopt{+=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{exp}\hldef{}\hlopt{(}\hldef{}\hlnum{1}\hldef{j\ }\hlopt{{*}\ }\hldef{PI2\ }\hlopt{{*}\ (}\hldef{s\ }\hlopt{{-}\ }\hldef{t}\hlopt{))}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf}\hlopt{{[}{-}}\hldef{}\hlnum{10}\hldef{}\hlopt{{]}}\hldef{\ \ }\hlopt{+=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{exp}\hldef{}\hlopt{(}\hldef{}\hlnum{1}\hldef{j\ }\hlopt{{*}\ }\hldef{PI2\ }\hlopt{{*}\ (}\hldef{s\ }\hlopt{+\ }\hldef{t}\hlopt{))}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf}\hlopt{{[}}\hldef{}\hlnum{0}\hldef{}\hlopt{{]}\ {*}=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{exp}\hldef{}\hlopt{(}\hldef{}\hlnum{1}\hldef{j\ }\hlopt{{*}\ }\hldef{PI2\ }\hlopt{{*}\ (}\hldef{s}\hlopt{+}\hldef{t}\hlopt{))}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{perturbed\textunderscore cf}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{vcr}\hlopt{,\ }\hldef{niter\ }\hlopt{=\ }\hldef{}\hlkwd{tile\textunderscore job}\hldef{}\hlopt{(}\hldef{cp}\hlopt{,}\hldef{A}\hlopt{,}\hldef{B}\hlopt{,}\hldef{}\hlnum{0.0}\hldef{}\hlopt{,}\hldef{}\hlnum{1.0}\hldef{}\hlopt{,}\hldef{}\hlnum{0.0}\hldef{}\hlopt{,}\hldef{}\hlnum{1.0}\hldef{}\hlopt{,}\hldef{side}\hlopt{{*}}\hldef{side}\hlopt{,}\hldef{perturb\textunderscore 2}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hlkwa{print}\hldef{}\hlopt{(}\hldef{f}\hlsng{"}\hlipl{\{niter\}\ }\hlsng{avg:}\hlipl{\{niter/side/side\}}\hlsng{"}\hldef{}\hlopt{)}\hldef{}\hspace*{\fill}
+\mbox{}
+\normalfont
+\begin{verbatim}
+## 249698 avg:3.810089111328125
+\end{verbatim}
+\noindent
+\ttfamily
+\hldef{}\hlkwd{plot\textunderscore manifold}\hldef{}\hlopt{(}\hldef{vcr}\hlopt{,\ }\hldef{}\hlsng{"Pertubator\ 2"}\hldef{}\hlopt{,\ }\hldef{}\hlsng{"manifold\textunderscore cheb2.png"}\hldef{}\hlopt{)}\hldef{}\hspace*{\fill}
+\mbox{}
+\normalfont
+\end{kframe}
+\end{knitrout}
+\end{minipage}
+&
+\begin{minipage}[m]{10cm}
+\begin{knitrout}\tiny
+\definecolor{shadecolor}{rgb}{0.969, 0.969, 0.969}\color{fgcolor}\begin{kframe}
+\noindent
+\ttfamily
+\hldef{}\hlkwb{@njit}\hspace*{\fill}\\
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{perturb\textunderscore 3}\hldef{}\hlopt{(}\hldef{cf}\hlopt{,}\hldef{s}\hlopt{,}\hldef{t}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{PI2\ }\hlopt{=\ }\hldef{}\hlnum{2\ }\hldef{}\hlopt{{*}\ }\hldef{np}\hlopt{.}\hldef{pi}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf\ }\hlopt{=\ }\hldef{cf}\hlopt{.}\hldef{}\hlkwd{copy}\hldef{}\hlopt{()}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf}\hlopt{{[}{-}}\hldef{}\hlnum{2}\hldef{}\hlopt{{]}}\hldef{\ \ }\hlopt{{*}=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{exp}\hldef{}\hlopt{(}\hldef{}\hlnum{1}\hldef{j\ }\hlopt{{*}\ }\hldef{PI2\ }\hlopt{{*}\ (}\hldef{s}\hlopt{+}\hldef{t}\hlopt{))}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf}\hlopt{{[}{-}}\hldef{}\hlnum{3}\hldef{}\hlopt{{]}}\hldef{\ \ }\hlopt{{*}=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{exp}\hldef{}\hlopt{(}\hldef{}\hlnum{1}\hldef{j\ }\hlopt{{*}\ }\hldef{PI2\ }\hlopt{{*}\ (}\hldef{s}\hlopt{{-}}\hldef{t}\hlopt{))}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf}\hlopt{{[}{-}}\hldef{}\hlnum{6}\hldef{}\hlopt{{]}}\hldef{\ \ }\hlopt{{*}=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{exp}\hldef{}\hlopt{(}\hldef{}\hlnum{1}\hldef{j\ }\hlopt{{*}\ }\hldef{PI2\ }\hlopt{{*}\ (}\hldef{s}\hlopt{{*}}\hldef{s\ }\hlopt{{-}\ }\hldef{t}\hlopt{{*}}\hldef{t}\hlopt{))}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf}\hlopt{{[}{-}}\hldef{}\hlnum{10}\hldef{}\hlopt{{]}}\hldef{\ \ }\hlopt{{*}=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{exp}\hldef{}\hlopt{(}\hldef{}\hlnum{1}\hldef{j\ }\hlopt{{*}\ }\hldef{PI2\ }\hlopt{{*}\ (}\hldef{s}\hlopt{{*}}\hldef{s\ }\hlopt{{-}\ }\hldef{t}\hlopt{{*}}\hldef{t}\hlopt{))}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf}\hlopt{{[}}\hldef{}\hlnum{0}\hldef{}\hlopt{{]}\ {*}=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{exp}\hldef{}\hlopt{(}\hldef{}\hlnum{1}\hldef{j\ }\hlopt{{*}\ }\hldef{PI2\ }\hlopt{{*}\ }\hldef{t\ }\hlopt{{*}\ }\hldef{s}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{perturbed\textunderscore cf}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{vcr}\hlopt{,\ }\hldef{niter\ }\hlopt{=\ }\hldef{}\hlkwd{tile\textunderscore job}\hldef{}\hlopt{(}\hldef{cp}\hlopt{,}\hldef{A}\hlopt{,}\hldef{B}\hlopt{,}\hldef{}\hlnum{0.0}\hldef{}\hlopt{,}\hldef{}\hlnum{1.0}\hldef{}\hlopt{,}\hldef{}\hlnum{0.0}\hldef{}\hlopt{,}\hldef{}\hlnum{1.0}\hldef{}\hlopt{,}\hldef{side}\hlopt{{*}}\hldef{side}\hlopt{,}\hldef{perturb\textunderscore 3}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hlkwa{print}\hldef{}\hlopt{(}\hldef{f}\hlsng{"}\hlipl{\{niter\}\ }\hlsng{avg:}\hlipl{\{niter/side/side\}}\hlsng{"}\hldef{}\hlopt{)}\hldef{}\hspace*{\fill}
+\mbox{}
+\normalfont
+\begin{verbatim}
+## 203872 avg:3.11083984375
+\end{verbatim}
+\noindent
+\ttfamily
+\hldef{}\hlkwd{plot\textunderscore manifold}\hldef{}\hlopt{(}\hldef{vcr}\hlopt{,\ }\hldef{}\hlsng{"Pertubator\ 3"}\hldef{}\hlopt{,\ }\hldef{}\hlsng{"manifold\textunderscore cheb3.png"}\hldef{}\hlopt{)}\hldef{}\hspace*{\fill}
+\mbox{}
+\normalfont
+\end{kframe}
+\end{knitrout}
+
+\end{minipage}
+\\
+\bottomrule
+\end{tabular}
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tabular}{cc}
+\includegraphics[width=10cm, height=10cm]{manifold_cheb2.png}    
+&
+\includegraphics[width=10cm, height=10cm]{manifold_cheb3.png}  
+\end{tabular}    
+\end{center}
+
+\newpage
+\subsection{Pert4, Pert5}
+\begin{center}
+\begin{tabular}{c}
+\begin{tabular}{m{10cm}m{10cm}}
+\toprule
+Pert4 & Pert5 \\
+\midrule
+\begin{minipage}[m]{10cm}
+\begin{knitrout}\tiny
+\definecolor{shadecolor}{rgb}{0.969, 0.969, 0.969}\color{fgcolor}\begin{kframe}
+\noindent
+\ttfamily
+\hldef{}\hlkwb{@njit}\hspace*{\fill}\\
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{perturb\textunderscore 4}\hldef{}\hlopt{(}\hldef{cf}\hlopt{,}\hldef{s}\hlopt{,}\hldef{t}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{PI2\ }\hlopt{=\ }\hldef{}\hlnum{2\ }\hldef{}\hlopt{{*}\ }\hldef{np}\hlopt{.}\hldef{pi}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf\ }\hlopt{=\ }\hldef{cf}\hlopt{.}\hldef{}\hlkwd{copy}\hldef{}\hlopt{()}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf}\hlopt{{[}{-}}\hldef{}\hlnum{2}\hldef{}\hlopt{{]}}\hldef{\ \ }\hlopt{{*}=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{exp}\hldef{}\hlopt{(}\hldef{}\hlnum{1}\hldef{j\ }\hlopt{{*}\ }\hldef{PI2\ }\hlopt{{*}\ }\hldef{}\hlnum{11\ }\hldef{}\hlopt{{*}\ }\hldef{t}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf}\hlopt{{[}{-}}\hldef{}\hlnum{5}\hldef{}\hlopt{{]}}\hldef{\ \ }\hlopt{{*}=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{exp}\hldef{}\hlopt{(}\hldef{}\hlnum{1}\hldef{j\ }\hlopt{{*}\ }\hldef{PI2\ }\hlopt{{*}\ }\hldef{}\hlnum{13\ }\hldef{}\hlopt{{*}\ }\hldef{s\ }\hlopt{{*}\ }\hldef{t}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf}\hlopt{{[}{-}}\hldef{}\hlnum{7}\hldef{}\hlopt{{]}}\hldef{\ \ }\hlopt{{*}=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{exp}\hldef{}\hlopt{(}\hldef{}\hlnum{1}\hldef{j\ }\hlopt{{*}\ }\hldef{PI2\ }\hlopt{{*}\ }\hldef{}\hlnum{17\ }\hldef{}\hlopt{{*}\ (}\hldef{s\ }\hlopt{{-}\ }\hldef{t}\hlopt{))}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf}\hlopt{{[}{-}}\hldef{}\hlnum{11}\hldef{}\hlopt{{]}}\hldef{\ \ }\hlopt{{*}=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{exp}\hldef{}\hlopt{(}\hldef{}\hlnum{1}\hldef{j\ }\hlopt{{*}\ }\hldef{PI2\ }\hlopt{{*}\ }\hldef{}\hlnum{19\ }\hldef{}\hlopt{{*}\ (}\hldef{s\ }\hlopt{+\ }\hldef{t}\hlopt{))}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf}\hlopt{{[}}\hldef{}\hlnum{0}\hldef{}\hlopt{{]}\ {*}=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{exp}\hldef{}\hlopt{(}\hldef{}\hlnum{1}\hldef{j\ }\hlopt{{*}\ }\hldef{PI2\ }\hlopt{{*}\ }\hldef{}\hlnum{23\ }\hldef{}\hlopt{{*}\ (}\hldef{s}\hlopt{+}\hldef{t}\hlopt{))}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{perturbed\textunderscore cf}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{vcr}\hlopt{,\ }\hldef{niter\ }\hlopt{=\ }\hldef{}\hlkwd{tile\textunderscore job}\hldef{}\hlopt{(}\hldef{cp}\hlopt{,}\hldef{A}\hlopt{,}\hldef{B}\hlopt{,}\hldef{}\hlnum{0.0}\hldef{}\hlopt{,}\hldef{}\hlnum{1.0}\hldef{}\hlopt{,}\hldef{}\hlnum{0.0}\hldef{}\hlopt{,}\hldef{}\hlnum{1.0}\hldef{}\hlopt{,}\hldef{side}\hlopt{{*}}\hldef{side}\hlopt{,}\hldef{perturb\textunderscore 4}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hlkwa{print}\hldef{}\hlopt{(}\hldef{f}\hlsng{"}\hlipl{\{niter\}\ }\hlsng{avg:}\hlipl{\{niter/side/side\}}\hlsng{"}\hldef{}\hlopt{)}\hldef{}\hspace*{\fill}
+\mbox{}
+\normalfont
+\begin{verbatim}
+## 303448 avg:4.6302490234375
+\end{verbatim}
+\noindent
+\ttfamily
+\hldef{}\hlkwd{plot\textunderscore manifold}\hldef{}\hlopt{(}\hldef{vcr}\hlopt{,\ }\hldef{}\hlsng{"Pertubator\ 4"}\hldef{}\hlopt{,\ }\hldef{}\hlsng{"manifold\textunderscore cheb4.png"}\hldef{}\hlopt{)}\hldef{}\hspace*{\fill}
+\mbox{}
+\normalfont
+\end{kframe}
+\end{knitrout}
+\end{minipage}
+&
+\begin{minipage}[m]{10cm}
+\begin{knitrout}\tiny
+\definecolor{shadecolor}{rgb}{0.969, 0.969, 0.969}\color{fgcolor}\begin{kframe}
+\noindent
+\ttfamily
+\hldef{}\hlkwb{@njit}\hspace*{\fill}\\
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{perturb\textunderscore 5}\hldef{}\hlopt{(}\hldef{cf}\hlopt{,}\hldef{s}\hlopt{,}\hldef{t}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{PI2\ }\hlopt{=\ }\hldef{}\hlnum{2\ }\hldef{}\hlopt{{*}\ }\hldef{np}\hlopt{.}\hldef{pi}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf\ }\hlopt{=\ }\hldef{cf}\hlopt{.}\hldef{}\hlkwd{copy}\hldef{}\hlopt{()}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf}\hlopt{{[}{-}}\hldef{}\hlnum{2}\hldef{}\hlopt{{]}}\hldef{\ \ }\hlopt{{*}=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{exp}\hldef{}\hlopt{(}\hldef{}\hlnum{1}\hldef{j\ }\hlopt{{*}\ }\hldef{PI2\ }\hlopt{{*}\ (}\hldef{s}\hlopt{+}\hldef{t}\hlopt{))}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf}\hlopt{{[}{-}}\hldef{}\hlnum{5}\hldef{}\hlopt{{]}}\hldef{\ \ }\hlopt{{*}=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{exp}\hldef{}\hlopt{(}\hldef{}\hlnum{1}\hldef{j\ }\hlopt{{*}\ }\hldef{PI2\ }\hlopt{{*}\ (}\hldef{s}\hlopt{{-}}\hldef{t}\hlopt{))}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf}\hlopt{{[}{-}}\hldef{}\hlnum{7}\hldef{}\hlopt{{]}}\hldef{\ \ }\hlopt{{*}=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{exp}\hldef{}\hlopt{(}\hldef{}\hlnum{1}\hldef{j\ }\hlopt{{*}\ }\hldef{PI2\ }\hlopt{{*}\ (}\hldef{s}\hlopt{{*}}\hldef{s\ }\hlopt{{-}\ }\hldef{t}\hlopt{{*}}\hldef{t}\hlopt{))}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf}\hlopt{{[}{-}}\hldef{}\hlnum{11}\hldef{}\hlopt{{]}}\hldef{\ \ }\hlopt{{*}=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{exp}\hldef{}\hlopt{(}\hldef{}\hlnum{1}\hldef{j\ }\hlopt{{*}\ }\hldef{PI2\ }\hlopt{{*}\ (}\hldef{s}\hlopt{{*}}\hldef{s\ }\hlopt{{-}\ }\hldef{t}\hlopt{{*}}\hldef{t}\hlopt{))}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf}\hlopt{{[}}\hldef{}\hlnum{0}\hldef{}\hlopt{{]}\ {*}=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{exp}\hldef{}\hlopt{(}\hldef{}\hlnum{1}\hldef{j\ }\hlopt{{*}\ }\hldef{PI2\ }\hlopt{{*}\ }\hldef{t\ }\hlopt{{*}\ }\hldef{s}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{perturbed\textunderscore cf}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{vcr}\hlopt{,\ }\hldef{niter\ }\hlopt{=\ }\hldef{}\hlkwd{tile\textunderscore job}\hldef{}\hlopt{(}\hldef{cp}\hlopt{,}\hldef{A}\hlopt{,}\hldef{B}\hlopt{,}\hldef{}\hlnum{0.0}\hldef{}\hlopt{,}\hldef{}\hlnum{1.0}\hldef{}\hlopt{,}\hldef{}\hlnum{0.0}\hldef{}\hlopt{,}\hldef{}\hlnum{1.0}\hldef{}\hlopt{,}\hldef{side}\hlopt{{*}}\hldef{side}\hlopt{,}\hldef{perturb\textunderscore 5}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hlkwa{print}\hldef{}\hlopt{(}\hldef{f}\hlsng{"}\hlipl{\{niter\}\ }\hlsng{avg:}\hlipl{\{niter/side/side\}}\hlsng{"}\hldef{}\hlopt{)}\hldef{}\hspace*{\fill}
+\mbox{}
+\normalfont
+\begin{verbatim}
+## 203397 avg:3.1035919189453125
+\end{verbatim}
+\noindent
+\ttfamily
+\hldef{}\hlkwd{plot\textunderscore manifold}\hldef{}\hlopt{(}\hldef{vcr}\hlopt{,\ }\hldef{}\hlsng{"Pertubator\ 5"}\hldef{}\hlopt{,\ }\hldef{}\hlsng{"manifold\textunderscore cheb5.png"}\hldef{}\hlopt{)}\hldef{}\hspace*{\fill}
+\mbox{}
+\normalfont
+\end{kframe}
+\end{knitrout}
+
+\end{minipage}
+\\
+\bottomrule
+\end{tabular}
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tabular}{cc}
+\includegraphics[width=10cm, height=10cm]{manifold_cheb4.png}    
+&
+\includegraphics[width=10cm, height=10cm]{manifold_cheb5.png}  
+\end{tabular}    
+\end{center}
+
+\newpage
+\subsection{Pert6, Pert7}
+\begin{center}
+\begin{tabular}{c}
+\begin{tabular}{m{10cm}m{10cm}}
+\toprule
+Pert6 & Pert7 \\
+\midrule
+\begin{minipage}[m]{10cm}
+\begin{knitrout}\tiny
+\definecolor{shadecolor}{rgb}{0.969, 0.969, 0.969}\color{fgcolor}\begin{kframe}
+\noindent
+\ttfamily
+\hldef{}\hlkwb{@njit}\hspace*{\fill}\\
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{perturb\textunderscore 6}\hldef{}\hlopt{(}\hldef{cf}\hlopt{,}\hldef{s}\hlopt{,}\hldef{t}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{PI2\ }\hlopt{=\ }\hldef{}\hlnum{2\ }\hldef{}\hlopt{{*}\ }\hldef{np}\hlopt{.}\hldef{pi}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf\ }\hlopt{=\ }\hldef{cf}\hlopt{.}\hldef{}\hlkwd{copy}\hldef{}\hlopt{()}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf}\hlopt{{[}{-}}\hldef{}\hlnum{2}\hldef{}\hlopt{{]}}\hldef{\ \ }\hlopt{{*}=\ }\hldef{t}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf}\hlopt{{[}{-}}\hldef{}\hlnum{5}\hldef{}\hlopt{{]}}\hldef{\ \ }\hlopt{{*}=\ (}\hldef{s\ }\hlopt{+\ }\hldef{}\hlnum{1}\hldef{j\ }\hlopt{{*}}\hldef{t\ }\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf}\hlopt{{[}{-}}\hldef{}\hlnum{7}\hldef{}\hlopt{{]}}\hldef{\ \ }\hlopt{{*}=\ (}\hldef{s\ }\hlopt{{-}\ }\hldef{}\hlnum{1}\hldef{j\ }\hlopt{{*}}\hldef{t\ }\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf}\hlopt{{[}{-}}\hldef{}\hlnum{11}\hldef{}\hlopt{{]}}\hldef{\ \ }\hlopt{{*}=\ (}\hldef{s}\hlopt{{*}}\hldef{s}\hlopt{{*}}\hldef{s\ }\hlopt{{-}\ }\hldef{}\hlnum{1}\hldef{j\ }\hlopt{{*}}\hldef{t}\hlopt{{*}}\hldef{t}\hlopt{{*}}\hldef{t\ }\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf}\hlopt{{[}}\hldef{}\hlnum{0}\hldef{}\hlopt{{]}\ {*}=\ (}\hldef{s}\hlopt{+}\hldef{t}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{perturbed\textunderscore cf}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{vcr}\hlopt{,\ }\hldef{niter\ }\hlopt{=\ }\hldef{}\hlkwd{tile\textunderscore job}\hldef{}\hlopt{(}\hldef{cp}\hlopt{,}\hldef{A}\hlopt{,}\hldef{B}\hlopt{,}\hldef{}\hlnum{0.0}\hldef{}\hlopt{,}\hldef{}\hlnum{1.0}\hldef{}\hlopt{,}\hldef{}\hlnum{0.0}\hldef{}\hlopt{,}\hldef{}\hlnum{1.0}\hldef{}\hlopt{,}\hldef{side}\hlopt{{*}}\hldef{side}\hlopt{,}\hldef{perturb\textunderscore 6}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hlkwa{print}\hldef{}\hlopt{(}\hldef{f}\hlsng{"}\hlipl{\{niter\}\ }\hlsng{avg:}\hlipl{\{niter/side/side\}}\hlsng{"}\hldef{}\hlopt{)}\hldef{}\hspace*{\fill}
+\mbox{}
+\normalfont
+\begin{verbatim}
+## 191559 avg:2.9229583740234375
+\end{verbatim}
+\noindent
+\ttfamily
+\hldef{}\hlkwd{plot\textunderscore manifold}\hldef{}\hlopt{(}\hldef{vcr}\hlopt{,\ }\hldef{}\hlsng{"Pertubator\ 6"}\hldef{}\hlopt{,\ }\hldef{}\hlsng{"manifold\textunderscore cheb6.png"}\hldef{}\hlopt{)}\hldef{}\hspace*{\fill}
+\mbox{}
+\normalfont
+\end{kframe}
+\end{knitrout}
+\end{minipage}
+&
+\begin{minipage}[m]{10cm}
+\begin{knitrout}\tiny
+\definecolor{shadecolor}{rgb}{0.969, 0.969, 0.969}\color{fgcolor}\begin{kframe}
+\noindent
+\ttfamily
+\hldef{}\hlkwb{@njit}\hspace*{\fill}\\
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{perturb\textunderscore 7}\hldef{}\hlopt{(}\hldef{cf}\hlopt{,}\hldef{s}\hlopt{,}\hldef{t}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{PI2\ }\hlopt{=\ }\hldef{}\hlnum{2\ }\hldef{}\hlopt{{*}\ }\hldef{np}\hlopt{.}\hldef{pi}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf\ }\hlopt{=\ }\hldef{cf}\hlopt{.}\hldef{}\hlkwd{copy}\hldef{}\hlopt{()}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf}\hlopt{{[}{-}}\hldef{}\hlnum{2}\hldef{}\hlopt{{]}}\hldef{\ \ }\hlopt{{*}=\ }\hldef{t}\hlopt{{*}}\hldef{s}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf}\hlopt{{[}{-}}\hldef{}\hlnum{5}\hldef{}\hlopt{{]}}\hldef{\ \ }\hlopt{{*}=\ (\ }\hldef{s\ }\hlopt{{*}\ }\hldef{s\ }\hlopt{{*}\ }\hldef{t\ }\hlopt{{*}\ }\hldef{t\ }\hlopt{{*}\ }\hldef{}\hlnum{1}\hldef{j\ }\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf}\hlopt{{[}{-}}\hldef{}\hlnum{7}\hldef{}\hlopt{{]}}\hldef{\ \ }\hlopt{{*}=\ (\ }\hldef{s\ }\hlopt{{*}\ }\hldef{t\ }\hlopt{{*}\ }\hldef{s\ }\hlopt{{-}\ }\hldef{}\hlnum{1}\hldef{j\ }\hlopt{{*}\ }\hldef{t\ }\hlopt{{*}\ }\hldef{s\ }\hlopt{{*}\ }\hldef{t\ }\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf}\hlopt{{[}{-}}\hldef{}\hlnum{11}\hldef{}\hlopt{{]}\ {*}=\ (\ }\hldef{t\ }\hlopt{{*}\ }\hldef{s\ }\hlopt{{*}\ }\hldef{t\ }\hlopt{{-}\ }\hldef{}\hlnum{1}\hldef{j\ }\hlopt{{*}\ }\hldef{s\ }\hlopt{{*}\ }\hldef{t\ }\hlopt{{*}\ }\hldef{s\ }\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf}\hlopt{{[}}\hldef{}\hlnum{0}\hldef{}\hlopt{{]}\ {*}=\ (\ }\hldef{s\ }\hlopt{{*}\ }\hldef{t\ }\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{perturbed\textunderscore cf}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{vcr}\hlopt{,\ }\hldef{niter\ }\hlopt{=\ }\hldef{}\hlkwd{tile\textunderscore job}\hldef{}\hlopt{(}\hldef{cp}\hlopt{,}\hldef{A}\hlopt{,}\hldef{B}\hlopt{,}\hldef{}\hlnum{0.0}\hldef{}\hlopt{,}\hldef{}\hlnum{1.0}\hldef{}\hlopt{,}\hldef{}\hlnum{0.0}\hldef{}\hlopt{,}\hldef{}\hlnum{1.0}\hldef{}\hlopt{,}\hldef{side}\hlopt{{*}}\hldef{side}\hlopt{,}\hldef{perturb\textunderscore 7}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hlkwa{print}\hldef{}\hlopt{(}\hldef{f}\hlsng{"}\hlipl{\{niter\}\ }\hlsng{avg:}\hlipl{\{niter/side/side\}}\hlsng{"}\hldef{}\hlopt{)}\hldef{}\hspace*{\fill}
+\mbox{}
+\normalfont
+\begin{verbatim}
+## 175393 avg:2.6762847900390625
+\end{verbatim}
+\noindent
+\ttfamily
+\hldef{}\hlkwd{plot\textunderscore manifold}\hldef{}\hlopt{(}\hldef{vcr}\hlopt{,\ }\hldef{}\hlsng{"Pertubator\ 7"}\hldef{}\hlopt{,\ }\hldef{}\hlsng{"manifold\textunderscore cheb7.png"}\hldef{}\hlopt{)}\hldef{}\hspace*{\fill}
+\mbox{}
+\normalfont
+\end{kframe}
+\end{knitrout}
+
+\end{minipage}
+\\
+\bottomrule
+\end{tabular}
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tabular}{cc}
+\includegraphics[width=10cm, height=10cm]{manifold_cheb6.png}    
+&
+\includegraphics[width=10cm, height=10cm]{manifold_cheb7.png}  
+\end{tabular}    
+\end{center}
+
+
+\newpage
+\subsection{Pert8, Pert9}
+\begin{center}
+\begin{tabular}{c}
+\begin{tabular}{m{10cm}m{10cm}}
+\toprule
+Pert8 & Pert9 \\
+\midrule
+\begin{minipage}[m]{10cm}
+\begin{knitrout}\tiny
+\definecolor{shadecolor}{rgb}{0.969, 0.969, 0.969}\color{fgcolor}\begin{kframe}
+\noindent
+\ttfamily
+\hldef{}\hlkwb{@njit}\hspace*{\fill}\\
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{perturb\textunderscore 8}\hldef{}\hlopt{(}\hldef{cf}\hlopt{,}\hldef{s}\hlopt{,}\hldef{t}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{PI2\ }\hlopt{=\ }\hldef{}\hlnum{2\ }\hldef{}\hlopt{{*}\ }\hldef{np}\hlopt{.}\hldef{pi}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf\ }\hlopt{=\ }\hldef{cf}\hlopt{.}\hldef{}\hlkwd{copy}\hldef{}\hlopt{()}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf}\hlopt{{[}{-}}\hldef{}\hlnum{2}\hldef{}\hlopt{{]}}\hldef{\ \ }\hlopt{{*}=\ }\hldef{t}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf}\hlopt{{[}{-}}\hldef{}\hlnum{5}\hldef{}\hlopt{{]}}\hldef{\ \ }\hlopt{{*}=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{cos}\hldef{}\hlopt{(}\hldef{s\ }\hlopt{+\ }\hldef{}\hlnum{1}\hldef{j\ }\hlopt{{*}}\hldef{t\ }\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf}\hlopt{{[}{-}}\hldef{}\hlnum{7}\hldef{}\hlopt{{]}}\hldef{\ \ }\hlopt{{*}=\ (}\hldef{s\ }\hlopt{{-}\ }\hldef{}\hlnum{1}\hldef{j\ }\hlopt{{*}}\hldef{t\ }\hlopt{)\ /\ (}\hldef{s\ }\hlopt{+\ }\hldef{}\hlnum{1}\hldef{j\ }\hlopt{{*}}\hldef{t\ }\hlopt{+\ }\hldef{}\hlnum{1\ }\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf}\hlopt{{[}{-}}\hldef{}\hlnum{11}\hldef{}\hlopt{{]}}\hldef{\ \ }\hlopt{{*}=\ (}\hldef{s}\hlopt{{*}}\hldef{s}\hlopt{{*}}\hldef{s\ }\hlopt{{-}\ }\hldef{}\hlnum{1}\hldef{j\ }\hlopt{{*}}\hldef{t}\hlopt{{*}}\hldef{t}\hlopt{{*}}\hldef{t\ }\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf}\hlopt{{[}}\hldef{}\hlnum{0}\hldef{}\hlopt{{]}\ {*}=\ (\ }\hldef{s\ }\hlopt{+\ }\hldef{}\hlnum{1}\hldef{j\ }\hlopt{{*}\ }\hldef{t\ }\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{perturbed\textunderscore cf}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{vcr}\hlopt{,\ }\hldef{niter\ }\hlopt{=\ }\hldef{}\hlkwd{tile\textunderscore job}\hldef{}\hlopt{(}\hldef{cp}\hlopt{,}\hldef{A}\hlopt{,}\hldef{B}\hlopt{,}\hldef{}\hlnum{0.0}\hldef{}\hlopt{,}\hldef{}\hlnum{1.0}\hldef{}\hlopt{,}\hldef{}\hlnum{0.0}\hldef{}\hlopt{,}\hldef{}\hlnum{1.0}\hldef{}\hlopt{,}\hldef{side}\hlopt{{*}}\hldef{side}\hlopt{,}\hldef{perturb\textunderscore 8}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hlkwd{plot\textunderscore manifold}\hldef{}\hlopt{(}\hldef{vcr}\hlopt{,\ }\hldef{}\hlsng{"Pertubator\ 8"}\hldef{}\hlopt{,\ }\hldef{}\hlsng{"manifold\textunderscore cheb8.png"}\hldef{}\hlopt{)}\hldef{}\hspace*{\fill}
+\mbox{}
+\normalfont
+\end{kframe}
+\end{knitrout}
+\end{minipage}
+&
+\begin{minipage}[m]{10cm}
+\begin{knitrout}\tiny
+\definecolor{shadecolor}{rgb}{0.969, 0.969, 0.969}\color{fgcolor}\begin{kframe}
+\noindent
+\ttfamily
+\hldef{}\hlkwb{@njit}\hspace*{\fill}\\
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{perturb\textunderscore 9}\hldef{}\hlopt{(}\hldef{cf}\hlopt{,}\hldef{s}\hlopt{,}\hldef{t}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{PI2\ }\hlopt{=\ }\hldef{}\hlnum{2\ }\hldef{}\hlopt{{*}\ }\hldef{np}\hlopt{.}\hldef{pi}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf\ }\hlopt{=\ }\hldef{cf}\hlopt{.}\hldef{}\hlkwd{copy}\hldef{}\hlopt{()}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf}\hlopt{{[}{-}}\hldef{}\hlnum{2}\hldef{}\hlopt{{]}}\hldef{\ \ }\hlopt{{*}=\ }\hldef{t}\hlopt{{*}}\hldef{s}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf}\hlopt{{[}{-}}\hldef{}\hlnum{5}\hldef{}\hlopt{{]}}\hldef{\ \ }\hlopt{{*}=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{cos}\hldef{}\hlopt{(\ }\hldef{s\ }\hlopt{{*}\ }\hldef{s\ }\hlopt{{*}\ }\hldef{t\ }\hlopt{{*}\ }\hldef{t\ }\hlopt{{*}\ }\hldef{}\hlnum{1}\hldef{j\ }\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf}\hlopt{{[}{-}}\hldef{}\hlnum{7}\hldef{}\hlopt{{]}}\hldef{\ \ }\hlopt{{*}=\ (\ }\hldef{s\ }\hlopt{{*}\ }\hldef{t\ }\hlopt{{*}\ }\hldef{s\ }\hlopt{{-}\ }\hldef{}\hlnum{1}\hldef{j\ }\hlopt{{*}\ }\hldef{t\ }\hlopt{{*}\ }\hldef{s\ }\hlopt{{*}\ }\hldef{t\ }\hlopt{)\ /\ (\ }\hldef{s\ }\hlopt{{*}\ }\hldef{t\ }\hlopt{{*}\ }\hldef{s\ }\hlopt{+\ }\hldef{}\hlnum{1}\hldef{j\ }\hlopt{{*}\ }\hldef{t\ }\hlopt{{*}\ }\hldef{s\ }\hlopt{{*}\ }\hldef{t\ }\hlopt{+\ }\hldef{}\hlnum{1}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf}\hlopt{{[}{-}}\hldef{}\hlnum{11}\hldef{}\hlopt{{]}\ {*}=\ (\ }\hldef{t\ }\hlopt{{*}\ }\hldef{s\ }\hlopt{{*}\ }\hldef{t\ }\hlopt{{-}\ }\hldef{}\hlnum{1}\hldef{j\ }\hlopt{{*}\ }\hldef{s\ }\hlopt{{*}\ }\hldef{t\ }\hlopt{{*}\ }\hldef{s\ }\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{perturbed\textunderscore cf}\hlopt{{[}}\hldef{}\hlnum{0}\hldef{}\hlopt{{]}\ {*}=\ (\ }\hldef{s\ }\hlopt{{*}\ }\hldef{t\ }\hlopt{+\ (}\hldef{s\ }\hlopt{+\ }\hldef{t}\hlopt{)\ {*}\ }\hldef{}\hlnum{1}\hldef{j\ }\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{perturbed\textunderscore cf}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{vcr}\hlopt{,\ }\hldef{niter\ }\hlopt{=\ }\hldef{}\hlkwd{tile\textunderscore job}\hldef{}\hlopt{(}\hldef{cp}\hlopt{,}\hldef{A}\hlopt{,}\hldef{B}\hlopt{,}\hldef{}\hlnum{0.0}\hldef{}\hlopt{,}\hldef{}\hlnum{1.0}\hldef{}\hlopt{,}\hldef{}\hlnum{0.0}\hldef{}\hlopt{,}\hldef{}\hlnum{1.0}\hldef{}\hlopt{,}\hldef{side}\hlopt{{*}}\hldef{side}\hlopt{,}\hldef{perturb\textunderscore 9}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hlkwd{plot\textunderscore manifold}\hldef{}\hlopt{(}\hldef{vcr}\hlopt{,\ }\hldef{}\hlsng{"Pertubator\ 9"}\hldef{}\hlopt{,\ }\hldef{}\hlsng{"manifold\textunderscore cheb9.png"}\hldef{}\hlopt{)}\hldef{}\hspace*{\fill}
+\mbox{}
+\normalfont
+\end{kframe}
+\end{knitrout}
+
+\end{minipage}
+\\
+\bottomrule
+\end{tabular}
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tabular}{cc}
+\includegraphics[width=10cm, height=10cm]{manifold_cheb8.png}    
+&
+\includegraphics[width=10cm, height=10cm]{manifold_cheb9.png}  
+\end{tabular}    
+\end{center}
+
+\newpage
+\subsection{Pert10, Pert11}
+\begin{center}
+\begin{tabular}{c}
+\begin{tabular}{m{10cm}m{10cm}}
+\toprule
+Stetup & Pert10, Pert11 \\
+\midrule
+\begin{minipage}[m]{10cm}
+\begin{knitrout}\tiny
+\definecolor{shadecolor}{rgb}{0.969, 0.969, 0.969}\color{fgcolor}\begin{kframe}
+\noindent
+\ttfamily
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{chessboard\textunderscore roots}\hldef{}\hlopt{(}\hldef{n}\hlopt{:\ }\hldef{}\hlkwb{int}\hldef{}\hlopt{)\ {-}$>$\ }\hldef{np}\hlopt{.}\hldef{ndarray}\hlopt{:}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{o\ }\hlopt{=\ (}\hldef{n\ }\hlopt{{-}\ }\hldef{}\hlnum{1}\hldef{}\hlopt{)\ /\ }\hldef{}\hlnum{2.0}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{x\ }\hlopt{=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{arange}\hldef{}\hlopt{(}\hldef{n}\hlopt{,\ }\hldef{dtype}\hlopt{=}\hldef{np}\hlopt{.}\hldef{float64}\hlopt{)\ {-}\ }\hldef{o}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{y\ }\hlopt{=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{arange}\hldef{}\hlopt{(}\hldef{n}\hlopt{,\ }\hldef{dtype}\hlopt{=}\hldef{np}\hlopt{.}\hldef{float64}\hlopt{)\ {-}\ }\hldef{o}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{X}\hlopt{,\ }\hldef{Y\ }\hlopt{=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{meshgrid}\hldef{}\hlopt{(}\hldef{x}\hlopt{,\ }\hldef{y}\hlopt{,\ }\hldef{indexing}\hlopt{=}\hldef{}\hlsng{"ij"}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{}\hlopt{(}\hldef{X\ }\hlopt{+\ }\hldef{}\hlnum{1}\hldef{j}\hlopt{{*}}\hldef{Y}\hlopt{).}\hldef{}\hlkwd{ravel}\hldef{}\hlopt{().}\hldef{}\hlkwd{astype}\hldef{}\hlopt{(}\hldef{np}\hlopt{.}\hldef{complex128}\hlopt{,\ }\hldef{copy}\hlopt{=}\hldef{}\hlkwa{False}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{chessboard\textunderscore to\textunderscore cheb}\hldef{}\hlopt{(}\hldef{n}\hlopt{:\ }\hldef{}\hlkwb{int}\hldef{}\hlopt{,\ }\hldef{pad}\hlopt{:\ }\hldef{}\hlkwb{float\ }\hldef{}\hlopt{=\ }\hldef{}\hlnum{0.5}\hldef{}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{roots\ }\hlopt{=\ }\hldef{}\hlkwd{chessboard\textunderscore roots}\hldef{}\hlopt{(}\hldef{n}\hlopt{)}\hldef{\ \ \ \ \ \ \ \ \ \ }\hlopt{}\hldef{}\hlslc{\#\ (n{*}n,)\ complex128}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{deg\textunderscore half\ }\hlopt{=\ (}\hldef{n\ }\hlopt{{-}\ }\hldef{}\hlnum{1}\hldef{}\hlopt{)\ /\ }\hldef{}\hlnum{2.0}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{A\ }\hlopt{=\ {-}}\hldef{deg\textunderscore half\ }\hlopt{{-}\ }\hldef{pad}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ }\hldef{}\hlslc{\#\ enclose\ real\ parts\ with\ a\ little\ padding}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{B\ }\hlopt{=}\hldef{\ \ }\hlopt{}\hldef{deg\textunderscore half\ }\hlopt{+\ }\hldef{pad}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{p\textunderscore x\ }\hlopt{=\ }\hldef{}\hlkwd{poly\textunderscore from\textunderscore roots}\hldef{}\hlopt{(}\hldef{roots}\hlopt{)}\hldef{\ \ \ \ \ \ \ \ \ }\hlopt{}\hldef{}\hlslc{\#\ ascending\ power\ coeffs\ (complex128)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{a}\hldef{\ \ \ }\hldef{}\hlopt{=\ }\hldef{}\hlkwd{cheb\textunderscore from\textunderscore power\textunderscore on\textunderscore domain}\hldef{}\hlopt{(}\hldef{p\textunderscore x}\hlopt{,\ }\hldef{A}\hlopt{,\ }\hldef{B}\hlopt{)}\hldef{\ \ }\hlopt{}\hldef{}\hlslc{\#\ Chebyshev\ coeffs\ on\ {[}A,B{]}}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{a}\hlopt{,\ }\hldef{A}\hlopt{,\ }\hldef{B}\hlopt{,\ }\hldef{roots}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{cp}\hlopt{,\ }\hldef{A}\hlopt{,\ }\hldef{B}\hlopt{,\ }\hldef{roots\ }\hlopt{=\ }\hldef{}\hlkwd{chessboard\textunderscore to\textunderscore cheb}\hldef{}\hlopt{(}\hldef{}\hlnum{8}\hldef{}\hlopt{)}\hldef{\ \ \ \ \ \ \ \ \ \ }\hlopt{}\hldef{}\hlslc{\#\ degree\ =\ 64}\hspace*{\fill}\\
+\hldef{guess\ }\hlopt{=\ }\hldef{}\hlkwd{cheb\textunderscore nodes\textunderscore initial\textunderscore guess}\hldef{}\hlopt{(}\hldef{}\hlkwb{len}\hldef{}\hlopt{(}\hldef{cp}\hlopt{){-}}\hldef{}\hlnum{1}\hldef{}\hlopt{,\ }\hldef{A}\hlopt{,\ }\hldef{B}\hlopt{)}\hspace*{\fill}\\
+\hldef{cr}\hlopt{,\ }\hldef{niter\ }\hlopt{=\ }\hldef{}\hlkwd{aberth\textunderscore cheb\textunderscore array}\hldef{}\hlopt{(}\hldef{cp}\hlopt{,\ }\hldef{A}\hlopt{,\ }\hldef{B}\hlopt{,\ }\hldef{guess}\hlopt{)}\hldef{}\hspace*{\fill}
+\mbox{}
+\normalfont
+\end{kframe}
+\end{knitrout}
+\end{minipage}
+&
+\begin{minipage}[m]{10cm}
+\begin{knitrout}\tiny
+\definecolor{shadecolor}{rgb}{0.969, 0.969, 0.969}\color{fgcolor}\begin{kframe}
+\noindent
+\ttfamily
+\hldef{}\hlkwb{@njit}\hspace*{\fill}\\
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{\textunderscore x\textunderscore times\textunderscore cheb}\hldef{}\hlopt{(}\hldef{c}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{n\ }\hlopt{=\ }\hldef{c}\hlopt{.}\hldef{shape}\hlopt{{[}}\hldef{}\hlnum{0}\hldef{}\hlopt{{]}{-}}\hldef{}\hlnum{1}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{d\ }\hlopt{=\ }\hldef{np}\hlopt{.}\hldef{}\hlkwd{zeros\textunderscore like}\hldef{}\hlopt{(}\hldef{c}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{if\ }\hldef{n\ }\hlopt{$>$=\ }\hldef{}\hlnum{1}\hldef{}\hlopt{:}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{d}\hlopt{{[}}\hldef{}\hlnum{0}\hldef{}\hlopt{{]}\ =\ }\hldef{}\hlnum{0.5}\hldef{}\hlopt{{*}}\hldef{c}\hlopt{{[}}\hldef{}\hlnum{1}\hldef{}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlkwa{if\ }\hldef{n\ }\hlopt{$>$=\ }\hldef{}\hlnum{2}\hldef{}\hlopt{:}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{d}\hlopt{{[}}\hldef{}\hlnum{1}\hldef{}\hlopt{{]}\ =\ }\hldef{c}\hlopt{{[}}\hldef{}\hlnum{0}\hldef{}\hlopt{{]}\ +\ }\hldef{}\hlnum{0.5}\hldef{}\hlopt{{*}}\hldef{c}\hlopt{{[}}\hldef{}\hlnum{2}\hldef{}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{}\hlkwa{for\ }\hldef{j\ }\hlkwa{in\ }\hldef{}\hlkwb{range}\hldef{}\hlopt{(}\hldef{}\hlnum{2}\hldef{}\hlopt{,\ }\hldef{n}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ }\hldef{d}\hlopt{{[}}\hldef{j}\hlopt{{]}\ =\ }\hldef{}\hlnum{0.5}\hldef{}\hlopt{{*}(}\hldef{c}\hlopt{{[}}\hldef{j}\hlopt{{-}}\hldef{}\hlnum{1}\hldef{}\hlopt{{]}\ +\ }\hldef{c}\hlopt{{[}}\hldef{j}\hlopt{+}\hldef{}\hlnum{1}\hldef{}\hlopt{{]})}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{}\hlkwa{else}\hldef{}\hlopt{:}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ \ \ \ \ }\hldef{d}\hlopt{{[}}\hldef{}\hlnum{1}\hldef{}\hlopt{{]}\ =\ }\hldef{c}\hlopt{{[}}\hldef{}\hlnum{0}\hldef{}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ \ \ \ \ }\hldef{d}\hlopt{{[}}\hldef{n}\hlopt{{]}\ =\ }\hldef{}\hlnum{0.5}\hldef{}\hlopt{{*}}\hldef{c}\hlopt{{[}}\hldef{n}\hlopt{{-}}\hldef{}\hlnum{1}\hldef{}\hlopt{{]}}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{d}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hlkwb{@njit}\hspace*{\fill}\\
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{perturb\textunderscore mix}\hldef{}\hlopt{(}\hldef{cf}\hlopt{,\ }\hldef{s}\hlopt{,\ }\hldef{t}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{e1\ }\hlopt{=\ }\hldef{}\hlnum{0.06}\hldef{}\hlopt{{*}(}\hldef{}\hlnum{2.0}\hldef{}\hlopt{{*}}\hldef{s\ }\hlopt{{-}\ }\hldef{}\hlnum{1.0}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{e2\ }\hlopt{=\ }\hldef{}\hlnum{0.04}\hldef{}\hlopt{{*}(}\hldef{}\hlnum{2.0}\hldef{}\hlopt{{*}}\hldef{t\ }\hlopt{{-}\ }\hldef{}\hlnum{1.0}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{y}\hldef{\ \ \ }\hldef{}\hlopt{=\ }\hldef{}\hlkwd{\textunderscore x\textunderscore times\textunderscore cheb}\hldef{}\hlopt{(}\hldef{cf}\hlopt{)}\hldef{\ \ \ \ \ \ \ }\hlopt{}\hldef{}\hlslc{\#\ adds\ odd\ degrees}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{y2}\hldef{\ \ }\hldef{}\hlopt{=\ }\hldef{}\hlkwd{\textunderscore x\textunderscore times\textunderscore cheb}\hldef{}\hlopt{(}\hldef{y}\hlopt{)}\hldef{\ \ \ \ \ \ \ \ }\hlopt{}\hldef{}\hlslc{\#\ richer\ coupling}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{cf\ }\hlopt{+\ }\hldef{e1}\hlopt{{*}}\hldef{y\ }\hlopt{+\ }\hldef{e2}\hlopt{{*}}\hldef{y2}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{vcr}\hlopt{,\ }\hldef{niter\ }\hlopt{=\ }\hldef{}\hlkwd{tile\textunderscore job}\hldef{}\hlopt{(}\hldef{cp}\hlopt{,}\hldef{A}\hlopt{,}\hldef{B}\hlopt{,}\hldef{}\hlnum{0.0}\hldef{}\hlopt{,}\hldef{}\hlnum{1.0}\hldef{}\hlopt{,}\hldef{}\hlnum{0.0}\hldef{}\hlopt{,}\hldef{}\hlnum{1.0}\hldef{}\hlopt{,}\hldef{side}\hlopt{{*}}\hldef{side}\hlopt{,}\hldef{perturb\textunderscore mix}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hlkwd{plot\textunderscore manifold}\hldef{}\hlopt{(}\hldef{vcr}\hlopt{,\ }\hldef{}\hlsng{"Pertubator\ 10"}\hldef{}\hlopt{,\ }\hldef{}\hlsng{"manifold\textunderscore cheb10.png"}\hldef{}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{}\hlkwb{@njit}\hspace*{\fill}\\
+\hldef{}\hlkwa{def\ }\hldef{}\hlkwd{perturb\textunderscore 11}\hldef{}\hlopt{(}\hldef{cf}\hlopt{,}\hldef{s}\hlopt{,}\hldef{t}\hlopt{):}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{e1\ }\hlopt{=\ }\hldef{}\hlnum{0.06}\hldef{}\hlopt{{*}(}\hldef{}\hlnum{2.0}\hldef{}\hlopt{{*}}\hldef{s\ }\hlopt{{-}\ }\hldef{}\hlnum{1.0}\hldef{j}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{e2\ }\hlopt{=\ }\hldef{}\hlnum{0.04}\hldef{}\hlopt{{*}(}\hldef{}\hlnum{2.0}\hldef{}\hlopt{{*}}\hldef{t\ }\hlopt{{-}\ }\hldef{}\hlnum{1.0}\hldef{j}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{y}\hldef{\ \ \ }\hldef{}\hlopt{=\ }\hldef{}\hlkwd{\textunderscore x\textunderscore times\textunderscore cheb}\hldef{}\hlopt{(}\hldef{cf}\hlopt{)}\hldef{\ \ \ \ \ \ \ }\hlopt{}\hldef{}\hlslc{\#\ adds\ odd\ degrees}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{y2}\hldef{\ \ }\hldef{}\hlopt{=\ }\hldef{}\hlkwd{\textunderscore x\textunderscore times\textunderscore cheb}\hldef{}\hlopt{(}\hldef{y}\hlopt{)}\hldef{\ \ \ \ \ \ \ \ }\hlopt{}\hldef{}\hlslc{\#\ richer\ coupling}\hspace*{\fill}\\
+\hldef{}\hldef{\ \ \ \ }\hldef{}\hlkwa{return\ }\hldef{cf\ }\hlopt{+\ }\hldef{e1}\hlopt{{*}}\hldef{y}\hlopt{{*}}\hldef{}\hlnum{1}\hldef{j\ }\hlopt{+\ }\hldef{e2}\hlopt{{*}}\hldef{y2}\hlopt{{*}}\hldef{t}\hspace*{\fill}\\
+\hldef{}\hspace*{\fill}\\
+\hldef{vcr}\hlopt{,\ }\hldef{niter\ }\hlopt{=\ }\hldef{}\hlkwd{tile\textunderscore job}\hldef{}\hlopt{(}\hldef{cp}\hlopt{,}\hldef{A}\hlopt{,}\hldef{B}\hlopt{,}\hldef{}\hlnum{0.0}\hldef{}\hlopt{,}\hldef{}\hlnum{1.0}\hldef{}\hlopt{,}\hldef{}\hlnum{0.0}\hldef{}\hlopt{,}\hldef{}\hlnum{1.0}\hldef{}\hlopt{,}\hldef{side}\hlopt{{*}}\hldef{side}\hlopt{,}\hldef{perturb\textunderscore 11}\hlopt{)}\hspace*{\fill}\\
+\hldef{}\hlkwd{plot\textunderscore manifold}\hldef{}\hlopt{(}\hldef{vcr}\hlopt{,\ }\hldef{}\hlsng{"Pertubator\ 11"}\hldef{}\hlopt{,\ }\hldef{}\hlsng{"manifold\textunderscore cheb11.png"}\hldef{}\hlopt{)}\hldef{}\hspace*{\fill}
+\mbox{}
+\normalfont
+\end{kframe}
+\end{knitrout}
+
+\end{minipage}
+\\
+\bottomrule
+\end{tabular}
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tabular}{cc}
+\includegraphics[width=10cm, height=10cm]{manifold_cheb10.png}    
+&
+\includegraphics[width=10cm, height=10cm]{manifold_cheb11.png}  
+\end{tabular}    
+\end{center}
+
+
+\end{document}

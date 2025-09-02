@@ -1,0 +1,100 @@
+\documentclass[11pt,oneside]{article}
+
+% Minimal preamble (no font packages, no custom macros)
+\usepackage[margin=1in]{geometry}
+\usepackage[T1]{fontenc}        % fine for pdfLaTeX; harmless for LuaLaTeX
+\usepackage[utf8]{inputenc}     % ignored by LuaLaTeX; fine for pdfLaTeX
+\usepackage{hyperref}           % keep links working
+
+\pagestyle{empty}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0pt}
+
+\begin{document}
+
+% ---- Header ----
+{\LARGE \textbf{Nick Nassuphis}}\par
+\rule{\textwidth}{0.5pt}
+
+\small 28 Lancaster Gate, W2 3LP \hfill 07710462948; \href{mailto:nicknassuphis@gmail.com}{nicknassuphis@gmail.com}
+\normalsize
+
+\vspace{10pt}
+
+% ---- Professional ----
+\section*{Professional}
+
+\textbf{ExodusPoint}, London, UK \hfill \emph{Sub Portfolio Manager: Sep 2020 -- May 2025}\par
+\begin{itemize}
+  \item Cross-asset volatility.
+\end{itemize}
+
+\textbf{Capstone Investment Advisors}, London, UK \hfill \emph{Portfolio Manager: Sep 2019 -- May 2020}\par
+\begin{itemize}
+  \item Cross-asset volatility.
+\end{itemize}
+
+\textbf{Insight Investment}, London, UK \hfill \emph{Senior PM, Absolute Insight: Apr 2017 -- May 2019}\par
+\begin{itemize}
+  \item Strategy analysis, development, benchmarking. Idea generation workflow. Investment process automation.
+  New business development. Equity Long/Short, Cross-Asset Volatility, FX Overlay, Emerging Market Credit. Convertibles.
+\end{itemize}
+
+\textbf{CQS}, London, UK \hfill \emph{PM, Systematic strategies: Jan 2015 -- Mar 2017}\par
+\begin{itemize}
+  \item Alpha capture, systematic M\&A arbitrage, option overlays for equity long/short strategies,
+  tactical asset allocation framework, risk analytics, idea generation workflow.
+\end{itemize}
+
+\textbf{North Harbour Capital / MapleLeaf Capital}, London, UK \hfill \emph{Managing Partner, Systematic strategies: Jan 2011 -- Dec 2014}\par
+\begin{itemize}
+  \item Systematic M\&A arbitrage, cross-asset trend following, equity factor strategies, analytics platform.
+\end{itemize}
+
+\textbf{Barclays Capital}, London, UK \hfill \emph{Head, Equity Exotic Derivatives Trading: May 2005 -- Jan 2011}\par
+\begin{itemize}
+  \item Responsible for 18 traders across London, New York, and Hong Kong.
+  \item Managed the tail-risk mitigation portfolio for the equity exotics business.
+\end{itemize}
+
+\textbf{Credit Suisse}, London, UK \hfill \emph{MD, European Equity Exotic Derivatives: Feb 2000 -- Apr 2005}\par
+\begin{itemize}
+  \item Managing Director, responsible for single-stock, index, and equity hybrids from 2004.
+  \item Director, responsible for the single-stock correlation business from 2000 onwards.
+\end{itemize}
+
+\textbf{WestLB}, London, UK \hfill \emph{Head, FX Exotic Derivatives: Jun 1997 -- Jan 2000}\par
+\begin{itemize}
+  \item Set up and managed the FX exotics business.
+\end{itemize}
+
+\textbf{Bankers Trust}, London, UK \hfill \emph{VP, European FX Exotic Derivatives: Aug 1994 -- May 1997}\par
+\begin{itemize}
+  \item Trader, FX exotics desk.
+\end{itemize}
+
+% ---- Education ----
+\section*{Education}
+
+\textbf{Massachusetts Institute of Technology}, Cambridge, MA \hfill \emph{1991 -- 1994}\par
+\begin{itemize}
+  \item MSc Engineering.
+\end{itemize}
+
+% ---- Other ----
+\section*{Other}
+
+\begin{itemize}
+  \item Equity risk factor toolkit:
+  \href{http://tinyurl.com/jhtcay3}{\texttt{tinyurl.com/jhtcay3}}
+  \item Volatility and the Buyback Anomaly:
+  \href{http://tinyurl.com/grevzzv}{\texttt{tinyurl.com/grevzzv}}
+  \item Regularized Robust Portfolio Estimation:
+  \href{https://tinyurl.com/3jh7y3b4}{\texttt{https://tinyurl.com/3jh7y3b4}}
+  \item Domain-specific language for financial contracts:
+  \href{http://tinyurl.com/639lf4f}{\texttt{tinyurl.com/639lf4f}}
+  \item Angel investor, board member at a drug discovery startup:
+  \href{https://www.reviral.co.uk/}{\texttt{https://www.reviral.co.uk/}}  
+\end{itemize}
+
+\end{document}
