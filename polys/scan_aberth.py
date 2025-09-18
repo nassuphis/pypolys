@@ -2,12 +2,14 @@
 # Polynomial manifold scanner using Aberth–Ehrlich, monomial basis.
 # - Parallelized over tiles (each worker computes its own coefficients).
 # - Warm starts within each tile with snake order + extrapolated guesses.
-# - Optional PNG output via PIL by rasterizing all roots.
-# Author: ChatGPT (GPT-5 Thinking) — 2025-08-29
+# - Optional PNG output via pyvips
 
 from __future__ import annotations
+import cmath
 import numpy as np
-from numba import njit, objmode
+import numpy.typing as npt
+from numba import njit, types
+from numba.typed import Dict
 from typing import Tuple, Callable
 import multiprocessing as mproc
 from multiprocessing.shared_memory import SharedMemory
@@ -19,7 +21,6 @@ import ast
 # parameters
 # =======================
 
-use_aberth = True
 # poly_giga_19 @ 2000*2000 evals
 # 356,000,000 roots
 # aberth: 177 sec
@@ -30,6 +31,36 @@ use_aberth = True
 
 # scan time: 565.457s rows: 1,000,000 cols: 90
 # scan time: 40.010s rows: 1,000,000 cols: 90
+
+param = {
+    "use_aberth" : True,
+    "poly"       : "giga_2880",
+    "png"        : "root_locus_6.png",
+    "pixels"     : 10_000,
+    "pps"        : 1_000,
+    "view"       : "(-2-2j,2+2j)",
+    "verbose"    : True,
+    "nodither"   : False,
+}
+
+# =======================
+# state keys
+# =======================
+# reserved state keys
+STATE_TILE_ID  = types.int8(0)
+STATE_ITER     = types.int8(1)
+STATE_XFRM     = types.int8(2)
+STATE_ZFRM     = types.int8(3)
+#custom state keys start here
+STATE_CUSTOM   = STATE_ZFRM + 1
+
+@njit
+def check_key(
+    state: Dict[np.int8, npt.NDArray[np.complex128]], 
+    k: types.int8
+)-> bool:
+    return k in state
+    
 # =======================
 # shared memory
 # =======================
@@ -255,10 +286,11 @@ def _aberth_solve(
     return z, steps, max_abs_p
 
 # =======================
-# Tile worker (no @njit) + MP driver
+# Tile worker
 # =======================
 
-
+# make a "snake" path
+# in greek: "voustophedon"
 def serpentine_grid(
         n: int, 
         x0=0.0, x1=1.0, 
@@ -281,8 +313,11 @@ def serpentine_grid(
     # scale to target ranges
     coords[:, 0] = x0 + coords[:, 0] * (x1 - x0)
     coords[:, 1] = y0 + coords[:, 1] * (y1 - y0)
+
     return coords
 
+# add "jitter" to a "snake" path
+# avoid aliasing
 def jitter_points(pts, s_start, s_end, t_start, t_end, seed=None):
     n = pts.shape[0]
     steps_side = int(round(np.sqrt(n)))  
@@ -296,6 +331,9 @@ def jitter_points(pts, s_start, s_end, t_start, t_end, seed=None):
     out[:, 1] = np.clip(out[:, 1], t_start, t_end)
     return out
 
+# work split into non-overlapping tiles
+# results go to disjoint regions of
+# shared memory
 def tile_worker(args):
     (
         tile_id, 
@@ -303,23 +341,32 @@ def tile_worker(args):
         n_points, 
         func, 
         tol, max_iters, per_root_tol, newton_fallback, verbose,
-        result_name, result_rows, result_cols  # <-- extra: cols = 1 + deg
+        result_name, result_rows, result_cols,  # <-- extra: cols = 1 + deg
+        param
     ) = args
 
+    use_aberth = param["use_aberth"]
     # complex128 result buffer: shape (result_rows, 1+deg)
     shm_result, result = get_shm(result_name, result_rows, result_cols, np.complex128)
 
     # serpentine points with or without jitter for this tile
     pts = serpentine_grid(n_points, s_start, s_end, t_start, t_end)
-    pts = jitter_points(pts, s_start, s_end, t_start, t_end, seed=None)
+    if not param["nodither"]:
+        pts = jitter_points(pts, s_start, s_end, t_start, t_end, seed=None)
 
     # degree & warm start from a sample
-
+    state  = Dict.empty(
+        key_type=types.int8,
+        value_type=types.complex128[:],
+    )
+    state[STATE_TILE_ID] = np.array([tile_id],dtype=np.complex128)
+   
     deg = result_cols -1
     guess = np.zeros(deg,dtype=np.complex128)
 
     for gi in range(len(pts)):
-        cf = func(pts[gi,0], pts[gi,1])
+        state[STATE_ITER] = np.array([gi],dtype=np.complex128)
+        cf = func(pts[gi,0], pts[gi,1],state)
         if np.any(np.isnan(cf)):
             continue
         guess = np.roots(cf).astype(np.complex128)
@@ -346,22 +393,22 @@ def tile_worker(args):
     roots = None
 
     for k in range(gi,len(pts)):
-
+        state[STATE_ITER] = np.array([k],dtype=np.complex128)
         if verbose and tile_id == 0 and (n_points >= 100) and (k % (n_points // 100) == 0):
             print(
                 f"worker {tile_id} : "
                 f"done: {100*k/n_points:.0f}% [{k:,}/{n_points:,}] "
-                f"s: {pts[k,0]:.3f} t: {pts[k,1]:.3f}] "
-                f"deg: {deg} "
-                f"last deg: {len(roots) if not roots is None else 0:,} "
-                f"ig: {gi} "
-                f"mean niter: {tot_niter/tot_aberth if tot_aberth>0 else max_iters:.2f} "
-                f"last niter: {niter} "
-                f"max ninter: {max_iters} "
-                f"last err: {np.log10(err) if err>0 else 0.0:.2f}"
+                #f"s: {pts[k,0]:.3f} t: {pts[k,1]:.3f}] "
+                #f"deg: {deg} "
+                #f"last deg: {len(roots) if not roots is None else 0:,} "
+                #f"ig: {gi} "
+                #f"mean niter: {tot_niter/tot_aberth if tot_aberth>0 else max_iters:.2f} "
+                #f"last niter: {niter} "
+                #f"max ninter: {max_iters} "
+                #f"last err: {np.log10(err) if err>0 else 0.0:.2f} "
             )
 
-        cf = func(pts[k,0], pts[k,1]).astype(np.complex128)
+        cf = func(pts[k,0], pts[k,1],state).astype(np.complex128)
         
         niter, err = 1, 1.0
         if not np.any(np.isnan(cf)):
@@ -405,7 +452,13 @@ def scan(
       col 1..deg: roots for that (s,t).
     """
     # probe degree
-    cf0 = func(0.1, 0.1)
+    state  = Dict.empty(
+        key_type=types.int8,
+        value_type=types.complex128[:],
+    )
+    state[STATE_TILE_ID] = np.array([-1],dtype=np.complex128)
+    state[STATE_ITER] = np.array([0],dtype=np.complex128)
+    cf0 = func(0.1, 0.1,state)
     deg = len(cf0) - 1
 
     ctx = mproc.get_context("spawn")
@@ -452,7 +505,8 @@ def scan(
             points_per_worker, 
             func, 
             tol, max_iters, per_root_tol, newton_fallback, verbose,
-            shm_result.name, rows_total, 1 + deg
+            shm_result.name, rows_total, 1 + deg,
+            param
         ))
 
     with ctx.Pool(processes=len(args)) as pool:
@@ -464,44 +518,78 @@ def scan(
     return out
 
 # =======================
-# polys (example coeff gen)
+# parameter transforms
 # =======================
+
+# unit circle
 @njit(cache=True, fastmath=True)
-def uc(s: float, t: float) -> Tuple[np.complex128, np.complex128]:
+def uc(
+    s: float, t: float
+) -> Tuple[np.complex128, np.complex128]:
     t1 = np.exp(1j * 2.0 * np.pi * s)  # safe (s∈[0,1])
     t2 = np.exp(1j * 2.0 * np.pi * t)  # safe (t∈[0,1])
     return( t1, t2 )
 
 @njit(cache=True, fastmath=True)
-def coeff2(t1: np.complex128, t2: np.complex128) -> Tuple[np.complex128, np.complex128]:
-   return(t1 + t2,t1 * t2)
+def coeff2(
+    t1: np.complex128, t2: np.complex128
+) -> Tuple[np.complex128, np.complex128]:
+   tt1 = t1 + t2
+   tt2 = t1 * t2
+   return ( tt1, tt2 )
 
 @njit(cache=True, fastmath=True)
-def coeff3(t1: np.complex128, t2: np.complex128) -> Tuple[np.complex128, np.complex128]:
-  return(_safe_div(1,t1 + 2),_safe_div(1,t2 + 2))
+def coeff3(
+    t1: np.complex128, t2: np.complex128
+) -> Tuple[np.complex128, np.complex128]:
+  tt1 = _safe_div( 1, t1 + 2)
+  tt2 = _safe_div( 1, t2 + 2 )
+  return( tt1 , tt2 )
 
 @njit(cache=True, fastmath=True)
-def coeff3u(t1: np.complex128, t2: np.complex128) -> Tuple[np.complex128, np.complex128]:
-  return(1/(t1 + 2),1/(t2 + 2))
+def coeff3u( # unsafe
+    t1: np.complex128, t2: np.complex128
+) -> Tuple[np.complex128, np.complex128]:
+  tt1 = 1 / ( t1 + 2 )
+  tt2 = 1 / ( t2 + 2 )
+  return ( tt1, tt2 )
 
 @njit(cache=True, fastmath=True)
-def coeff3a(t1: np.complex128, t2: np.complex128) -> Tuple[np.complex128, np.complex128]:
-  return(_safe_div(1,t1 + 1),_safe_div(1,t2 + 1))
+def coeff3a(
+    t1: np.complex128, t2: np.complex128
+) -> Tuple[np.complex128, np.complex128]:
+  tt1 = _safe_div( 1, t1 + 1 )
+  tt2 = _safe_div( 1, t2 + 1 )
+  return ( tt1, tt2 )
 
 @njit(cache=True, fastmath=True)
-def coeff4(t1: np.complex128, t2: np.complex128) -> Tuple[np.complex128, np.complex128]:
-  return( np.cos(t1),np.sin(t2))
+def coeff4(
+    t1: np.complex128, t2: np.complex128
+) -> Tuple[np.complex128, np.complex128]:
+  tt1 = np.cos(t1)
+  tt2 = np.sin(t2)
+  return ( tt1, tt2 )
 
 @njit(cache=True, fastmath=True)
-def coeff5(t1: np.complex128, t2: np.complex128) -> Tuple[np.complex128, np.complex128]:
-  return( t1 + _safe_div( 1.0 + 0.0j, t2 ), t2 + _safe_div( 1.0 + 0.0j, t1 ) )
+def coeff5(
+    t1: np.complex128, t2: np.complex128
+) -> Tuple[np.complex128, np.complex128]:
+  tt1 = t1 + _safe_div( 1.0 + 0.0j, t2 )
+  tt2 = t2 + _safe_div( 1.0 + 0.0j, t1 )
+  return ( tt1, tt2 )
 
 @njit(cache=True, fastmath=True)
-def coeff5u(t1: np.complex128, t2: np.complex128) -> Tuple[np.complex128, np.complex128]:
-  return( t1 + (1.0+0.0j)/t2 , t2 + (1.0+0.0j)/t1 )
+def coeff5u(
+    t1: np.complex128, t2: np.complex128
+) -> Tuple[np.complex128, np.complex128]:
+  tt1 = t1 + (1.0+0.0j) / t2 
+  tt2 = t2 + (1.0+0.0j) / t1
+  return ( tt1, tt2 )
 
 @njit(cache=True, fastmath=True)
-def coeff6(t1: np.complex128, t2: np.complex128) -> Tuple[np.complex128, np.complex128]:
+def coeff6(
+    t1: np.complex128, t2: np.complex128
+) -> Tuple[np.complex128, np.complex128]:
   num1 = t1*t1*t1 + 1j
   den1 = t1*t1*t1 - 1j
   val1 = _safe_div(num1 , den1, eps=1e-12 )
@@ -511,37 +599,93 @@ def coeff6(t1: np.complex128, t2: np.complex128) -> Tuple[np.complex128, np.comp
   return ( val1, val2 )
 
 @njit(cache=True, fastmath=True)
-def coeff7(t1: np.complex128, t2: np.complex128) -> Tuple[np.complex128, np.complex128]:
+def coeff6u( # unsafe
+    t1: np.complex128, t2: np.complex128
+) -> Tuple[np.complex128, np.complex128]:
+  num1 = t1*t1*t1 + 1j
+  den1 = t1*t1*t1 - 1j
+  val1 = num1 / den1
+  num2 = t2*t2*t2 + 1j
+  den2 = t2*t2*t2 - 1j
+  val2 = num2 / den2
+  return ( val1, val2 )
+
+@njit(cache=True, fastmath=True)
+def coeff7(
+    t1: np.complex128, t2: np.complex128
+) -> Tuple[np.complex128, np.complex128]:
   top1  = t1 + np.sin(t1)
   bot1  = t1 + np.cos(t1)
   val1  = _safe_div(top1 , bot1 )
   top2  = t2 + np.sin(t2)
   bot2  = t2 + np.cos(t2)
   val2  = _safe_div(top2 , bot2 )
-  return (val1, val2)
+  return ( val1, val2 )
 
 @njit(cache=True, fastmath=True)
-def coeff8(t1, t2): 
+def coeff7u( # unsafe
+    t1: np.complex128, t2: np.complex128
+) -> Tuple[np.complex128, np.complex128]:
+  top1  = t1 + np.sin(t1)
+  bot1  = t1 + np.cos(t1)
+  val1  = top1 / bot1 
+  top2  = t2 + np.sin(t2)
+  bot2  = t2 + np.cos(t2)
+  val2  = top2 / bot2 
+  return ( val1, val2 )
+
+@njit(cache=True, fastmath=True)
+def coeff8(
+    t1: np.complex128, t2: np.complex128
+) -> Tuple[np.complex128, np.complex128]: 
   top1  = t1 + np.sin(t2)
   bot1  = t2 + np.cos(t1)
   val1  = _safe_div(top1 , bot1)
   top2  = t2 + np.sin(t1)
   bot2  = t1 + np.cos(t2)
   val2  = _safe_div(top2 , bot2)
-  return (val1, val2)
+  return ( val1, val2 )
 
 @njit(cache=True, fastmath=True)
-def coeff9(t1: np.complex128, t2: np.complex128) -> Tuple[np.complex128, np.complex128]:
+def coeff8u( # unsafe
+    t1: np.complex128, t2: np.complex128
+) -> Tuple[np.complex128, np.complex128]: 
+  top1  = t1 + np.sin(t2)
+  bot1  = t2 + np.cos(t1)
+  val1  = top1 / bot1
+  top2  = t2 + np.sin(t1)
+  bot2  = t1 + np.cos(t2)
+  val2  = top2 / bot2
+  return ( val1, val2 )
+
+@njit(cache=True, fastmath=True)
+def coeff9(
+    t1: np.complex128, t2: np.complex128
+) -> Tuple[np.complex128, np.complex128]:
   top1  = t1*t1 + 1j * t2
   bot1  = t1*t1 - 1j * t2
   val1  = _safe_div(top1,bot1, eps=1e-12)
   top2  = t2*t2 + 1j * t1
   bot2  = t2*t2 - 1j * t1
   val2  = _safe_div(top2,bot2, eps=1e-12)
-  return (val1, val2)
+  return ( val1, val2 )
 
 @njit(cache=True, fastmath=True)
-def coeff10(t1: np.complex128, t2: np.complex128) -> Tuple[np.complex128, np.complex128]:
+def coeff9u(
+    t1: np.complex128, t2: np.complex128
+) -> Tuple[np.complex128, np.complex128]:
+  top1  = t1*t1 + 1j * t2
+  bot1  = t1*t1 - 1j * t2
+  val1  = top1 / bot1
+  top2  = t2*t2 + 1j * t1
+  bot2  = t2*t2 - 1j * t1
+  val2  = top2 / bot2
+  return ( val1, val2 )
+
+@njit(cache=True, fastmath=True)
+def coeff10(
+    t1: np.complex128, t2: np.complex128
+) -> Tuple[np.complex128, np.complex128]:
     top1 = t1*t1*t1*t1 - t2
     bot1 = t1*t1*t1*t1 + t2
     val1 = _safe_div(top1,bot1, eps=1e-12)
@@ -551,7 +695,30 @@ def coeff10(t1: np.complex128, t2: np.complex128) -> Tuple[np.complex128, np.com
     return( val1, val2 )
 
 @njit(cache=True, fastmath=True)
-def p1_1(a: float, b: float) -> np.ndarray:
+def coeff10u(
+    t1: np.complex128, t2: np.complex128
+) -> Tuple[np.complex128, np.complex128]:
+    top1 = t1*t1*t1*t1 - t2
+    bot1 = t1*t1*t1*t1 + t2
+    val1 = top1/bot1
+    top2 = t2*t2*t2*t2 - t1
+    bot2 = t2*t2*t2*t2 + t1
+    val2 = top2/bot2
+    return( val1, val2 )
+
+# =======================
+# coefficient transforms
+# =======================
+
+# =======================
+# polys 
+# =======================
+
+@njit(cache=True, fastmath=True)
+def p1_1(
+    a: float, b: float, 
+    state: Dict[np.int8, np.ndarray]
+) -> npt.NDArray[np.complex128]:
     # returns monomial coeffs (highest-first) for degree=20 (length 21)
     c = np.zeros(21, dtype=np.complex128)
     c[0] = 1.0
@@ -566,7 +733,10 @@ def p1_1(a: float, b: float) -> np.ndarray:
     return c
 
 @njit(cache=True, fastmath=True)
-def poly_giga_5(s:float, t:float):
+def poly_giga_5(
+    s:float, t:float, 
+    state: Dict[np.int8, np.ndarray]
+)-> npt.NDArray[np.complex128]:
     t1, t2 = uc( s, t )
     cf = np.zeros(25, dtype=np.complex128)
     cf[0]  = 1.0 + 0j 
@@ -580,8 +750,19 @@ def poly_giga_5(s:float, t:float):
     cf[14] = 100j * t2**3 - 100j * t2**2 + 100j * t2 - 100j
     return np.flip(cf)
 
+# sq2 view
+######
+# 86 sec using aberth @ 5000
+######
+# 26 sec using aberth @ 1000
+# 1410 sec using np.roots @ 1000
+# 54x speed improvement
+######
 @njit(cache=True, fastmath=True)  
-def poly_giga_10(s: float, t: float) -> np.ndarray:
+def poly_giga_10(
+    s: float, t: float, 
+    state: Dict[np.int8, np.ndarray]
+) -> npt.NDArray[np.complex128]:
 
     n = 120
     t1, t2 = uc( s, t )
@@ -591,24 +772,30 @@ def poly_giga_10(s: float, t: float) -> np.ndarray:
     re1, im1 = np.real(t1), np.imag(t1)
     re2, im2 = np.real(t2), np.imag(t2)
 
-    k = np.arange(1, n + 1, dtype=np.float64)          # 1..120
+    k = np.arange(1, n + 1, dtype=np.float64)  
     term1 = (100.0 * (re1 + im2) * (k / 10.0) ** 2) * np.exp(1j * (re2 * k / 20.0))
     term2 = (50.0 * (im1 - re2) * np.sin(k * 0.1 * im2)) * np.exp(-1j * k * 0.05 * re1)
     cf[:] = term1 + term2
 
-    cf[29] += 1j * 1000.0         # cf[30] in R
-    cf[59] += -500.0              # cf[60] in R
-    cf[89] += 250.0 * np.exp(1j * (t1 * t2))  # cf[90] in R
+    cf[29] += 1j * 1000.0         
+    cf[59] += -500.0          
+    cf[89] += 250.0 * np.exp(1j * (t1 * t2))  
 
-    return np.flip(cf)
+    return rotate_poly(np.flip(cf),-np.pi/2)
 
+# works but no dithering needed
+# aberth @500 12 sec
+# np.roots @500 141 sec
 @njit(cache=True, fastmath=True) 
-def poly_giga_19(t1: float, t2: float) -> np.ndarray:
+def poly_giga_19(
+    t1: float, t2: float, 
+    state: Dict[np.int8, np.ndarray]
+) -> npt.NDArray[np.complex128]:
 
     n = 90
     cf = np.zeros(n, dtype=np.complex128)
     cf[0] = t1 - t2
-    for k in range(1, n):  # Python 1..89 ↔ R 2..90
+    for k in range(1, n): 
         v = np.sin((k + 1) * cf[k - 1]) + np.cos((k + 1) * t1)
         av = np.abs(v)
         if np.isfinite(av) and av > 1e-10:
@@ -616,14 +803,17 @@ def poly_giga_19(t1: float, t2: float) -> np.ndarray:
         else:
             cf[k] = t1 + t2
 
-    return np.flip(cf)
+    return rotate_poly(np.flip(cf),np.pi)
 
 @njit(cache=True, fastmath=True)
-def p7f(t1, t2):
+def p7f(
+    t1:float , t2:float, 
+    state: Dict[np.int8, np.ndarray]
+) -> npt.NDArray[np.complex128]:
     pi2  =  2 * np.pi
-    n    =  23
-    tt1  =  np.exp(1j * 2 * np.pi * t1)
-    ttt1 =  np.exp(1j * 2 * np.pi * tt1)
+    n    =  23 # was 23
+    tt1  =  np.exp(1j * pi2 * t1)
+    ttt1 =  np.exp(1j * pi2 * tt1)
     v  =  np.linspace(np.real(tt1), np.real(ttt1), n)
     if t2 < 0.1:
         f = 10 * t1 * np.exp(1j * np.sin(11 * pi2 * v))
@@ -648,53 +838,49 @@ def p7f(t1, t2):
 
     f[n-1] +=  211 * np.exp(1j * pi2 * (1/7) * t2 )
 
-    return f
+    return rotate_poly(f,-np.pi/2)
     
+# aberth @500 3 sec
+# np.roots @500 16 sec
 @njit(cache=True, fastmath=True)
-def poly_giga_42(s: float, t: float) -> np.ndarray:
-    # R: length 50, indices 1-based; here: 0-based
+def poly_giga_42(
+    s: float, t: float, 
+    state: Dict[np.int8, np.ndarray]
+) -> npt.NDArray[np.complex128]:
     t1, t2 = uc( s, t )
     cf = np.zeros(45, dtype=np.complex128)
-
-    # cf[c(1, 8, 16, 32, 40)] = c(1, -3, 3, -1, 2)
-    cf[0]  = 1.0 + 0.0j    # index 1
-    cf[7]  = -3.0 + 0.0j   # index 8
-    cf[15] = 3.0 + 0.0j    # index 16
-    cf[31] = -1.0 + 0.0j   # index 32
-    cf[39] = 2.0 + 0.0j    # index 40
-
-    # cf[12] = 100i * exp(t1^2 + t2^2)
+    cf[0]  = 1.0 + 0.0j   
+    cf[7]  = -3.0 + 0.0j  
+    cf[15] = 3.0 + 0.0j    
+    cf[31] = -1.0 + 0.0j  
+    cf[39] = 2.0 + 0.0j   
     cf[11] = 100.0j * np.exp(t1 * t1 + t2 * t2)
-
-    # cf[20] = 50 * (t1^3 + t2^3)
     cf[19] = 50.0 * (t1 * t1 * t1 + t2 * t2 * t2)
-
-    # cf[25] = exp(1i * (t1 - t2)) + 10 * t1^2
     cf[24] = np.exp(1.0j * (t1 - t2)) + 10.0 * (t1 * t1)
-
-    # cf[45] = 200 * sin(t1 + t2) + 1i * cos(t1 - t2)
     cf[44] = 200.0 * np.sin(t1 + t2) + 1.0j * np.cos(t1 - t2)
-
-    # numpy roots expect highest
     return np.flip(cf)
 
+#
 @njit(cache=True, fastmath=True)
-def poly_giga_0142(s: float, t: float) -> np.ndarray:
-    tt1, tt2 = uc( s, t )
-    t1 = tt1 + tt2
-    t2 = tt1 * tt2
+def poly_giga_0142( s: float, t: float, state: Dict[np.int8, np.ndarray]):
+    a, b = uc( s, t )
+    t1 = a + b
+    t2 = a * b
     n = 40
     a = abs(t1 + t2) * 0.5
     m = int((5.0 * a) % 21.0) + 3  # in {3, ..., 23}
     v = np.power(np.linspace(0.0, 1.0, n), 0.75) / (m + t1 + t2) 
-    uc = np.exp(1j * 50.0 * np.pi * v)                  
+    u = np.exp(1j * 50.0 * np.pi * v)                  
     sf = (np.arange(n, dtype=np.float64) % float(m + 10)) 
-    cf = (sf * uc).astype(np.complex128)  # (n,) complex128
+    cf = (sf * u).astype(np.complex128)  # (n,) complex128
     return cf[1:]
 
 
 @njit(cache=True, fastmath=True)
-def p11b2_v5(s: float, t: float) -> np.ndarray:
+def p11b2_v5(
+    s: float, t: float, 
+    state: Dict[np.int8, np.ndarray]
+) -> npt.NDArray[np.complex128]:
     t1 = s
     t2 = t
     n = 11
@@ -714,50 +900,58 @@ def p11b2_v5(s: float, t: float) -> np.ndarray:
     uc = np.exp(1j * np.pi * u) 
     return uc.astype(np.complex128)
 
-# ---------- persistent state held in Python (per process) ----------
-_p11b2_guess: np.ndarray | None = None
-
-def _get_p11b2_guess() -> np.ndarray:
-    global _p11b2_guess
-    if _p11b2_guess is None:
-        g0 = np.roots(p11b2_v5(0.01, 0.01)).astype(np.complex128)
-        _p11b2_guess = g0
-    return _p11b2_guess
-
-def _set_p11b2_guess(new_guess: np.ndarray) -> None:
-    global _p11b2_guess
-    _p11b2_guess = np.asarray(new_guess, dtype=np.complex128)
+# store previous root in state
+@njit(cache=True, fastmath=True)
+def p11b2_v5_abroot(
+    t1: float, t2: float, 
+    state: Dict[np.int8, np.ndarray]
+) -> npt.NDArray[np.complex128]:
+    cf = p11b2_v5(t1, t2, state)
+    if not check_key(state,STATE_CUSTOM):
+        g0 = np.roots(p11b2_v5(0.01, 0.01,state)).astype(np.complex128)
+        state[STATE_CUSTOM] = g0
+    roots, niter, err = _aberth_solve(cf, state[STATE_CUSTOM], 1e-10, 120, True, True)
+    state[STATE_CUSTOM] = roots
+    return roots
 
 @njit(cache=True, fastmath=True)
-def p11b2_v5_nproot(t1: float, t2: float) -> np.ndarray:
-    cf = p11b2_v5(t1, t2)
+def p11b2_v5_revabroot(
+    t1: float, t2: float, 
+    state: Dict[np.int8, np.ndarray]
+) -> npt.NDArray[np.complex128]:
+    cf = np.flip(p11b2_v5(t1, t2, state))
+    if not check_key(state,STATE_CUSTOM):
+        g0 = np.roots(p11b2_v5(0.01, 0.01,state)).astype(np.complex128)
+        state[STATE_CUSTOM] = g0
+    roots, niter, err = _aberth_solve(cf, state[STATE_CUSTOM], 1e-10, 120, False, False)
+    state[STATE_CUSTOM] = roots
+    return roots
+
+@njit(cache=True, fastmath=True)
+def p11b2_v5_nproot(
+    t1: float, t2: float, 
+    state: Dict[np.int8, np.ndarray]
+) -> npt.NDArray[np.complex128]:
+    cf = p11b2_v5(t1, t2, state)
     roots = np.roots(cf)
     return roots
 
 @njit(cache=True, fastmath=True)
-def p11b2_v5_revnproot(t1: float, t2: float) -> np.ndarray:
-    cf = np.flip(p11b2_v5(t1, t2))
+def p11b2_v5_revnproot(
+    t1: float, t2: float, 
+    state: Dict[np.int8, np.ndarray]
+) -> npt.NDArray[np.complex128]:
+    cf = np.flip(p11b2_v5(t1, t2, state))
     roots = np.roots(cf)
     return roots
 
-@njit(cache=True, fastmath=True)
-def p11b2_v5_abroot(t1: float, t2: float) -> np.ndarray:
-    cf = p11b2_v5(t1, t2)
-    with objmode(g='complex128[:]'): g = _get_p11b2_guess()
-    roots, niter, err = _aberth_solve(cf, g, 1e-10, 120, True, True)
-    with objmode(): _set_p11b2_guess(roots)
-    return roots
+
 
 @njit(cache=True, fastmath=True)
-def p11b2_v5_revabroot(t1: float, t2: float) -> np.ndarray:
-    cf = np.flip(p11b2_v5(t1, t2))
-    with objmode(g='complex128[:]'): g = _get_p11b2_guess()
-    roots, niter, err = _aberth_solve(cf, g, 1e-10, 120, False, False)
-    with objmode(): _set_p11b2_guess(roots)
-    return roots
-
-@njit(cache=True, fastmath=True)
-def poly_cf1p1(s:float, t:float) -> np.ndarray:
+def poly_cf1p1(
+    s:float, t:float, 
+    state: Dict[np.int8, np.ndarray]
+) -> npt.NDArray[np.complex128]:
     t1, t2 = uc( s, t )
     cf = np.zeros(36, dtype=np.complex128)
     for i in range(1, 37):
@@ -768,7 +962,10 @@ def poly_cf1p1(s:float, t:float) -> np.ndarray:
     return rotate_poly(np.flip(cf),-np.pi/2)
 
 @njit(cache=True, fastmath=True)
-def poly_cf3p1(s: float, t: float) -> np.ndarray:
+def poly_cf3p1(
+    s: float, t: float, 
+    state: Dict[np.int8, np.ndarray]
+) -> npt.NDArray[np.complex128]:
     t1, t2 = uc( s, t )
     t1, t2 = coeff3( t1, t2 )
     cf = np.zeros(36, dtype=np.complex128)
@@ -787,7 +984,10 @@ def poly_cf3p1(s: float, t: float) -> np.ndarray:
  
 # np.roots vs aberth difference
 @njit(cache=True, fastmath=True)
-def poly_cf3p1a(s: float, t: float) -> np.ndarray:
+def poly_cf3p1a(
+    s: float, t: float, 
+    state: Dict[np.int8, np.ndarray]
+) -> npt.NDArray[np.complex128]:
     t1, t2 = uc( s, t )
     t1, t2 = coeff3u( t1, t2 )
     cf = np.zeros(36, dtype=np.complex128)
@@ -800,7 +1000,10 @@ def poly_cf3p1a(s: float, t: float) -> np.ndarray:
     return rotate_poly(np.flip(cf),-np.pi/2)
 
 @njit(cache=True, fastmath=True)
-def poly_cf5p1(s: float, t: float) -> np.ndarray:
+def poly_cf5p1(
+    s: float, t: float, 
+    state: Dict[np.int8, np.ndarray]
+) -> npt.NDArray[np.complex128]:
     t1, t2 = uc( s, t )
     t1, t2 = coeff5( t1, t2 )
     cf = np.zeros(36, dtype=np.complex128)
@@ -819,7 +1022,10 @@ def poly_cf5p1(s: float, t: float) -> np.ndarray:
 
 # np.roots vs aberth difference
 @njit(cache=True, fastmath=True)
-def poly_cf5p1u(s: float, t: float) -> np.ndarray:
+def poly_cf5p1u(
+    s: float, t: float, 
+    state: Dict[np.int8, np.ndarray]
+) -> npt.NDArray[np.complex128]:
     t1, t2 = uc( s, t )
     t1, t2 = coeff5u( t1, t2 )
     cf = np.zeros(36, dtype=np.complex128)
@@ -832,7 +1038,10 @@ def poly_cf5p1u(s: float, t: float) -> np.ndarray:
     return rotate_poly(np.flip(cf),-np.pi/2)
 
 @njit(cache=True, fastmath=True)
-def poly_8(s:float, t:float)-> np.ndarray:
+def poly_8(
+    s:float, t:float, 
+    state: Dict[np.int8, np.ndarray]
+)-> npt.NDArray[np.complex128]:
     t1, t2 = uc( s, t )
     cf = np.zeros(51, dtype=np.complex128)
     cf[0:25] = np.arange(1, 26) * (t1**2 + 1j * t2**3)
@@ -848,7 +1057,10 @@ def poly_8(s:float, t:float)-> np.ndarray:
     return rotate_poly(np.flip(cf),-np.pi/2)
 
 @njit(cache=True, fastmath=True)
-def poly_52(s:float, t:float)-> np.ndarray:
+def poly_52(
+    s:float, t:float, 
+    state: Dict[np.int8, np.ndarray]
+)-> npt.NDArray[np.complex128]:
     t1, t2 = uc( s, t )
     cf = np.zeros(71, dtype=np.complex128)
     cf[0] = t1 ** 7 + t2 ** 7
@@ -860,7 +1072,10 @@ def poly_52(s:float, t:float)-> np.ndarray:
     return rotate_poly(np.flip(cf),-np.pi/2)
     
 @njit(cache=True, fastmath=True)
-def poly_123(s:float, t:float)-> np.ndarray:
+def poly_123(
+    s:float, t:float, 
+    state: Dict[np.int8, np.ndarray]
+)-> npt.NDArray[np.complex128]:
     t1, t2 = uc( s, t )
     cf = np.zeros(71, dtype=np.complex128)
     cf[0] = t1.real**2 - t2.imag**2
@@ -878,7 +1093,10 @@ def poly_123(s:float, t:float)-> np.ndarray:
     return rotate_poly(np.flip(cf),-np.pi/2)
 
 @njit(cache=True, fastmath=True)
-def poly_184(s:float, t:float)-> np.ndarray:
+def poly_184(
+    s:float, t:float, 
+    state: Dict[np.int8, np.ndarray]
+)-> npt.NDArray[np.complex128]:
     t1, t2 = uc( s, t )
     cf = np.zeros(71, dtype=np.complex128)
     cf[0] = t1**5 + 2 * t2**4
@@ -897,7 +1115,10 @@ def poly_184(s:float, t:float)-> np.ndarray:
     return rotate_poly(np.flip(cf),-np.pi/2)
   
 @njit(cache=True, fastmath=True)
-def poly_532(s:float, t:float)-> np.ndarray:
+def poly_532(
+    s:float, t:float, 
+    state: Dict[np.int8, np.ndarray]
+)-> npt.NDArray[np.complex128]:
     t1, t2 = uc( s, t )
     n = 35
     cf = np.zeros(n, dtype=np.complex128)
@@ -910,7 +1131,10 @@ def poly_532(s:float, t:float)-> np.ndarray:
     return rotate_poly(np.flip(cf),-np.pi/2)
     
 @njit(cache=True, fastmath=True)
-def poly_600(s:float, t:float)-> np.ndarray:
+def poly_600(
+    s:float, t:float, 
+    state: Dict[np.int8, np.ndarray]
+) -> npt.NDArray[np.complex128]:
     t1, t2 = uc( s, t )
     degree = 25
     cf = np.zeros(degree + 1, dtype=np.complex128)
@@ -931,7 +1155,10 @@ def poly_600(s:float, t:float)-> np.ndarray:
 
 
 @njit(cache=True, fastmath=True)
-def poly_597(s:float, t:float)-> np.ndarray:
+def poly_597(
+    s:float, t:float, 
+    state: Dict[np.int8, np.ndarray]
+)-> npt.NDArray[np.complex128]:
     t1, t2 = uc( s, t )
     degree = 25
     cf = np.zeros(degree + 1, dtype=np.complex128)
@@ -959,15 +1186,14 @@ def poly_597(s:float, t:float)-> np.ndarray:
 
 
 @njit(cache=True, fastmath=True)
-def poly_cf10p1(s: float, t: float) -> np.ndarray:
-
+def poly_cf10p1(
+    s: float, t: float, 
+    state: Dict[np.int8, np.ndarray]
+) -> npt.NDArray[np.complex128]:
     t1, t2 = uc( s, t )
-    t1, t2 = coeff10( t1, t2 )
+    t1, t2 = coeff10u( t1, t2 )
     cf = np.zeros(36, dtype=np.complex128)
-
-    # real, safe log(|t1+t2|+1)
     L = np.log(abs(t1 + t2) + 1.0)
-
     for i in range(1, 37):
         pw1 = _c_pow_frac(t1, 0.5 * i)        # t1**(i/2)
         pw2 = _c_pow_frac(t2, (1.0/3.0) * i)  # t2**(i/3)
@@ -975,27 +1201,21 @@ def poly_cf10p1(s: float, t: float) -> np.ndarray:
         term_poly = (i*i) * t1 * t2
         term_log  = (0.0 + 1.0j) * L * i
         cf[i-1] = term_trig + term_poly + term_log
-
-    # cross terms (guarded powers used)
     cf[10] = t1 * t2 * (cf[6].real) + (cf[18].imag) * t1 * t1 * t1
     cf[21] = t2 * cf[10] + (cf[34].real) * t1 * t1 * t1
     cf[32] = cf[21] - (cf[16].real) * t1 * t1
-
-    # clean non-finite just in case
-    for i in range(cf.size):
-        z = cf[i]
-        if not (np.isfinite(z.real) and np.isfinite(z.imag)):
-            cf[i] = 0.0 + 0.0j
-
-    # highest-first + rotate roots by -pi/2
     return rotate_poly(np.flip(cf),-np.pi/2)
 
-
+# aberth not working
+# np.roots works
 @njit(cache=True, fastmath=True)
-def poly_cf10p344(s: float, t: float) -> np.ndarray:
-    t1, t2 = uc( s, t )
-    t1, t2 = coeff10( t1, t2 )
-    n = 35
+def poly_cf10p344(
+    s: float, t: float, 
+    state: Dict[np.int8, np.ndarray]
+) -> npt.NDArray[np.complex128]:
+    tt1, tt2 = uc( s, t )
+    t1, t2 = coeff10u( tt1, tt2 )
+    n = 35 # was 35
     cf = np.zeros(n, dtype=np.complex128)
     rec_seq = np.linspace(np.real(t1), np.real(t2), n)
     imc_seq = np.linspace(np.imag(t1), np.imag(t2), n)
@@ -1003,31 +1223,30 @@ def poly_cf10p344(s: float, t: float) -> np.ndarray:
         mag = np.log(np.abs(rec_seq[j] * imc_seq[j]) + 1) * (1 + np.sin(j * np.pi / 3)) * (j % 4 + 1)
         ang = np.angle(t1) * np.cos(j * np.pi / 5) + np.angle(t2) * np.sin(j * np.pi / 7) + np.log(np.abs(rec_seq[j] + imc_seq[j]) + 1)
         cf[j] = mag * (np.cos(ang) + 1j * np.sin(ang))
-    for i in range(cf.size):
-        z = cf[i]
-        if not (np.isfinite(z.real) and np.isfinite(z.imag)):
-            cf[i] = 0.0 + 0.0j
     return cf
     
 @njit(cache=True, fastmath=True)
-def poly_cf9p546(s: float, t: float) -> np.ndarray:
+def poly_cf9p546(
+    s: float, t: float, 
+    state: Dict[np.int8, np.ndarray]
+) -> npt.NDArray[np.complex128]:
     t1, t2 = uc( s, t )
     t1, t2 = coeff9( t1, t2 )
     n = 35
     cf = np.zeros(n, dtype=np.complex128)
-    rec1 = t1.real
-    imc1 = t1.imag
-    rec2 = t2.real
-    imc2 = t2.imag
+    imc1 = t1.imag 
+    imc2 = t2.imag 
     for j in range(1, n + 1):
-        r = (rec1 + rec2) / 2 + np.sin(j * np.pi / 7) * np.cos(j * np.pi / 5)
         theta = (imc1 - imc2) / n * j + np.sin(j * np.pi / 3)
         magnitude = np.log(np.abs(t1) * j + np.abs(t2) * (n - j + 1)) + np.sqrt(j)
         cf[j - 1] = magnitude * (np.cos(theta) + 1j * np.sin(theta))
     return rotate_poly(np.flip(cf),-np.pi/2)
 
 @njit(cache=True, fastmath=True)
-def poly_cf9p440(s: float, t: float) -> np.ndarray:
+def poly_cf9p440(
+    s: float, t: float, 
+    state: Dict[np.int8, np.ndarray]
+) -> npt.NDArray[np.complex128]:
     t1, t2 = uc( s, t )
     t1, t2 = coeff9( t1, t2 )
     n = 35
@@ -1041,7 +1260,10 @@ def poly_cf9p440(s: float, t: float) -> np.ndarray:
     return rotate_poly(np.flip(cf),-np.pi/2)
 
 @njit(cache=True, fastmath=True)
-def poly_cf5p371(s: float, t: float) -> np.ndarray:
+def poly_cf5p371(
+    s: float, t: float, 
+    state: Dict[np.int8, np.ndarray]
+) -> npt.NDArray[np.complex128]:
     t1, t2 = uc( s, t )
     t1, t2 = coeff5( t1, t2 )
     n = 35
@@ -1052,10 +1274,15 @@ def poly_cf5p371(s: float, t: float) -> np.ndarray:
         cf[j - 1] = mag_part * (np.cos(angle_part) + 1j * np.sin(angle_part)) + np.conj(t1)**j - np.log(np.abs(t2) + 1) * np.sin(j)
     return rotate_poly(np.flip(cf),-np.pi/2)
 
+# FIXME
+# aberth not working
 @njit(cache=True, fastmath=True)
-def poly_cf6p345(s: float, t: float) -> np.ndarray:
+def poly_cf6p345(
+    s: float, t: float, 
+    state: Dict[np.int8, np.ndarray]
+) -> npt.NDArray[np.complex128]:
     t1, t2 = uc( s, t )
-    t1, t2 = coeff6( t1, t2 )
+    t1, t2 = coeff6u( t1, t2 )
     n = 35
     cf = np.zeros(n, dtype=np.complex128)
     rec = np.linspace(np.real(t1), np.real(t2), n)
@@ -1066,10 +1293,15 @@ def poly_cf6p345(s: float, t: float) -> np.ndarray:
         cf[j] += np.conj(cf[j]) * np.sin(j * np.pi / 4)
     return _rotate_poly_safe(np.flip(cf),-np.pi/2)
 
+# FIXME
+# aberth not working
 @njit(cache=True, fastmath=True)
-def poly_cf6p344(s: float, t: float) -> np.ndarray:
+def poly_cf6p344(
+    s: float, t: float, 
+    state: Dict[np.int8, np.ndarray]
+) -> npt.NDArray[np.complex128]:
     t1, t2 = uc( s, t )
-    t1, t2 = coeff6( t1, t2 )
+    t1, t2 = coeff6u( t1, t2 )
     n = 35
     cf = np.zeros(n, dtype=np.complex128)
     rec_seq = np.linspace(np.real(t1), np.real(t2), n)
@@ -1082,7 +1314,10 @@ def poly_cf6p344(s: float, t: float) -> np.ndarray:
 
     
 @njit(cache=True, fastmath=True)
-def poly_cf4p729(s: float, t: float) -> np.ndarray:
+def poly_cf4p729(
+    s: float, t: float, 
+    state: Dict[np.int8, np.ndarray]
+) -> npt.NDArray[np.complex128]:
     t1, t2 = uc( s, t )
     t1, t2 = coeff4( t1, t2 )
     degree = 8
@@ -1096,7 +1331,10 @@ def poly_cf4p729(s: float, t: float) -> np.ndarray:
     return _rotate_poly_safe(np.flip(cf),-np.pi/2)
   
 @njit(cache=True, fastmath=True)
-def poly_cf4p808(s: float, t: float) -> np.ndarray:
+def poly_cf4p808(
+    s: float, t: float, 
+    state: Dict[np.int8, np.ndarray]
+) -> npt.NDArray[np.complex128]:
     t1, t2 = uc( s, t )
     t1, t2 = coeff4( t1, t2 )
     cf = np.zeros(25, dtype=np.complex128)
@@ -1110,9 +1348,11 @@ def poly_cf4p808(s: float, t: float) -> np.ndarray:
     return _rotate_poly_safe(np.flip(cf),-np.pi/2)
 
 
-
 @njit(cache=True, fastmath=True)
-def poly_cf4p821(s: float, t: float) -> np.ndarray:
+def poly_cf4p821(
+    s: float, t: float, 
+    state: Dict[np.int8, np.ndarray]
+) -> npt.NDArray[np.complex128]:
     t1, t2 = uc( s, t )
     t1, t2 = coeff4( t1, t2 )
     cf = np.zeros(25, dtype=np.complex128)
@@ -1129,8 +1369,12 @@ def poly_cf4p821(s: float, t: float) -> np.ndarray:
             cf[k] = cf[k] / (1j * arg_t2)
     return _rotate_poly_safe(np.flip(cf),-np.pi/2)
 
+# works
 @njit(cache=True, fastmath=True)
-def poly_cf5p23(s: float, t: float) -> np.ndarray:
+def poly_cf5p23(
+    s: float, t: float, 
+    state: Dict[np.int8, np.ndarray]
+) -> npt.NDArray[np.complex128]:
     t1, t2 = uc( s, t )
     t1, t2 = coeff5( t1, t2 )
     cf = np.zeros(71, dtype=np.complex128)
@@ -1146,9 +1390,12 @@ def poly_cf5p23(s: float, t: float) -> np.ndarray:
     cf[50] = cf[40] + cf[20] + np.sin(t2)
     return _rotate_poly_safe(np.flip(cf),-np.pi/2)
 
-
+# works
 @njit(cache=True, fastmath=True)
-def poly_cf5p242(s: float, t: float) -> np.ndarray:
+def poly_cf5p242(
+    s: float, t: float, 
+    state: Dict[np.int8, np.ndarray]
+) -> npt.NDArray[np.complex128]:
     t1, t2 = uc( s, t )
     t1, t2 = coeff5( t1, t2 )
     cf = np.zeros(35, dtype=np.complex128)
@@ -1170,8 +1417,12 @@ def poly_cf5p242(s: float, t: float) -> np.ndarray:
     cf[34] = 90j * t1 * t2 - 45 * np.real(t1) + 22.5
     return _rotate_poly_safe(np.flip(cf),-np.pi/2)
 
+# works
 @njit(cache=True, fastmath=True)
-def poly_cf5p69(s: float, t: float) -> np.ndarray:
+def poly_cf5p69(
+    s: float, t: float, 
+    state: Dict[np.int8, np.ndarray]
+) -> npt.NDArray[np.complex128]:
     t1, t2 = uc( s, t )
     t1, t2 = coeff5( t1, t2 )
     cf = np.zeros(71, dtype=np.complex128)
@@ -1180,9 +1431,13 @@ def poly_cf5p69(s: float, t: float) -> np.ndarray:
         cf[i - 1] = ((np.real(t1) + np.imag(t1) * j) / np.abs(t2 + i)) * np.sin(np.angle(t1 + t2 * i)) + np.log(np.abs(t1 * t2) + 1) * np.cos(2 * np.pi * i / 71)
     cf[cf == 0] = np.real(t1) ** 2 - np.imag(t1) * np.imag(t2)
     return _rotate_poly_safe(np.flip(cf),-np.pi/2)
-        
+
+# works       
 @njit(cache=True, fastmath=True)
-def poly_cf5p6(s: float, t: float) -> np.ndarray:
+def poly_cf5p6(
+    s: float, t: float, 
+    state: Dict[np.int8, np.ndarray]
+) -> npt.NDArray[np.complex128]:
     t1, t2 = uc( s, t )
     t1, t2 = coeff5( t1, t2 )
     cf = np.zeros(51, dtype=np.complex128)
@@ -1190,8 +1445,12 @@ def poly_cf5p6(s: float, t: float) -> np.ndarray:
         cf[k-1] = (t1 + t2) * np.sin(np.log(np.abs(t1 * t2)**k + 1)) + np.cos(np.angle(t1 * t2)**k) * np.conj(t1 - t2)
     return _rotate_poly_safe(np.flip(cf),-np.pi/2)
 
+# works
 @njit(cache=True, fastmath=True)
-def poly_cf1p530(s: float, t: float) -> np.ndarray:
+def poly_cf1p530(
+    s: float, t: float, 
+    state: Dict[np.int8, np.ndarray]
+) -> npt.NDArray[np.complex128]:
     t1, t2 = uc( s, t )
     n = 35
     cf = np.zeros(n, dtype=np.complex128)
@@ -1208,8 +1467,12 @@ def poly_cf1p530(s: float, t: float) -> np.ndarray:
         cf[j] = mag * (np.cos(angle) + 1j * np.sin(angle))
     return _rotate_poly_safe(np.flip(cf),-np.pi/2)
 
+# works
 @njit(cache=True, fastmath=True)
-def poly_cf2p105(s: float, t: float) -> np.ndarray:
+def poly_cf2p105(
+    s: float, t: float, 
+    state: Dict[np.int8, np.ndarray]
+) -> npt.NDArray[np.complex128]:
     t1, t2 = uc( s, t )
     t1, t2 = coeff2( t1, t2 )
     n = 71
@@ -1218,9 +1481,12 @@ def poly_cf2p105(s: float, t: float) -> np.ndarray:
             cf[k - 1] = np.sin(k * (np.real(t1) * np.imag(t2))**3) + np.cos(k * np.log(np.abs(t1 * t2 + 1)) * np.angle(t1 + np.conj(t2)))
     return _rotate_poly_safe(np.flip(cf),-np.pi/2)
 
-
+# works
 @njit(cache=True, fastmath=True)
-def poly_cf2p112(s: float, t: float) -> np.ndarray:
+def poly_cf2p112(
+    s: float, t: float, 
+    state: Dict[np.int8, np.ndarray]
+) -> npt.NDArray[np.complex128]:
     t1, t2 = uc( s, t )
     t1, t2 = coeff2( t1, t2 )
     cf = np.zeros(71, dtype=np.complex128)
@@ -1239,8 +1505,14 @@ def poly_cf2p112(s: float, t: float) -> np.ndarray:
     cf[70] = np.sum(cf[0:70]) / 71
     return _rotate_poly_safe(np.flip(cf),-np.pi/2)
 
+# works
+# np.roots @500 45 sec
+# aberth @500 5 sec
 @njit(cache=True, fastmath=True)
-def poly_cf2p114(s: float, t: float) -> np.ndarray:
+def poly_cf2p114(
+    s: float, t: float, 
+    state: Dict[np.int8, np.ndarray]
+) -> npt.NDArray[np.complex128]:
     t1, t2 = uc( s, t )
     t1, t2 = coeff2( t1, t2 )
     cf = np.zeros(71, dtype=np.complex128)
@@ -1257,9 +1529,13 @@ def poly_cf2p114(s: float, t: float) -> np.ndarray:
     cf[70] = np.exp(t1) - np.exp(t2) 
     return _rotate_poly_safe(np.flip(cf),-np.pi/2)
 
+# FIXME
 # np.roots works, aberth not at all
 @njit(cache=True, fastmath=True)
-def poly_cf2p116(s: float, t: float) -> np.ndarray:
+def poly_cf2p116(
+    s: float, t: float, 
+    state: Dict[np.int8, np.ndarray]
+) -> npt.NDArray[np.complex128]:
     t1, t2 = uc( s, t )
     t1, t2 = coeff2( t1, t2 )
     cf = np.zeros(71, dtype=np.complex128)
@@ -1273,7 +1549,10 @@ def poly_cf2p116(s: float, t: float) -> np.ndarray:
 
 
 @njit(cache=True, fastmath=True)
-def poly_cf2p243(s: float, t: float) -> np.ndarray:
+def poly_cf2p243(
+    s: float, t: float, 
+    state: Dict[np.int8, np.ndarray]
+)-> npt.NDArray[np.complex128]:
     t1, t2 = uc( s, t )
     t1, t2 = coeff2( t1, t2 )
     cf = np.zeros(35, dtype=np.complex128)
@@ -1307,7 +1586,10 @@ def poly_cf2p243(s: float, t: float) -> np.ndarray:
 
 # np.roots works, aberth not at all
 @njit(cache=True, fastmath=True)
-def poly_cf2p273(s: float, t: float) -> np.ndarray:
+def poly_cf2p273(
+    s: float, t: float, 
+    state: Dict[np.int8, np.ndarray]
+)-> npt.NDArray[np.complex128]:
     t1, t2 = uc( s, t )
     t1, t2 = coeff2( t1, t2 )
     cf = np.zeros(35, dtype=np.complex128)
@@ -1332,7 +1614,10 @@ def poly_cf2p273(s: float, t: float) -> np.ndarray:
 
 
 @njit(cache=True, fastmath=True)
-def poly_cf2p393(s: float, t: float) -> np.ndarray:
+def poly_cf2p393(
+    s: float, t: float, 
+    state: Dict[np.int8, np.ndarray]
+) -> npt.NDArray[np.complex128]:
     t1, t2 = uc( s, t )
     t1, t2 = coeff2( t1, t2 )
     cf = np.zeros(35, dtype=np.complex128)
@@ -1346,7 +1631,10 @@ def poly_cf2p393(s: float, t: float) -> np.ndarray:
     return _rotate_poly_safe(np.flip(cf),-np.pi/2)
 
 @njit(cache=True, fastmath=True)
-def poly_cf2p393rev(s: float, t: float) -> np.ndarray:
+def poly_cf2p393rev(
+    s: float, t: float, 
+    state: Dict[np.int8, np.ndarray]
+) -> npt.NDArray[np.complex128]:
     t1, t2 = uc( s, t )
     t1, t2 = coeff2( t1, t2 )
     cf = np.zeros(35, dtype=np.complex128)
@@ -1360,7 +1648,10 @@ def poly_cf2p393rev(s: float, t: float) -> np.ndarray:
     return cf
 
 @njit(cache=True, fastmath=True)
-def poly_cf2p425(s: float, t: float) -> np.ndarray:
+def poly_cf2p425(
+    s: float, t: float, 
+    state: Dict[np.int8, np.ndarray]
+) -> npt.NDArray[np.complex128]:
     t1, t2 = uc( s, t )
     t1, t2 = coeff2( t1, t2 )
     n = 35
@@ -1379,7 +1670,10 @@ def poly_cf2p425(s: float, t: float) -> np.ndarray:
     return _rotate_poly_safe(np.flip(cf),-np.pi/2)
 
 @njit(cache=True, fastmath=True)
-def poly_cf2p472(s: float, t: float) -> np.ndarray:
+def poly_cf2p472(
+    s: float, t: float, 
+    state: Dict[np.int8, np.ndarray]
+) -> npt.NDArray[np.complex128]:
     t1, t2 = uc( s, t )
     t1, t2 = coeff2( t1, t2 )
     n = 71
@@ -1395,7 +1689,10 @@ def poly_cf2p472(s: float, t: float) -> np.ndarray:
     return _rotate_poly_safe(np.flip(cf),-np.pi/2)
 
 @njit(cache=True, fastmath=True)
-def poly_cf2p483(s: float, t: float) -> np.ndarray:
+def poly_cf2p483(
+    s: float, t: float, 
+    state: Dict[np.int8, np.ndarray]
+) -> npt.NDArray[np.complex128]:
     t1, t2 = uc( s, t )
     t1, t2 = coeff2( t1, t2 )
     n =35
@@ -1415,7 +1712,10 @@ def poly_cf2p483(s: float, t: float) -> np.ndarray:
     return _rotate_poly_safe(np.flip(cf),-np.pi/2)
 
 @njit(cache=True, fastmath=True)
-def poly_cf2p666(s: float, t: float) -> np.ndarray:
+def poly_cf2p666(
+    s: float, t: float, 
+    state: Dict[np.int8, np.ndarray]
+) -> npt.NDArray[np.complex128]:
     t1, t2 = uc( s, t )
     t1, t2 = coeff2( t1, t2 )
     n = 8
@@ -1430,7 +1730,10 @@ def poly_cf2p666(s: float, t: float) -> np.ndarray:
     return _rotate_poly_safe(np.flip(cf),-np.pi/2)
 
 @njit(cache=True, fastmath=True)
-def poly_cf1p11(s: float, t: float) -> np.ndarray:
+def poly_cf1p11(
+    s: float, t: float, 
+    state: Dict[np.int8, np.ndarray]
+) -> npt.NDArray[np.complex128]:
     t1, t2 = uc( s, t )
     n = 51
     cf = np.zeros(n, dtype=np.complex128)
@@ -1442,7 +1745,10 @@ def poly_cf1p11(s: float, t: float) -> np.ndarray:
     return _rotate_poly_safe(np.flip(cf),-np.pi/2)
 
 @njit(cache=True, fastmath=True)
-def poly_cf2p11(s: float, t: float) -> np.ndarray:
+def poly_cf2p11(
+    s: float, t: float, 
+    state: Dict[np.int8, np.ndarray]
+) -> npt.NDArray[np.complex128]:
     t1, t2 = uc( s, t )
     t1, t2 = coeff2( t1, t2 )
     n = 51
@@ -1455,7 +1761,10 @@ def poly_cf2p11(s: float, t: float) -> np.ndarray:
     return _rotate_poly_safe(np.flip(cf),-np.pi/2)
 
 @njit(cache=True, fastmath=True)
-def poly_cf3p11(s: float, t: float) -> np.ndarray:
+def poly_cf3p11(
+    s: float, t: float, 
+    state: Dict[np.int8, np.ndarray]
+) -> npt.NDArray[np.complex128]:
     t1, t2 = uc( s, t )
     t1, t2 = coeff3( t1, t2 )
     n = 51
@@ -1466,6 +1775,263 @@ def poly_cf3p11(s: float, t: float) -> np.ndarray:
         cf[i] = cf[i] / (np.abs(cf[i]) + 1e-10)
     cf[n-1] = np.abs(t1) * np.abs(t2) * np.angle(t1 + t2)
     return _rotate_poly_safe(np.flip(cf),-np.pi/2)
+
+# owl
+@njit(cache=True, fastmath=True)
+def giga_232(
+    s: float, t: float, 
+    state: Dict[np.int8, np.ndarray]
+) -> npt.NDArray[np.complex128]:
+    t1, t2 = uc( s, t )
+    t1, t2 = coeff2( t1, t2 )
+    degree = 8
+    cf = np.zeros(degree +1, dtype=np.complex128)
+    for j in range(0, degree +1):
+        r_part = t1.real * j**2 - t2.real * np.sqrt(j +1)
+        im_part = (t1.imag + t2.imag) * np.log(j +2)
+        magnitude = np.abs(t1)**(j %3 +1) + np.abs(t2)**(degree -j)
+        angle = np.angle(t1) * np.sin(j) + np.angle(t2) * np.cos(j)
+        cf[j] = (r_part +1j * im_part) * magnitude * np.exp(1j * angle)
+    return  _rotate_poly_safe(np.flip(cf),-np.pi/2)
+
+# "dragonfly"
+# coeff3u works
+# coeff3 not
+@njit(cache=True, fastmath=True)
+def giga_227(
+    s: float, t: float, 
+    state: Dict[np.int8, np.ndarray]
+) -> npt.NDArray[np.complex128]:
+    t1, t2 = uc( s, t )
+    t1, t2 = coeff3u( t1, t2 )
+    cf = np.zeros(25, dtype=np.complex128)
+    cf[0:5] = np.array([abs(t1 + t2)**(i+1) for i in range(5)])
+    cf[5:10] = ((t1+2j*t2)**3).real * np.log(np.abs(np.conj(t1*t2)))
+    cf[10:15] = ((t1-t2)**2).imag / np.angle(t1*t2)
+    cf[15:20] = np.abs(cf[5:10])**0.5 + np.angle(cf[0:5])
+    cf[20:25] = np.array([abs(t1 * t2)**(i+1) for i in range(5)])
+    return  _rotate_poly_safe(np.flip(cf),-np.pi/2)
+
+# "scarab"
+# coeff3u works
+# coeff3 not
+@njit(cache=True, fastmath=True)
+def giga_230(
+    s: float, t: float,
+    state: Dict[np.int8, np.ndarray]
+) ->npt.NDArray[np.complex128]:
+    t1, t2 = uc( s, t )
+    t1, t2 = coeff3u( t1, t2 )
+    n = 10
+    cf = np.zeros(n, dtype=np.complex128)
+    cf[0] = 100 * np.sin(t1)**3 * np.cos(t2)**2
+    cf[1] = 100 * np.exp(1j * (t1 + t2)) - 10 * (t1 - t2)**2
+    cf[2] = t1*t2*(t1 - t2) / (np.abs(t1) + np.abs(t2) + 1)
+    cf[4] = (t1*t2*np.exp(1j * (t1**2-t2**2)))**3
+    cf[6] = np.sqrt(np.abs(t1)) - np.sqrt(np.abs(t2)) + 1j * np.sin(t1*t2)
+    cf[7] = 50 * np.abs(t1 - t2) * np.exp(1j * np.abs(t1 + t2))
+    cf[8] = t1-abs(t2) if t1.imag > 0 else t2-abs(t1)
+    cf[9] = (1j*t1*t2)**(0.1*t1*t2)
+    return  _rotate_poly_safe(np.flip(cf),+np.pi/2)
+
+# "cicada"
+@njit(cache=True, fastmath=True)
+def giga_221(
+    s: float, t: float, 
+    state: Dict[np.int8, np.ndarray]
+) -> npt.NDArray[np.complex128]:
+    t1, t2 = uc( s, t )
+    t1, t2 = coeff7( t1, t2 )
+    degree = 25
+    cf = np.zeros(35, dtype=np.complex128)
+    for j in range(1, degree + 1):
+        mag = np.log(np.abs(t1) + j**1.3) * np.abs(np.sin(j * np.pi / 4)) + np.abs(t2) * np.cos(j * np.pi / 6)
+        angle = np.angle(t1) * np.sin(j / 3) + np.angle(t2) * np.cos(j / 5) + np.sin(j * np.pi / 7)
+        cf[j - 1] = mag * (np.cos(angle) + 1j * np.sin(angle))
+    for k in range(degree + 1, 36):
+        cf[k - 1] = np.log(k + 1) * (np.sin(k * np.angle(t1)) + 1j * np.cos(k / 2))
+    return  _rotate_poly_safe(np.flip(cf),+np.pi/2)
+
+# "spider"
+# none works
+@njit(cache=True, fastmath=True)
+def giga_224(
+    s: float, t: float, 
+    state: Dict[np.int8, np.ndarray]
+) -> npt.NDArray[np.complex128]:
+    t1, t2 = uc( s, t )
+    t1, t2 = coeff7u( t1, t2 )
+    cf = np.zeros(51, dtype=np.complex128)
+    cf[0] = t1 + t2
+    for i in range(1, 51):
+        cf[i] = ((np.cos(t1)/np.sin(t2))**i + (np.sin(t1)/np.cos(t2))**(2j)) * cmath.phase(t1 + t2)**i
+    cf[1:51] = np.log(np.abs(cf[1:51]) + 1) / np.log(i+1)
+    cf[4] = cf[4] * np.abs(t1 + t2)
+    cf[9] = cf[9] * (t1 * t2.conjugate()).real
+    cf[19] = cf[19] * (t2 * t1.conjugate()).imag
+    cf[29] = cf[29] * cmath.phase(t1 + t2)
+    cf[39] = cf[39] * np.abs(t1 + t2)
+    cf[49] = cf[49] * (t1 * t2.conjugate()).real
+    return  _rotate_poly_safe(np.flip(cf),+np.pi/2)
+
+# boom
+@njit(cache=True, fastmath=True)
+def giga_2863(
+    s: float, t: float, 
+    state: Dict[np.int8, np.ndarray]
+) -> npt.NDArray[np.complex128]:
+    t1 = s + 1j * t
+    t2 = t + 1j * s
+    t1, t2 = coeff6u( t1, t2 )
+    n =  12 # original is 11
+    cf = np.zeros(n, dtype=np.complex128)
+    for k in range(n):
+        freq_t1 = (k+1)*cmath.phase(t1)
+        freq_t2 = (k+1)*cmath.phase(t2)
+        cf[k] = (np.sin(freq_t1)+1j*np.cos(freq_t2)) * np.exp(-abs(t1*t2)*k/n)
+    for k in range(1, n-1):
+        cf[k] = (cf[k-1] + cf[k+1])*0.5*(t1 + t2)
+    cf = cf[np.argsort(np.abs(np.cumsum(cf)))] 
+    return _rotate_poly_safe(cf,-np.pi/2)
+
+# growth
+# aberth not working @500 5 sec
+# np.roots does. @500 
+# image is probably noise
+@njit(cache=True, fastmath=True)
+def giga_2864(
+    s: float, t: float, 
+    state: Dict[np.int8, np.ndarray]
+) -> npt.NDArray[np.complex128]:
+    t1 = s + 1j * t
+    t2 = s + 1j * t
+    n = 71
+    cf = np.zeros(n, dtype=np.complex128)
+    for k in range(n):
+        a = [t1.real, t1.imag]
+        b = [t2.real, t2.imag]
+        dot = a[0]*b[0] + a[1]*b[1]
+        wedge = a[0]*b[1] - a[1]*b[0]
+        gp = dot + 1j*wedge
+        cf[k] = gp**(k+1)
+    cf[::2] *= -1
+    return cf
+
+# letter bitmap
+b2 = [
+    0b01111110,
+    0b10000001,
+    0b10100101,
+    0b10000001,
+    0b10111101,
+    0b10011001,
+    0b10000001,
+    0b01111110
+]
+factor = 1
+coordinates = []
+
+# bits -> coordinates
+for y, row in enumerate(b2):
+    for x in range(8):
+        if row & (1 << (7-x)):  # Check if the x-th bit (from left) is set
+            x_center = x - 3.5
+            y_center = (7-y) - 3.5
+            x_scaled = x_center * factor
+            y_scaled = y_center * factor
+            z = complex(x_scaled, y_scaled)
+            coordinates.append(z) 
+
+# letter coordinates
+letter = np.array(coordinates, dtype=np.complex128)
+
+@njit(cache=True, fastmath=True)
+def scale(t,s):
+    return ( (1-s)/2+ s*t ) * factor
+
+@njit(cache=True, fastmath=True)
+def square(t1, t2, offset ):
+    cf0 = letter
+    s1 = scale( t1, 0.9 )
+    s2 = scale( t2, 0.9 ) * 1j
+    s3 = s1 + s2
+    cf = cf0 + s3 + offset
+    return cf
+
+@njit
+def poly_from_roots(
+    roots: npt.NDArray[np.complex128]
+)-> npt.NDArray[np.complex128]:
+    n = len(roots)
+    coeffs = np.zeros(n + 1, dtype=roots.dtype)
+    coeffs[0] = 1.0
+
+    for r in roots:
+        # shift coefficients to the right
+        new_coeffs = np.zeros_like(coeffs)
+        for i in range(n):
+            new_coeffs[i]     += coeffs[i]
+            new_coeffs[i + 1] -= coeffs[i] * r
+        coeffs = new_coeffs
+    return coeffs
+
+@njit(cache=True, fastmath=True)
+def roots(cf: npt.NDArray[np.complex128])-> npt.NDArray[np.complex128]:
+   if np.sum(np.abs(cf))<1e-10 :
+      return cf
+   try:
+    cf0 = np.roots(cf)
+    return cf0
+   except:
+    return cf
+
+@njit(cache=True, fastmath=True)   
+def sort_moduli_keep_angles(
+    complex_vector: npt.NDArray[np.complex128]
+)-> npt.NDArray[np.complex128]:
+    angles = np.angle(complex_vector)
+    sorted_moduli = np.sort(np.abs(complex_vector))
+    return sorted_moduli * np.exp(1j * angles)
+
+@njit(cache=True, fastmath=True)  
+def invuc(
+    cf: npt.NDArray[np.complex128]
+)-> npt.NDArray[np.complex128]:
+   sa = np.max(np.abs(cf))
+   cf0 = cf / sa
+   cf1 = np.exp(1j*2*np.pi*cf0)
+   return cf/cf1 
+
+@njit(cache=True, fastmath=True) 
+def normalize(cf: npt.NDArray[np.complex128])-> npt.NDArray[np.complex128]:
+   sa = np.max(np.abs(cf))
+   return cf / sa
+
+@njit(cache=True, fastmath=True)
+def giga_2880(
+    s: float, t: float, 
+    state: Dict[np.int8, npt.NDArray[np.complex128]]
+) -> npt.NDArray[np.complex128]:
+    andy = 0.1
+    t1 = s
+    t2 = t
+    # nopoly_crazy1(t1,t2)
+    state_iter_value = state[STATE_ITER]
+    ival = state_iter_value[0]
+    i = int(ival.real)
+    # i = np.random.randint(1, 1_000_001)
+    x = (i % 71)/5
+    y = (i % 101)/3
+    offset = x*np.exp(1j*2*np.pi*y)
+    rts = square(0.1*t1,0.1*t2,offset)
+    # poly
+    cf0 = poly_from_roots(rts)
+    # 
+    cf1 = sort_moduli_keep_angles(cf0) * andy + cf0
+    cf2 = invuc(cf1)
+    cf3 = normalize(cf2)
+    cf4 = np.append(np.roots(cf3),1) * andy + cf3
+    return cf4
 
 # =======================
 # Rasterizers
@@ -1955,6 +2521,8 @@ if __name__ == "__main__":
     ap.add_argument("--max-iters", type=int, default=100, help="Maximum Aberth iterations per point")
     ap.add_argument("--per-root-tol", action="store_true", help="Use per-root relative step tolerance")
     ap.add_argument("--newton-fallback", action="store_true", help="Damped Newton fallback if p'(z) ~ 0")
+    ap.add_argument("--nodither", default=False,action="store_true", help="No dithering")
+    ap.add_argument("--noaberth", default=False,action="store_true", help="Use np.roots")
     ap.add_argument("--verbose", action="store_true")
 
     # PNG
@@ -1967,6 +2535,9 @@ if __name__ == "__main__":
     ap.add_argument("--hue-circular", action="store_true",help="Average hue on the unit circle (use for angle-like hues)")
 
     args = ap.parse_args()
+
+    param["nodither"] = args.nodither
+    param["use_aberth"] = not args.noaberth
 
     poly_func = resolve_poly(args.poly)
     N = args.pps * args.pps
