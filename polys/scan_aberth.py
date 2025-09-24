@@ -16,6 +16,9 @@ from multiprocessing.shared_memory import SharedMemory
 import time
 import pyvips as vips
 import ast
+import re
+import argparse
+
 
 # =======================
 # parameters
@@ -44,7 +47,9 @@ param = {
 }
 
 # =======================
-# state keys
+# state is a numpy compatible dictionary
+# in the inner loop with int8 key for speed
+# Dict[np.int8, npt.NDArray[np.complex128]]
 # =======================
 # reserved state keys
 STATE_TILE_ID  = types.int8(0)
@@ -54,6 +59,8 @@ STATE_ZFRM     = types.int8(3)
 #custom state keys start here
 STATE_CUSTOM   = STATE_ZFRM + 1
 
+#FIXME
+# add get value or None kind of thing
 @njit
 def check_key(
     state: Dict[np.int8, npt.NDArray[np.complex128]], 
@@ -175,6 +182,34 @@ def rotate_poly(coeffs:np.ndarray, theta:float) -> np.ndarray:
     return rotated
 
 @njit(cache=True, fastmath=True)
+def safe_roots_toline(rts: npt.NDArray[np.complex128]) -> npt.NDArray[np.complex128]:
+   num = 1+rts
+   den = 1-rts
+   line = 1j * _safe_div(num,den)
+   return line
+
+@njit(cache=True, fastmath=True)
+def roots_toline(rts: npt.NDArray[np.complex128]) -> npt.NDArray[np.complex128]:
+   num = 1+rts
+   den = 1-rts
+   line = 1j * num/den
+   return line
+
+@njit(cache=True, fastmath=True)
+def pull_unit_circle(z: np.ndarray, alpha: float = 1.0, sigma: float = 0.75) -> np.ndarray:
+    n = z.shape[0]
+    out = np.empty_like(z)
+    for i in range(n):
+        x = z[i].real
+        y = z[i].imag
+        r = np.hypot(x, y)
+        theta = np.arctan2(y, x)
+        d = r - 1.0
+        rprime = r - alpha * d * np.exp(- (d / sigma) ** 2)
+        out[i] = rprime * (np.cos(theta) + 1j * np.sin(theta))
+    return out
+
+@njit(cache=True, fastmath=True)
 def _horner_and_deriv(a: np.ndarray, z: complex) -> Tuple[complex, complex]:
     n = a.size - 1
     p = a[0]
@@ -183,6 +218,22 @@ def _horner_and_deriv(a: np.ndarray, z: complex) -> Tuple[complex, complex]:
         dp = dp * z + p
         p = p * z + a[k]
     return p, dp
+
+@njit(types.complex128(types.complex128[:], types.complex128), cache=True, fastmath=True)
+def _horner_scalar(cf, z):
+    acc = 0.0 + 0.0j
+    for k in range(cf.size):
+        acc = acc * z + cf[k]
+    return acc
+
+@njit(cache=True, fastmath=True)
+def numba_polyval(cf, z):
+    npts = z.size
+    z1d = z.reshape(npts)
+    out1d = np.empty(npts, dtype=np.complex128)
+    for i in range(npts):
+        out1d[i] = _horner_scalar(cf, z1d[i])
+    return out1d.reshape(z.shape)
 
 @njit(cache=True, fastmath=True)
 def _cauchy_radius(a: np.ndarray) -> float:
@@ -340,11 +391,11 @@ def tile_worker(args):
         s_start, s_end, t_start, t_end,
         n_points, 
         func, 
-        tol, max_iters, per_root_tol, newton_fallback, verbose,
+        tol, max_iters, per_root_tol, newton_fallback, 
         result_name, result_rows, result_cols,  # <-- extra: cols = 1 + deg
         param
     ) = args
-
+    verbose = param["verbose"]
     use_aberth = param["use_aberth"]
     # complex128 result buffer: shape (result_rows, 1+deg)
     shm_result, result = get_shm(result_name, result_rows, result_cols, np.complex128)
@@ -423,6 +474,14 @@ def tile_worker(args):
             roots = guess
 
         roots = roots.astype(np.complex128)
+
+        if param["unitpull"]:
+            roots = pull_unit_circle(roots)
+
+        if param["toline"]:
+            roots = roots_toline(roots)
+        
+
         row_idx = base + k
         result[row_idx, 0] = pts[k,0] + 1j * pts[k,1]
 
@@ -443,7 +502,6 @@ def scan(
         max_iters: int = 80,
         per_root_tol: bool = False,
         newton_fallback: bool = False,
-        verbose: bool = True
     ) -> np.ndarray:
     """
     func(a,b)->coeffs must be top-level (picklable).
@@ -464,7 +522,7 @@ def scan(
     ctx = mproc.get_context("spawn")
     ncpu = mproc.cpu_count()
 
-    tiles = int(ncpu**0.5)**2                    # square tiles
+    tiles = int(ncpu**0.5)**2  # square tiles
     tiles_per_side = int(tiles**0.5)
     assert tiles_per_side**2 == tiles, "tiles must be a square number"
 
@@ -475,7 +533,7 @@ def scan(
 
     # actual points computed (since we only launch ncpu workers)
     rows_total = ncpu * points_per_worker
-    if verbose:
+    if param["verbose"]:
         print(
             f"[mp] ncpu={ncpu} "
             f"tiles={tiles} "
@@ -497,14 +555,14 @@ def scan(
         s_end   = s_start + tile_size
         t_start = ty * tile_size
         t_end   = t_start + tile_size
-        if verbose:
+        if param["verbose"]:
             print(f"worker {wid:2d} [{tx},{ty}] : ({s_start:.6f},{t_start:.6f})–({s_end:.6f},{t_end:.6f}) : ppw={points_per_worker}")
         args.append((
             wid, 
             s_start, s_end, t_start, t_end,
             points_per_worker, 
             func, 
-            tol, max_iters, per_root_tol, newton_fallback, verbose,
+            tol, max_iters, per_root_tol, newton_fallback, 
             shm_result.name, rows_total, 1 + deg,
             param
         ))
@@ -512,7 +570,11 @@ def scan(
     with ctx.Pool(processes=len(args)) as pool:
         _ = pool.map(tile_worker, args)
 
+    if param["verbose"]:
+        print("scan finished")
     out = np.copy(result)
+    if param["verbose"]:
+        print("results copied")
     shm_result.close()
     shm_result.unlink()
     return out
@@ -528,7 +590,7 @@ def uc(
 ) -> Tuple[np.complex128, np.complex128]:
     t1 = np.exp(1j * 2.0 * np.pi * s)  # safe (s∈[0,1])
     t2 = np.exp(1j * 2.0 * np.pi * t)  # safe (t∈[0,1])
-    return( t1, t2 )
+    return t1, t2 
 
 @njit(cache=True, fastmath=True)
 def coeff2(
@@ -536,7 +598,7 @@ def coeff2(
 ) -> Tuple[np.complex128, np.complex128]:
    tt1 = t1 + t2
    tt2 = t1 * t2
-   return ( tt1, tt2 )
+   return  tt1, tt2 
 
 @njit(cache=True, fastmath=True)
 def coeff3(
@@ -544,7 +606,7 @@ def coeff3(
 ) -> Tuple[np.complex128, np.complex128]:
   tt1 = _safe_div( 1, t1 + 2)
   tt2 = _safe_div( 1, t2 + 2 )
-  return( tt1 , tt2 )
+  return tt1 , tt2 
 
 @njit(cache=True, fastmath=True)
 def coeff3u( # unsafe
@@ -552,7 +614,7 @@ def coeff3u( # unsafe
 ) -> Tuple[np.complex128, np.complex128]:
   tt1 = 1 / ( t1 + 2 )
   tt2 = 1 / ( t2 + 2 )
-  return ( tt1, tt2 )
+  return  tt1, tt2 
 
 @njit(cache=True, fastmath=True)
 def coeff3a(
@@ -560,7 +622,7 @@ def coeff3a(
 ) -> Tuple[np.complex128, np.complex128]:
   tt1 = _safe_div( 1, t1 + 1 )
   tt2 = _safe_div( 1, t2 + 1 )
-  return ( tt1, tt2 )
+  return tt1, tt2 
 
 @njit(cache=True, fastmath=True)
 def coeff4(
@@ -568,7 +630,7 @@ def coeff4(
 ) -> Tuple[np.complex128, np.complex128]:
   tt1 = np.cos(t1)
   tt2 = np.sin(t2)
-  return ( tt1, tt2 )
+  return tt1, tt2 
 
 @njit(cache=True, fastmath=True)
 def coeff5(
@@ -576,7 +638,7 @@ def coeff5(
 ) -> Tuple[np.complex128, np.complex128]:
   tt1 = t1 + _safe_div( 1.0 + 0.0j, t2 )
   tt2 = t2 + _safe_div( 1.0 + 0.0j, t1 )
-  return ( tt1, tt2 )
+  return  tt1, tt2 
 
 @njit(cache=True, fastmath=True)
 def coeff5u(
@@ -584,7 +646,7 @@ def coeff5u(
 ) -> Tuple[np.complex128, np.complex128]:
   tt1 = t1 + (1.0+0.0j) / t2 
   tt2 = t2 + (1.0+0.0j) / t1
-  return ( tt1, tt2 )
+  return tt1, tt2 
 
 @njit(cache=True, fastmath=True)
 def coeff6(
@@ -596,7 +658,7 @@ def coeff6(
   num2 = t2*t2*t2 + 1j
   den2 = t2*t2*t2 - 1j
   val2 = _safe_div(num2 , den2, eps=1e-12 )
-  return ( val1, val2 )
+  return  val1, val2 
 
 @njit(cache=True, fastmath=True)
 def coeff6u( # unsafe
@@ -608,7 +670,7 @@ def coeff6u( # unsafe
   num2 = t2*t2*t2 + 1j
   den2 = t2*t2*t2 - 1j
   val2 = num2 / den2
-  return ( val1, val2 )
+  return  val1, val2 
 
 @njit(cache=True, fastmath=True)
 def coeff7(
@@ -620,7 +682,7 @@ def coeff7(
   top2  = t2 + np.sin(t2)
   bot2  = t2 + np.cos(t2)
   val2  = _safe_div(top2 , bot2 )
-  return ( val1, val2 )
+  return val1, val2 
 
 @njit(cache=True, fastmath=True)
 def coeff7u( # unsafe
@@ -632,7 +694,7 @@ def coeff7u( # unsafe
   top2  = t2 + np.sin(t2)
   bot2  = t2 + np.cos(t2)
   val2  = top2 / bot2 
-  return ( val1, val2 )
+  return  val1, val2 
 
 @njit(cache=True, fastmath=True)
 def coeff8(
@@ -644,7 +706,7 @@ def coeff8(
   top2  = t2 + np.sin(t1)
   bot2  = t1 + np.cos(t2)
   val2  = _safe_div(top2 , bot2)
-  return ( val1, val2 )
+  return val1, val2 
 
 @njit(cache=True, fastmath=True)
 def coeff8u( # unsafe
@@ -656,7 +718,7 @@ def coeff8u( # unsafe
   top2  = t2 + np.sin(t1)
   bot2  = t1 + np.cos(t2)
   val2  = top2 / bot2
-  return ( val1, val2 )
+  return  val1, val2 
 
 @njit(cache=True, fastmath=True)
 def coeff9(
@@ -668,7 +730,7 @@ def coeff9(
   top2  = t2*t2 + 1j * t1
   bot2  = t2*t2 - 1j * t1
   val2  = _safe_div(top2,bot2, eps=1e-12)
-  return ( val1, val2 )
+  return val1, val2 
 
 @njit(cache=True, fastmath=True)
 def coeff9u(
@@ -680,7 +742,7 @@ def coeff9u(
   top2  = t2*t2 + 1j * t1
   bot2  = t2*t2 - 1j * t1
   val2  = top2 / bot2
-  return ( val1, val2 )
+  return val1, val2 
 
 @njit(cache=True, fastmath=True)
 def coeff10(
@@ -692,7 +754,7 @@ def coeff10(
     top2 = t2*t2*t2*t2 - t1
     bot2 = t2*t2*t2*t2 + t1
     val2 = _safe_div(top2,bot2, eps=1e-12)
-    return( val1, val2 )
+    return val1, val2 
 
 @njit(cache=True, fastmath=True)
 def coeff10u(
@@ -704,11 +766,111 @@ def coeff10u(
     top2 = t2*t2*t2*t2 - t1
     bot2 = t2*t2*t2*t2 + t1
     val2 = top2/bot2
-    return( val1, val2 )
+    return val1, val2 
 
 # =======================
 # coefficient transforms
 # =======================
+
+@njit(cache=True, fastmath=True)   
+def sort_moduli_keep_angles(
+    complex_vector: npt.NDArray[np.complex128]
+)-> npt.NDArray[np.complex128]:
+    angles = np.angle(complex_vector)
+    sorted_moduli = np.sort(np.abs(complex_vector))
+    return sorted_moduli * np.exp(1j * angles)
+
+@njit(cache=True, fastmath=True)
+def sort_by_abs(vec):
+    idx = np.argsort(np.abs(vec))
+    out = np.empty_like(vec)
+    for i in range(vec.size):
+        out[i] = vec[idx[i]]
+    return out
+
+@njit(cache=True, fastmath=True)  
+def invuc(
+    cf: npt.NDArray[np.complex128]
+)-> npt.NDArray[np.complex128]:
+   sa = np.max(np.abs(cf))
+   cf0 = cf / sa
+   cf1 = np.exp(1j*2*np.pi*cf0)
+   return cf/cf1 
+
+@njit(cache=True, fastmath=True) 
+def normalize(cf: npt.NDArray[np.complex128])-> npt.NDArray[np.complex128]:
+   sa = np.max(np.abs(cf))
+   return cf / sa
+
+# Horizontal flip: p(x) -> p(-x)
+# Negate coefficients with odd index.
+@njit(cache=True, fastmath=True)
+def poly_flip_horizontal(cf: np.ndarray) -> np.ndarray:
+    out = np.empty_like(cf)
+    n = cf.shape[0]
+    for k in range(n):
+        if k & 1:   # odd power
+            out[k] = -cf[k]
+        else:
+            out[k] = cf[k]
+    return out
+
+
+# Vertical flip: p(x) -> conj(p(conj(x)))
+# Just conjugate coefficients.
+@njit(cache=True, fastmath=True)
+def poly_flip_vertical(cf: np.ndarray) -> np.ndarray:
+    out = np.empty_like(cf)
+    n = cf.shape[0]
+    for k in range(n):
+        out[k] = np.conj(cf[k])
+    return out
+
+@njit(cache=True, fastmath=True)
+def rotate_poly(coeffs:np.ndarray, theta:float) -> np.ndarray:
+    n = len(coeffs) - 1
+    a0 = coeffs[0]
+    k = np.arange(n, -1, -1)  # powers: n .. 0
+    rotated = coeffs * np.exp(-1j * theta * k)
+    rotated *= np.exp(1j * n * theta) / a0
+    return rotated
+
+@njit(cache=True, fastmath=True)
+def swirler( cf: np.ndarray ) ->  np.ndarray:
+    a = np.abs( cf *100 ) % 1
+    b = np.abs( cf *10  ) % 1
+    swirled_cf = cf * np.exp( a*a*a*a + b*b*b*b + 1j*2*np.pi*b*a )
+    return swirled_cf
+
+# =======================
+# root transforms
+# =======================
+
+@njit
+def numba_poly(
+    roots: npt.NDArray[np.complex128]
+)-> npt.NDArray[np.complex128]:
+    n = len(roots)
+    coeffs = np.zeros(n + 1, dtype=roots.dtype)
+    coeffs[0] = 1.0
+
+    for r in roots:
+        # shift coefficients to the right
+        new_coeffs = np.zeros_like(coeffs)
+        for i in range(n):
+            new_coeffs[i]     += coeffs[i]
+            new_coeffs[i + 1] -= coeffs[i] * r
+        coeffs = new_coeffs
+    return coeffs
+
+
+@njit(cache=True, fastmath=True)
+def toline(cf: npt.NDArray[np.complex128]) -> npt.NDArray[np.complex128]:
+   rts=np.roots(cf)
+   cay = roots_toline(rts)
+   cf1 = numba_poly(cay)
+   return cf1
+
 
 # =======================
 # polys 
@@ -781,7 +943,7 @@ def poly_giga_10(
     cf[59] += -500.0          
     cf[89] += 250.0 * np.exp(1j * (t1 * t2))  
 
-    return rotate_poly(np.flip(cf),-np.pi/2)
+    return _rotate_poly_safe(np.flip(cf),np.pi/2)
 
 # works but no dithering needed
 # aberth @500 12 sec
@@ -793,7 +955,7 @@ def poly_giga_19(
 ) -> npt.NDArray[np.complex128]:
 
     n = 90
-    cf = np.zeros(n, dtype=np.complex128)
+    cf = np.empty(n, dtype=np.complex128)
     cf[0] = t1 - t2
     for k in range(1, n): 
         v = np.sin((k + 1) * cf[k - 1]) + np.cos((k + 1) * t1)
@@ -1895,9 +2057,14 @@ def giga_2863(
     return _rotate_poly_safe(cf,-np.pi/2)
 
 # growth
-# aberth not working @500 5 sec
-# np.roots does. @500 
+# aberth N=71 @500 5 sec
+# np.roots  @500 72 sec
+# 14x speedup
+# for small N np.roots+aberth are same and boring
+# for larger N aberth continues to be boring
+# but np.roots becomes interesting
 # image is probably noise
+# first case of really interesting noise
 @njit(cache=True, fastmath=True)
 def giga_2864(
     s: float, t: float, 
@@ -1905,7 +2072,7 @@ def giga_2864(
 ) -> npt.NDArray[np.complex128]:
     t1 = s + 1j * t
     t2 = s + 1j * t
-    n = 71
+    n = 71 # was 71
     cf = np.zeros(n, dtype=np.complex128)
     for k in range(n):
         a = [t1.real, t1.imag]
@@ -1916,6 +2083,24 @@ def giga_2864(
         cf[k] = gp**(k+1)
     cf[::2] *= -1
     return cf
+
+# equivalent to giga_2864
+# large N + np.roots are interesting
+# because of numerical error
+# aberth has no noise so its boring
+@njit(cache=True, fastmath=True)
+def solver_noise(
+    s: float, t: float, 
+    state: Dict[np.int8, np.ndarray]
+) -> npt.NDArray[np.complex128]:
+    n = 71
+    st = s*s+t*t
+    cf = np.empty(n, dtype=np.complex128)
+    p = st  
+    for k in range(n):
+        cf[k] = ((k & 1) * 2 - 1) * p + 0*1j   # -,+,-,+,...
+        p *= st
+    return rotate_poly(cf,np.pi/2)
 
 # letter bitmap
 b2 = [
@@ -1958,22 +2143,7 @@ def square(t1, t2, offset ):
     cf = cf0 + s3 + offset
     return cf
 
-@njit
-def poly_from_roots(
-    roots: npt.NDArray[np.complex128]
-)-> npt.NDArray[np.complex128]:
-    n = len(roots)
-    coeffs = np.zeros(n + 1, dtype=roots.dtype)
-    coeffs[0] = 1.0
 
-    for r in roots:
-        # shift coefficients to the right
-        new_coeffs = np.zeros_like(coeffs)
-        for i in range(n):
-            new_coeffs[i]     += coeffs[i]
-            new_coeffs[i + 1] -= coeffs[i] * r
-        coeffs = new_coeffs
-    return coeffs
 
 @njit(cache=True, fastmath=True)
 def roots(cf: npt.NDArray[np.complex128])-> npt.NDArray[np.complex128]:
@@ -1985,27 +2155,6 @@ def roots(cf: npt.NDArray[np.complex128])-> npt.NDArray[np.complex128]:
    except:
     return cf
 
-@njit(cache=True, fastmath=True)   
-def sort_moduli_keep_angles(
-    complex_vector: npt.NDArray[np.complex128]
-)-> npt.NDArray[np.complex128]:
-    angles = np.angle(complex_vector)
-    sorted_moduli = np.sort(np.abs(complex_vector))
-    return sorted_moduli * np.exp(1j * angles)
-
-@njit(cache=True, fastmath=True)  
-def invuc(
-    cf: npt.NDArray[np.complex128]
-)-> npt.NDArray[np.complex128]:
-   sa = np.max(np.abs(cf))
-   cf0 = cf / sa
-   cf1 = np.exp(1j*2*np.pi*cf0)
-   return cf/cf1 
-
-@njit(cache=True, fastmath=True) 
-def normalize(cf: npt.NDArray[np.complex128])-> npt.NDArray[np.complex128]:
-   sa = np.max(np.abs(cf))
-   return cf / sa
 
 @njit(cache=True, fastmath=True)
 def giga_2880(
@@ -2025,7 +2174,7 @@ def giga_2880(
     offset = x*np.exp(1j*2*np.pi*y)
     rts = square(0.1*t1,0.1*t2,offset)
     # poly
-    cf0 = poly_from_roots(rts)
+    cf0 = numba_poly(rts)
     # 
     cf1 = sort_moduli_keep_angles(cf0) * andy + cf0
     cf2 = invuc(cf1)
@@ -2033,13 +2182,521 @@ def giga_2880(
     cf4 = np.append(np.roots(cf3),1) * andy + cf3
     return cf4
 
+# aberth @4000 217 sec
+# np.roots @4000 551 sec 
+@njit(cache=True, fastmath=True)
+def littlewood(
+    s: float, t: float, 
+    state: Dict[np.int8, npt.NDArray[np.complex128]]
+) -> npt.NDArray[np.complex128]:
+    n = 35
+    bits  = np.random.randint(0, 2, size=n)      # 0/1 ints
+    signs = bits * 2 - 1                         # -> -1/+1
+    return signs.astype(np.complex128)
+
+
+@njit(cache=True, fastmath=True)
+def _hash01(i: np.int64) -> float:
+    # cheap integer hash → [0,1)
+    x = np.uint64(i) * np.uint64(0x9E3779B97F4A7C15)
+    x ^= x >> np.uint64(33)
+    x *= np.uint64(0xC2B2AE3D27D4EB4F)
+    x ^= x >> np.uint64(29)
+    x *= np.uint64(0x165667B19E3779F9)
+    x ^= x >> np.uint64(32)
+    # keep 53 random bits as mantissa
+    return (x & np.uint64((1 << 53) - 1)) / float(1 << 53)
+
+@njit(cache=True, fastmath=True)
+def _params_for_k(k: int) -> (float, float, float):
+    # deterministic “pseudo-random” params per coefficient k
+    a = _hash01(np.int64(3*k + 1))  # in [0,1)
+    b = _hash01(np.int64(5*k + 2))
+    c = _hash01(np.int64(7*k + 3))
+    # spread frequencies a,b and a phase c
+    # keep frequencies modest so the field is smooth in (s,t)
+    freq_s = 0.2 + 1.3 * a      # ~[0.7, 3.0]
+    freq_t = 0.2 + 1.3 * b
+    phase  = 2.0 * np.pi * c
+    return freq_s, freq_t, phase
+
+# aberth @4000 27 sec
+# np.roots @4000 555 sec 
+@njit(cache=True, fastmath=True)
+def littlewood_stateless(
+    s: float, t: float,
+    state: Dict[np.int8, npt.NDArray[np.complex128]]
+) -> np.ndarray:
+    n = 63
+    out = np.empty(n, dtype=np.complex128)
+    for k in range(n):
+        fs, ft, ph = _params_for_k(k)
+        H = np.sin( 2.0 * np.pi * ( fs*s + ft*t ) + ph )
+        sign = 1.0 * s  if H >= 0.0 else -1.0 * t
+        out[k] = sign + ((s+t)**k)*1j
+    return rotate_poly(out,np.pi/2)
+
+
+# eigen value/eigenvector state 
+STATE_LAMS = STATE_CUSTOM
+STATE_VECS = STATE_CUSTOM + 1
+
+# ---------- helpers already shown above (kept unchanged) ----------
+@njit(cache=True, fastmath=True)
+def companion_matrix(coeffs):
+    n = coeffs.size - 1
+    coeffs = coeffs / coeffs[0]
+    C = np.zeros((n, n), dtype=np.complex128)
+    if n > 1:
+        C[:-1, 1:] = np.eye(n - 1)
+    C[-1, :] = -coeffs[:0:-1]
+    return C
+
+
+
+# --- robust shifted solve that avoids singular (T - mu I); returns ok flag ---
+# ---- small helpers ----
+@njit(cache=True, fastmath=True)
+def _rayleigh_quotient(T, v):
+    Tv = T @ v
+    return np.vdot(v, Tv)
+
+@njit(cache=True, fastmath=True)
+def _form_shifted(T, mu_eff, A_scratch):
+    """A_scratch <- T - mu_eff * I  (no new allocs)."""
+    n = T.shape[0]
+    # copy T into A_scratch
+    for i in range(n):
+        rowTi = T[i]
+        rowAi = A_scratch[i]
+        for j in range(n):
+            rowAi[j] = rowTi[j]
+        rowAi[i] = rowTi[i] - mu_eff  # subtract on diagonal
+
+@njit(cache=True, fastmath=True)
+def _solve_guarded(T, mu, v, A_scratch):
+    """
+    Solve (T - (mu + eps*i) I) w = v with at most 3 escalations of eps.
+    Returns (w, ok).
+    """
+    n = T.shape[0]
+    # base eps ~ 1e-12 * (1 + |mu|)
+    eps = 1e-12 * (1.0 + np.abs(mu))
+    for _ in range(3):
+        mu_eff = mu + (eps * 1j)
+        _form_shifted(T, mu_eff, A_scratch)
+        w = np.linalg.solve(A_scratch, v)
+        # residual test: ||Aw - v|| / (||T||*||w|| + ||v||)
+        # compute r = A w - v
+        r = A_scratch @ w - v
+        num = np.sqrt((np.vdot(r, r)).real)
+        Tw = T @ w
+        den = np.sqrt((np.vdot(Tw, Tw)).real) + np.sqrt((np.vdot(v, v)).real)
+        if den == 0.0:
+            den = 1.0
+        rel = num / den
+        nrm2 = (np.vdot(w, w)).real
+        if np.isfinite(rel) and np.isfinite(nrm2) and nrm2 > 0.0 and rel < 1e-8:
+            return w, True
+        eps *= 10.0
+    # last attempt (accept even if mediocre; subsequent steps will fix)
+    mu_eff = mu + (eps * 1j)
+    _form_shifted(T, mu_eff, A_scratch)
+    w = np.linalg.solve(A_scratch, v)
+    return w, np.isfinite((np.vdot(w, w)).real)
+
+@njit(cache=True, fastmath=True)
+def refine_eigenpair_once(T, mu, v, A_scratch):
+    """
+    One shifted-inverse + Rayleigh step with guard.
+    Assumes:
+      - T is complex128 C-contiguous (n,n)
+      - v is complex128 C-contiguous (n,)
+      - A_scratch is complex128 (n,n) preallocated
+    Returns (lam, v_new, ok).
+    """
+    w, ok = _solve_guarded(T, mu, v, A_scratch)
+    if not ok:
+        return mu, v, False
+    nrm2 = (np.vdot(w, w)).real
+    if nrm2 <= 0.0 or not np.isfinite(nrm2):
+        return mu, v, False
+    v_new = w / np.sqrt(nrm2)
+    lam = _rayleigh_quotient(T, v_new)
+    return lam, v_new, True
+
+@njit(cache=True, fastmath=True)
+def refine_all_eigenpairs(T, lams_prev, V_prev, steps=1, rtol=1e-12):
+    """
+    Fully in-jit warm-start refinement for all eigenpairs.
+    No try/except; no object mode.
+    """
+    n = T.shape[0]
+    lams = lams_prev.copy()      # keep contiguous
+    V    = V_prev.copy()         # keep contiguous
+    A_scratch = np.empty_like(T) # one scratch per call
+
+    for k in range(n):
+        mu = lams[k]
+        v  = V[:, k].copy()      # make column contiguous
+        ok_all = True
+        for _ in range(steps):
+            lam, v, ok = refine_eigenpair_once(T, mu, v, A_scratch)
+            if not ok:
+                ok_all = False
+                break
+            if np.abs(lam - mu) <= rtol * (1.0 + np.abs(mu)):
+                mu = lam
+                break
+            mu = lam
+        if not ok_all:
+            # As a fully in-jit fallback: compute eig here (Numba supports eig)
+            l0, V0 = np.linalg.eig(T)
+            # normalize columns
+            for j in range(n):
+                nrm2 = (np.vdot(V0[:, j], V0[:, j])).real
+                if nrm2 > 0.0:
+                    V0[:, j] = V0[:, j] / np.sqrt(nrm2)
+            return l0.astype(np.complex128), V0.astype(np.complex128)
+        lams[k] = mu
+        V[:, k] = v
+    return lams, V
+
+# ---------- state pack/unpack (column-major, numba-safe) ----------
+@njit(cache=True)
+def _pack_cols(V):  # V: (n,n) -> Vf: (n*n,) in column-major order
+    n = V.shape[0]
+    Vf = np.empty(n*n, dtype=np.complex128)
+    p = 0
+    for j in range(n):
+        for i in range(n):
+            Vf[p] = V[i, j]
+            p += 1
+    return Vf
+
+@njit(cache=True)
+def _unpack_cols(Vf, n):  # Vf: (n*n,) -> V: (n,n) column-major
+    V = np.empty((n, n), dtype=np.complex128)
+    p = 0
+    for j in range(n):
+        for i in range(n):
+            V[i, j] = Vf[p]
+            p += 1
+    return V
+
+# keys (int8) — use your existing values
+# e.g., STATE_CUSTOM is defined elsewhere; here we assume:
+# STATE_LAMS = STATE_CUSTOM
+# STATE_VECS = STATE_CUSTOM + 1
+
+@njit(cache=True)
+def save_eigs_to_state(state, lams, V):
+    state[STATE_LAMS] = lams.copy()
+    state[STATE_VECS] = _pack_cols(V)
+
+@njit(cache=True)
+def load_eigs_from_state(state, n):
+    lams = state[STATE_LAMS]
+    Vf = state[STATE_VECS]
+    V = _unpack_cols(Vf, n)
+    return lams, V
+
+# ---------- your polynomial-from-roots helper (assumed present) ----------
+# numba_poly(roots) -> coeffs (monic, highest-degree first)
+
+# build grid z = x + i y with np.indices alternative 
+cmn = 5
+cmx, cmy = 2.0 * (np.indices((cmn, cmn)) / (cmn - 1) - 0.5)
+cmz = (cmx + 1j * cmy).astype(np.complex128)
+cmfac = 1.0 / (cmn + 1.0)
+# ---------- cm_1 (entirely in numba, with warm start) ----------
+# scan time: 345.093s @ 3000
+# scan time: 360.799s @ 3000
+@njit(cache=True, fastmath=True)
+def cm_1(
+    s: float, t: float,
+    state  # Dict[int8, complex128[:]]
+) -> np.ndarray:
+    t1, t2 = uc(s, t)  # assume uc is njit'able
+ 
+    v = (t1 + 1j * t2)
+    vv = cmfac * np.exp(1j * 2.0 * np.pi * v)
+    rts = (cmz + vv).reshape(cmn*cmn)
+    cf0 = numba_poly(rts)
+    cm = companion_matrix(cf0).astype(np.complex128)
+
+    a = np.abs(cm) % 1.0
+    acf = np.array([1.0+0.0j, 0.0+1.0j, 0.0+0.0j, 0.0+0.0j], dtype=np.complex128)
+    ap = numba_polyval(acf, a)
+    T = np.ascontiguousarray((cm - 0.75 * ap).astype(np.complex128))
+
+    # ---- warm-start eigenpairs ----
+    if STATE_LAMS in state and STATE_VECS in state:
+        # refine from saved state (1 step is often enough)
+        lprev, Vprev = load_eigs_from_state(state, T.shape[0])
+        try:
+            lams, V = refine_all_eigenpairs(T, lprev, Vprev, steps=3)
+        except:
+            lams, V = np.linalg.eig(T)
+        save_eigs_to_state(state, lams, V)
+    else:
+        # bootstrap ONCE in-jit
+        l0, V0 = np.linalg.eig(T)
+        # normalize columns
+        for k in range(V0.shape[1]):
+            nrm2 = np.vdot(V0[:, k], V0[:, k]).real
+            if nrm2 > 0.0:
+                V0[:, k] = V0[:, k] / np.sqrt(nrm2)
+        l0 = np.ascontiguousarray(l0.astype(np.complex128))
+        V0 = np.ascontiguousarray(V0.astype(np.complex128))
+        save_eigs_to_state(state, l0, V0)
+        lams = l0
+
+    # retrieve (after maybe saving) and produce the polynomial
+    lams, _Vcur = load_eigs_from_state(state, T.shape[0])
+    cf = numba_poly(lams).astype(np.complex128)
+    return cf
+
+
+# scan time: 388.280s @ 3000
+@njit(cache=True, fastmath=True)
+def cm_2(
+    s: float, t: float,
+    state: Dict[np.int8, npt.NDArray[np.complex128]]
+) -> np.ndarray:
+    t1, t2 = uc( s, t )
+    n = 5
+    fac = 1.0/(n+1.0)
+    x , y = 2.0 * ( np.indices(((n,n)))/(n-1) - 0.5 )
+    z = (x + 1j*y).astype(np.complex128)
+    v = (t1 + 1j*t2)
+    vv = fac*np.exp(1j*2*np.pi*v)
+    rts = (z + vv ).flatten()
+    cf = numba_poly(rts)
+    cm = companion_matrix(cf).astype(np.complex128)
+    a = np.abs(cm)%1
+    acf = np.array([1,1j,0,0],dtype=np.complex128)
+    ap = numba_polyval(acf,a)
+    tcm = ( 1.0*(cm) - 0.75*( ap ) ).astype(np.complex128)
+    roots = np.linalg.eigvals(tcm).astype(np.complex128)
+    cf = numba_poly( roots ).astype(np.complex128)
+    return cf.astype(np.complex128)
+
+# 
+@njit(cache=True, fastmath=True)
+def cm_3(
+    s: float, t: float,
+    state: Dict[np.int8, npt.NDArray[np.complex128]]
+) -> np.ndarray:
+    cf0 = poly_giga_5( s, t, state)
+    cm = companion_matrix(cf0).astype(np.complex128)
+    tcm = np.exp(1j*cm)
+    roots = np.linalg.eigvals(tcm).astype(np.complex128)
+    return roots
+
+@njit(cache=True, fastmath=True)
+def cm_4(
+    s: float, t: float,
+    state: Dict[np.int8, npt.NDArray[np.complex128]]
+) -> np.ndarray:
+    cf0 = poly_giga_5( s, t, state)
+    cm = companion_matrix(cf0).astype(np.complex128)
+    acm = np.abs(cm)%1
+    tcm = cm * np.exp(1j*2*np.pi*(1j*acm*acm+acm))
+    roots = np.linalg.eigvals(tcm).astype(np.complex128)
+    cf1 = numba_poly( roots ).astype(np.complex128)
+    return cf1
+
+@njit(cache=True, fastmath=True)
+def cm_5(
+    s: float, t: float,
+    state: Dict[np.int8, npt.NDArray[np.complex128]]
+) -> np.ndarray:
+    cf0 = poly_giga_5( s, t, state)
+    cm = companion_matrix(cf0).astype(np.complex128)
+    acm = np.abs(cm)%1
+    tcm = cm * np.exp(1j*2*np.pi*(acm))
+    roots = np.linalg.eigvals(tcm).astype(np.complex128)
+    cf1 = numba_poly( roots ).astype(np.complex128)
+    return cf1
+
+@njit(cache=True, fastmath=True)
+def colsum(M):
+    nrows, ncols = M.shape
+    out = np.zeros(ncols, dtype=M.dtype)
+    for j in range(ncols):
+        s = 0
+        for i in range(nrows):
+            s += M[i, j]
+        out[j] = s
+    return out
+
+@njit(cache=True, fastmath=True)
+def rowsum(M):
+    nrows, ncols = M.shape
+    out = np.zeros(ncols, dtype=M.dtype)
+    for j in range(nrows):
+        s = 0
+        for i in range(ncols):
+            s += M[i, j]
+        out[j] = s
+    return out
+
+
+
+# replace eigenvalues with col sums
+@njit(cache=True, fastmath=True)
+def cm_6(
+    s: float, t: float,
+    state: Dict[np.int8, npt.NDArray[np.complex128]]
+) -> np.ndarray:
+    cf0 = poly_giga_5( s, t, state)
+    cm = companion_matrix(cf0).astype(np.complex128)
+    acm = np.abs(cm)%1
+    tcm = cm * np.exp(1j*2*np.pi*(1j*acm*acm+acm+1j))
+    cf1 = colsum(tcm)
+    return cf1
+
+@njit(cache=True, fastmath=True)
+def cm_7(
+    s: float, t: float,
+    state: Dict[np.int8, npt.NDArray[np.complex128]]
+) -> np.ndarray:
+    cf0 = poly_giga_5( s, t, state)
+    cm = companion_matrix(cf0).astype(np.complex128)
+    acm = np.abs(cm)%1
+    tcm = cm * np.exp(1j*2*np.pi*(1j*acm*acm*acm-2*acm*acm))
+    cf1 = colsum(tcm)
+    return cf1
+
+@njit(cache=True)
+def outer_matrix(v):
+    n = v.size
+    out = np.empty((n, n), dtype=v.dtype)
+    for i in range(n):
+        for j in range(n):
+            out[i, j] = v[i] * v[j]    # or v[i] * np.conjugate(v[j]) if Hermitian wanted
+    return out
+
+@njit(cache=True, fastmath=True)
+def cm_8(
+    s: float, t: float,
+    state: Dict[np.int8, npt.NDArray[np.complex128]]
+) -> np.ndarray:
+    cf0 = p7f( s, t, state)
+    a = (np.abs(cf0)%1)*(np.arange(len(cf0))%2+1)
+    cf2 = cf0 * np.exp(1j*2*np.pi*(1j*a*a+a+np.cos(2*np.pi*a)))
+    return cf2
+
+@njit(cache=True, fastmath=True)
+def cm_9(
+    s: float, t: float,
+    state: Dict[np.int8, npt.NDArray[np.complex128]]
+) -> np.ndarray:
+    cf0 = p7f( s, t, state)
+    a = (np.abs(cf0)%1)
+    cf2 = cf0 * np.exp(1j*2*np.pi*(1j*a*a*a+1j*np.cos(2*np.pi*a)+np.sin(2*np.pi*a)))
+    return cf2
+
+@njit(cache=True, fastmath=True)
+def cm_10(
+    s: float, t: float,
+    state: Dict[np.int8, npt.NDArray[np.complex128]]
+) -> np.ndarray:
+    cf0 = p7f( s, t, state)
+    a = (np.abs(cf0)%1)
+    cf2 = cf0 * np.exp(1j*2*np.pi*(2j*a*a*a+1*(1j*np.cos(2*np.pi*a)+np.sin(2*np.pi*a))))
+    return cf2
+
+
+# swirly swirls
+@njit(cache=True, fastmath=True)
+def cm_11(
+    s: float, t: float,
+    state: Dict[np.int8, npt.NDArray[np.complex128]]
+) -> np.ndarray:
+    return swirler(giga_221( s, t, state))
+
+# lots of little circles
+@njit(cache=True, fastmath=True)
+def cm_12(
+    s: float, t: float,
+    state: Dict[np.int8, npt.NDArray[np.complex128]]
+) -> np.ndarray:
+    return swirler(poly_52( s, t, state))
+
+
+@njit(cache=True, fastmath=True)
+def cm_13(
+    s: float, t: float,
+    state: Dict[np.int8, npt.NDArray[np.complex128]]
+) -> np.ndarray:
+    return swirler(poly_123( s, t, state))
+
+@njit(cache=True, fastmath=True)
+def cm_14(
+    s: float, t: float,
+    state: Dict[np.int8, npt.NDArray[np.complex128]]
+) -> np.ndarray:
+    return swirler(poly_532( s, t, state))
+
+# poly_cf4p729
+# poly_cf4p808
+# poly_cf4p821
+# poly_cf5p23
+@njit(cache=True, fastmath=True)
+def cm_15(
+    s: float, t: float,
+    state: Dict[np.int8, npt.NDArray[np.complex128]]
+) -> np.ndarray:
+    return swirler(poly_cf5p23(s, t, state))
+
+
+@njit(cache=True, fastmath=True)
+def cm_16(
+    s: float, t: float,
+    state: Dict[np.int8, npt.NDArray[np.complex128]]
+) -> np.ndarray:
+    return swirler(poly_cf5p69(s, t, state))
+
+@njit(cache=True, fastmath=True)
+def cm_17(
+    s: float, t: float,
+    state: Dict[np.int8, npt.NDArray[np.complex128]]
+) -> np.ndarray:
+    return swirler(poly_cf1p530(s, t, state))
+
+# poly_cf2p112
+# "colliding worlds"
+@njit(cache=True, fastmath=True)
+def cm_18(
+    s: float, t: float,
+    state: Dict[np.int8, npt.NDArray[np.complex128]]
+) -> np.ndarray:
+    return swirler(poly_cf2p112(s, t, state))
+
+# poly_cf2p112
+@njit(cache=True, fastmath=True)
+def cm_19(
+    s: float, t: float,
+    state: Dict[np.int8, npt.NDArray[np.complex128]]
+) -> np.ndarray:
+    return swirler(poly_giga_5(s, t, state))
+
 # =======================
 # Rasterizers
 # =======================
 
-def view(roots_mat: np.ndarray, args):
+def view(
+    roots_mat: np.ndarray, args
+):
 
     if args.view is not None:
+        match_sq = re.match(r"^sq([0-9.]+)$", args.view)
+        if match_sq:
+            val = float(match_sq.group(1))
+            return -val, -val, val, val
+        # its an expression, try to evaluate it
         ll, ur = ast.literal_eval(args.view)
         llx, lly, ury, urx = ll.real, ll.imag, ur.real, ur.imag
         return llx, lly, urx, ury
@@ -2047,17 +2704,17 @@ def view(roots_mat: np.ndarray, args):
     zs = roots_mat[:, 1:].ravel()
     if zs.size == 0: return -1.0, -1.0, 1.0, 1.0
 
-    re = zs.real
-    im = zs.imag
-    rx = re.max() - re.min() if re.size else 1.0
-    ry = im.max() - im.min() if im.size else 1.0
+    real = zs.real
+    imag = zs.imag
+    rx = real.max() - real.min() if real.size else 1.0
+    ry = imag.max() - imag.min() if imag.size else 1.0
     pad_x = args.pad * (rx if rx > 0 else 1.0)
     pad_y = args.pad * (ry if ry > 0 else 1.0)
 
-    llx = re.min() - pad_x
-    urx = re.max() + pad_x
-    lly = im.min() - pad_y
-    ury = im.max() + pad_y
+    llx = real.min() - pad_x
+    urx = real.max() + pad_x
+    lly = imag.min() - pad_y
+    ury = imag.max() + pad_y
 
     return llx, lly, urx, ury
 
@@ -2511,8 +3168,6 @@ def resolve_poly(name: str):
     return cand
 
 if __name__ == "__main__":
-    import argparse
-    from PIL import Image
 
     ap = argparse.ArgumentParser(description="Tile-only Aberth manifold scan (monomial).")
     ap.add_argument("--poly", type=str, default="p7f",help="Name of polynomial coeff generator")
@@ -2523,6 +3178,9 @@ if __name__ == "__main__":
     ap.add_argument("--newton-fallback", action="store_true", help="Damped Newton fallback if p'(z) ~ 0")
     ap.add_argument("--nodither", default=False,action="store_true", help="No dithering")
     ap.add_argument("--noaberth", default=False,action="store_true", help="Use np.roots")
+    ap.add_argument("--nostats", default=False,action="store_true", help="Do not compute stats")
+    ap.add_argument("--toline", default=False,action="store_true", help="Roots to line")
+    ap.add_argument("--unitpull", default=False,action="store_true", help="Pull towards unit circle")
     ap.add_argument("--verbose", action="store_true")
 
     # PNG
@@ -2536,10 +3194,15 @@ if __name__ == "__main__":
 
     args = ap.parse_args()
 
+    param["verbose"] = args.verbose
     param["nodither"] = args.nodither
+    param["toline"] = args.toline
+    param["unitpull"] = args.unitpull
+    param["nostats"] = args.nostats
     param["use_aberth"] = not args.noaberth
+    param["poly"] = args.poly
 
-    poly_func = resolve_poly(args.poly)
+    poly_func = resolve_poly(param["poly"])
     N = args.pps * args.pps
     t0 = time.perf_counter()
     roots_mat = scan(
@@ -2548,13 +3211,13 @@ if __name__ == "__main__":
         max_iters = args.max_iters,
         per_root_tol = args.per_root_tol,
         newton_fallback = args.newton_fallback,
-        verbose = args.verbose
     )
-    print(f"scan time: {time.perf_counter() - t0:.3f}s")
-    t0 = time.perf_counter()
-    # roots_mat shape: (M, 1+deg) complex128, col0 = s+1j*t
-    print(f"rows: {roots_mat.shape[0]:,} cols: {roots_mat.shape[1]:,}")
-    print(f"roots: {roots_mat.shape[0]*roots_mat.shape[1]:,}")
+    if not param["nostats"]:
+        print(f"scan time: {time.perf_counter() - t0:.3f}s")
+        t0 = time.perf_counter()
+        # roots_mat shape: (M, 1+deg) complex128, col0 = s+1j*t
+        print(f"rows: {roots_mat.shape[0]:,} cols: {roots_mat.shape[1]:,}")
+        print(f"roots: {roots_mat.shape[0]*roots_mat.shape[1]:,}")
 
     # stats: parameters and roots
     st = roots_mat[:, 0]
@@ -2562,45 +3225,52 @@ if __name__ == "__main__":
     t = st.imag
 
     zs = roots_mat[:, 1:].ravel()
-    re = np.real(zs)
-    im = np.imag(zs)
+    real = np.real(zs)
+    imag = np.imag(zs)
 
     if zs.size > 0:
-        print(f"len real: {len(re):,} len imag: {len(im):,}")
-        print(f"nan real: {np.isnan(re).sum():.2f} nan imag: {np.isnan(im).sum():.2f}")
-        print(f"min real: {np.nanmin(re):.2f} min imag: {np.nanmin(im):.2f}")
-        print(f"max real: {np.nanmax(re):.2f} max imag: {np.nanmax(im):.2f}")
-        print(f"mean real: {np.nanmean(re):.2f} mean imag: {np.nanmean(im):.2f}")
-        print(f"median real: {np.nanmedian(re):.2f} mean imag: {np.nanmedian(im):.2f}")
-        print(f"q25 real: {np.nanquantile(re,0.25):.2f} q25 imag: {np.nanquantile(im,0.25):.2f}")
-        print(f"q75 real: {np.nanquantile(re,0.75):.2f} q75 imag: {np.nanquantile(im,0.75):.2f}")
+        if not param["nostats"]:
+            print(f"len real: {len(real):,} len imag: {len(imag):,}")
+            print(f"nan real: {np.isnan(real).sum():.2f} nan imag: {np.isnan(imag).sum():.2f}")
+            print(f"min real: {np.nanmin(real):.2f} min imag: {np.nanmin(imag):.2f}")
+            print(f"max real: {np.nanmax(real):.2f} max imag: {np.nanmax(imag):.2f}")
+            print(f"mean real: {np.nanmean(real):.2f} mean imag: {np.nanmean(imag):.2f}")
+            print(f"median real: {np.nanmedian(real):.2f} mean imag: {np.nanmedian(imag):.2f}")
+            print(f"q25 real: {np.nanquantile(real,0.25):.2f} q25 imag: {np.nanquantile(imag,0.25):.2f}")
+            print(f"q75 real: {np.nanquantile(real,0.75):.2f} q75 imag: {np.nanquantile(imag,0.75):.2f}")
     else:
         print("no roots in output")
 
     if st.size > 0:
-        print(f"min s: {np.nanmin(s):.2f} min t: {np.nanmin(t):.2f}")
-        print(f"max s: {np.nanmax(s):.2f} max t: {np.nanmax(t):.2f}")
+        if not param["nostats"]:
+            print(f"min s: {np.nanmin(s):.2f} min t: {np.nanmin(t):.2f}")
+            print(f"max s: {np.nanmax(s):.2f} max t: {np.nanmax(t):.2f}")
 
-    print(f"stats time: {time.perf_counter() - t0:.3f}s")
+    if not param["nostats"]:
+        print(f"stats time: {time.perf_counter() - t0:.3f}s")
     if args.png is not None:
         t0 = time.perf_counter()
         llx, lly, urx, ury = view(roots_mat, args)
-        print(f"view time: {time.perf_counter() - t0:.3f}s")
-        print(f"ll: ({llx:.2f},{lly:.2f}) ur: ({urx:.2f},{ury:.2f})")
+        if not param["nostats"]:
+            print(f"view time: {time.perf_counter() - t0:.3f}s")
+            print(f"ll: ({llx:.2f},{lly:.2f}) ur: ({urx:.2f},{ury:.2f})")
         t0 = time.perf_counter()
         img_arr = rasterize_points(roots_mat, llx, lly, urx, ury, args.pixels)
-        print(f"rasterize time: {time.perf_counter() - t0:.3f}s")
-        print(f"sum nz all: {np.count_nonzero(img_arr):,}  rows: {img_arr.shape[0]:,} cols: {img_arr.shape[1]:,}")
+        if not param["nostats"]:
+            print(f"rasterize time: {time.perf_counter() - t0:.3f}s")
+            print(f"sum nz all: {np.count_nonzero(img_arr):,}  rows: {img_arr.shape[0]:,} cols: {img_arr.shape[1]:,}")
         t0 = time.perf_counter()
         img = vips.Image.new_from_memory(img_arr.data, args.pixels, args.pixels, 1, "uchar")
         img.pngsave(args.png, compression=1, effort=1, filter="none", interlace=False, strip=True, bitdepth=1)
-        print(f"image save time: {time.perf_counter() - t0:.3f}s")
-        print(f"Saved PNG to {args.png} [{args.pixels}x{args.pixels}]")
+        if not param["nostats"]:
+            print(f"image save time: {time.perf_counter() - t0:.3f}s")
+            print(f"Saved PNG to {args.png} [{args.pixels}x{args.pixels}]")
     if args.png_hsv is not None:
         t0 = time.perf_counter()
         llx, lly, urx, ury = view(roots_mat, args)
-        print(f"[HSV] view time: {time.perf_counter() - t0:.3f}s")
-        print(f"[HSV] ll: ({llx:.3f},{lly:.3f}) ur: ({urx:.3f},{ury:.3f})")
+        if not param["nostats"]:
+            print(f"[HSV] view time: {time.perf_counter() - t0:.3f}s")
+            print(f"[HSV] ll: ({llx:.3f},{lly:.3f}) ur: ({urx:.3f},{ury:.3f})")
 
         t0 = time.perf_counter()
         rgb = rasterize_hsv_color(
@@ -2608,13 +3278,15 @@ if __name__ == "__main__":
             hue_fn_name=args.hue_fn,
             circular=args.hue_circular
         )
-        print(f"[HSV] rasterize time: {time.perf_counter() - t0:.3f}s")
-        print(f"[HSV] colored pixels: {np.count_nonzero(rgb.any(axis=-1)):,}")
+        if not param["nostats"]:
+            print(f"[HSV] rasterize time: {time.perf_counter() - t0:.3f}s")
+            print(f"[HSV] colored pixels: {np.count_nonzero(rgb.any(axis=-1)):,}")
 
         t0 = time.perf_counter()
         img = vips.Image.new_from_memory(rgb.data, args.pixels, args.pixels, 3, "uchar")
         img.pngsave(args.png_hsv, compression=1, effort=1, interlace=False, strip=True)
-        print(f"[HSV] image save time: {time.perf_counter() - t0:.3f}s")
-        print(f"Saved color PNG to {args.png_hsv} [{args.pixels}x{args.pixels}]")
+        if not param["nostats"]:
+            print(f"[HSV] image save time: {time.perf_counter() - t0:.3f}s")
+            print(f"Saved color PNG to {args.png_hsv} [{args.pixels}x{args.pixels}]")
 
 
