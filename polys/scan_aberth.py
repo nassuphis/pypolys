@@ -18,6 +18,7 @@ import pyvips as vips
 import ast
 import re
 import argparse
+import rasterizer
 
 
 # =======================
@@ -2718,122 +2719,6 @@ def view(
 
     return llx, lly, urx, ury
 
-
-def _raster_worker(args):
-    (rid, rows_range, shm_roots_name, N, M,
-     llx, lly, urx, ury, pixels,
-     shm_img_name) = args
-
-    # attach to shared buffers
-    shm_roots, R = get_shm(shm_roots_name, N, M, np.complex128)
-    shm_img, IMG = get_shm(shm_img_name, pixels, pixels, np.uint8)
-
-    IMG1D = IMG.reshape(-1)
-
-    span_x = urx - llx
-    span_y = ury - lly
-    if span_x <= 0.0: span_x = 1e-10
-    if span_y <= 0.0: span_y = 1e-10
-    sx = float(pixels) / span_x
-    sy = float(pixels) / span_y
-
-    i0, i1 = rows_range
-    step = 1_000_000  # tune
-
-    for a in range(i0, i1, step):
-        b = min(a + step, i1)
-        Z = R[a:b, 1:].reshape(-1)
-
-        # use float64 for precise mapping at huge resolutions
-        xr = Z.real.astype(np.float64, copy=False)
-        yi = Z.imag.astype(np.float64, copy=False)
-        msk = np.isfinite(xr) & np.isfinite(yi)
-        if not msk.any():
-            continue
-        xr = xr[msk]; yi = yi[msk]
-
-        # 2) cull anything outside the viewport BEFORE scaling
-        in_view = (xr >= llx) & (xr < urx) & (yi >= lly) & (yi < ury)
-        if not in_view.any():
-            continue
-        xr = xr[in_view]; yi = yi[in_view]
-
-        # 3) map to pixel space (floats)
-        xpf = (xr - llx) * sx
-        ypf = (yi - lly) * sy
-
-        # 4) guard against NaN/Inf produced by the multiply
-        fOK = np.isfinite(xpf) & np.isfinite(ypf)
-        if not fOK.any():
-            continue
-        xpf = xpf[fOK]; ypf = ypf[fOK]
-
-
-        # 5) floor then cast to int64
-        ix = np.floor(xpf).astype(np.int64, copy=False)
-        iy = np.floor(ypf).astype(np.int64, copy=False)
-
-        # 6) final in-bounds mask (defensive)
-        inb = (ix >= 0) & (ix < pixels) & (iy >= 0) & (iy < pixels)
-        if not inb.any():
-            continue
-        ix = ix[inb]; iy = iy[inb]
-
-
-        # bins in 64-bit; also cast to intp for indexing
-        bins = (iy * np.int64(pixels) + ix).astype(np.intp, copy=False)
-
-        # de-duplicate to reduce write pressure
-        ubins = np.unique(bins)
-        IMG1D[ubins] = 1  # multiple writes of 1 are benign
-
-    shm_roots.close()
-    shm_img.close()
-
-def rasterize_points(
-    roots_mat: np.ndarray,
-    llx: float, lly: float, urx: float, ury: float,
-    pixels: int,
-    nprocs: int | None = None
-) -> np.ndarray:
-    N, M = roots_mat.shape
-    if N == 0 or M <= 1:
-        return np.zeros((pixels, pixels), dtype=np.uint8)
-
-    if nprocs is None:
-        nprocs = mproc.cpu_count()
-
-    # Share roots
-    shm_roots, Rsh = make_shm(N, M, np.complex128)
-    Rsh[:] = roots_mat  # one-time copy into shared segment
-
-    # Shared output image (uint8). We'll flip vertically at the end.
-    shm_img, IMG = make_shm(pixels, pixels, np.uint8)  # zero-initialized
-
-    # Row ranges per worker
-    rows_per = (N + nprocs - 1) // nprocs
-    args = []
-    for p in range(nprocs):
-        i0 = p * rows_per
-        i1 = min((p + 1) * rows_per, N)
-        if i0 >= i1:
-            continue
-        args.append((
-            p, (i0, i1), shm_roots.name, N, M,
-            llx, lly, urx, ury, pixels,
-            shm_img.name
-        ))
-
-    ctx = mproc.get_context("spawn")
-    with ctx.Pool(processes=len(args)) as pool:
-        pool.map(_raster_worker, args)
-
-    # copy result out and clean up
-    out = np.array(IMG[::-1, :], copy=True)  # flip vertically
-    shm_img.close(); shm_img.unlink()
-    shm_roots.close(); shm_roots.unlink()
-    return (out * 255).astype(np.uint8)
-
 #---------- Hue utilities ----------
 
 def hue_xnorm(xr: np.ndarray, yi: np.ndarray, llx, lly, urx, ury) -> np.ndarray:
@@ -3179,6 +3064,7 @@ if __name__ == "__main__":
     ap.add_argument("--nodither", default=False,action="store_true", help="No dithering")
     ap.add_argument("--noaberth", default=False,action="store_true", help="Use np.roots")
     ap.add_argument("--nostats", default=False,action="store_true", help="Do not compute stats")
+    ap.add_argument("--notime", default=False,action="store_true", help="Do not timing")
     ap.add_argument("--toline", default=False,action="store_true", help="Roots to line")
     ap.add_argument("--unitpull", default=False,action="store_true", help="Pull towards unit circle")
     ap.add_argument("--verbose", action="store_true")
@@ -3199,6 +3085,7 @@ if __name__ == "__main__":
     param["toline"] = args.toline
     param["unitpull"] = args.unitpull
     param["nostats"] = args.nostats
+    param["notime"] = args.notime
     param["use_aberth"] = not args.noaberth
     param["poly"] = args.poly
 
@@ -3212,7 +3099,7 @@ if __name__ == "__main__":
         per_root_tol = args.per_root_tol,
         newton_fallback = args.newton_fallback,
     )
-    if not param["nostats"]:
+    if not param["notime"]:
         print(f"scan time: {time.perf_counter() - t0:.3f}s")
         t0 = time.perf_counter()
         # roots_mat shape: (M, 1+deg) complex128, col0 = s+1j*t
@@ -3251,24 +3138,23 @@ if __name__ == "__main__":
     if args.png is not None:
         t0 = time.perf_counter()
         llx, lly, urx, ury = view(roots_mat, args)
-        if not param["nostats"]:
+        if not param["notime"]:
             print(f"view time: {time.perf_counter() - t0:.3f}s")
             print(f"ll: ({llx:.2f},{lly:.2f}) ur: ({urx:.2f},{ury:.2f})")
         t0 = time.perf_counter()
-        img_arr = rasterize_points(roots_mat, llx, lly, urx, ury, args.pixels)
-        if not param["nostats"]:
+        img_arr = rasterizer.rasterize(roots_mat[:,1:], llx, lly, urx, ury, args.pixels)
+        if not param["notime"]:
             print(f"rasterize time: {time.perf_counter() - t0:.3f}s")
             print(f"sum nz all: {np.count_nonzero(img_arr):,}  rows: {img_arr.shape[0]:,} cols: {img_arr.shape[1]:,}")
         t0 = time.perf_counter()
-        img = vips.Image.new_from_memory(img_arr.data, args.pixels, args.pixels, 1, "uchar")
-        img.pngsave(args.png, compression=1, effort=1, filter="none", interlace=False, strip=True, bitdepth=1)
-        if not param["nostats"]:
+        rasterizer.write_raster(img_arr,out=args.png)
+        if not param["notime"]:
             print(f"image save time: {time.perf_counter() - t0:.3f}s")
             print(f"Saved PNG to {args.png} [{args.pixels}x{args.pixels}]")
     if args.png_hsv is not None:
         t0 = time.perf_counter()
         llx, lly, urx, ury = view(roots_mat, args)
-        if not param["nostats"]:
+        if not param["notime"]:
             print(f"[HSV] view time: {time.perf_counter() - t0:.3f}s")
             print(f"[HSV] ll: ({llx:.3f},{lly:.3f}) ur: ({urx:.3f},{ury:.3f})")
 
@@ -3278,15 +3164,16 @@ if __name__ == "__main__":
             hue_fn_name=args.hue_fn,
             circular=args.hue_circular
         )
-        if not param["nostats"]:
+        if not param["notime"]:
             print(f"[HSV] rasterize time: {time.perf_counter() - t0:.3f}s")
             print(f"[HSV] colored pixels: {np.count_nonzero(rgb.any(axis=-1)):,}")
 
         t0 = time.perf_counter()
         img = vips.Image.new_from_memory(rgb.data, args.pixels, args.pixels, 3, "uchar")
         img.pngsave(args.png_hsv, compression=1, effort=1, interlace=False, strip=True)
-        if not param["nostats"]:
+        if not param["notime"]:
             print(f"[HSV] image save time: {time.perf_counter() - t0:.3f}s")
             print(f"Saved color PNG to {args.png_hsv} [{args.pixels}x{args.pixels}]")
 
-
+# python scan_aberth.py --pps 1000 --poly poly_cf3p1 --png root_locus.png  --pixels 5000  --pad 0.5 --view sq2    --verbose --nodither --nostats --unitpull 
+# python scan_aberth.py --pps 1000 --poly poly_giga_5 --png root_locus.png  --pixels 30000  --pad 0.5 --view sq2    --verbose --nodither --noaberth
