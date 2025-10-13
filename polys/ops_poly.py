@@ -35,7 +35,6 @@ def poly_giga_2(z,a,state):
     cf[24] = 10 * (t1 * t2**3)        # z^24
     return cf
     
-# FIXME comes out with missing edges
 def poly_giga_3(z,a,state):
     t1, t2 = z[0], z[1] 
     n = 25
@@ -114,8 +113,6 @@ def poly_giga_8(z,a,state):
     cf[34] = 200 * np.exp(1j * t1**3) - np.exp(-1j * t2**2)
     return cf
     
-# FIXME missing some parts
-# could it be the rasterizer ?
 def poly_giga_9(z,a,state):
     t1, t2 = z[0], z[1]
     n = 20
@@ -301,8 +298,10 @@ def poly_giga_19(z,a,state):
 def poly_giga_47(z,a,state):
     t1, t2 = z[0], z[1]
     cf = np.zeros(30, dtype=np.complex128)
-    cf[0:3] = np.roots([t1**3 - t2**2, 100 * t1, -50 * t2, 10j])
-    cf[9:11] = np.roots([1, t1**2 - 1j * t2, -100])
+    cf1 = np.array([t1**3 - t2**2, 100 * t1, -50 * t2, 10j], dtype=np.complex128)
+    cf[0:3] = np.roots(cf1)
+    cf2 = np.array([1, t1**2 - 1j * t2, -100], dtype=np.complex128)
+    cf[9:11] = np.roots(cf2)
     cf[14] = 50 * t1**3 - 20 * t2
     cf[24] = 200 * np.sin(t1.real + t2.imag) + 1j * np.cos(t1.imag - t2.real)
     cf[29] = np.exp(1j * t1) + t2**3
@@ -377,6 +376,179 @@ def giga_221(z,a,state):
         cf[k - 1] = np.log(k + 1) * (np.sin(k * np.angle(t1)) + 1j * np.cos(k / 2))
     return  cf
 
+def p1(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(36, dtype=np.complex128)
+    for i in range(1, 37):
+        cf[i-1] = np.sin(t1**(i/2)) * np.cos(t2**(i/3)) + (i**2) * t1 * t2 + np.log(np.abs(t1 + t2) + 1) * 1j * i
+    cf[10] = t1 * t2 * np.real(cf[6]) + np.imag(cf[18]) * t1**3
+    cf[21] = t2 * cf[10] + np.real(cf[34]) * t1**3
+    cf[32] = cf[21] - np.real(cf[16]) * t1**2
+    return cf
+
+def p8(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(51, dtype=np.complex128)
+    cf[0:25] = np.arange(1, 26) * (t1**2 + 1j * t2**3)
+    cf[25] = np.abs(t1 + t2)
+    cf[26:51] = np.arange(1, 26) * (t2**2 - 1j * t1**3)
+    cf[2] = np.sin(t1) * cf[0]**2
+    cf[6] = np.log(np.abs(t2) + 1) * cf[4]**3
+    cf[32] = cf[6] + cf[2]
+    cf[36] = cf[32] - cf[6]
+    cf[40] = cf[32] + cf[2]
+    cf[49] = np.angle(t1) * np.angle(t2)
+    cf[50] = np.abs(cf[40])
+    return cf
+
+def p52(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(71, dtype=np.complex128)
+    cf[0] = t1 ** 7 + t2 ** 7
+    for k in range(2, 36):
+        cf[k - 1] = np.sin(k * np.log(np.abs(t1) + 1) + np.log(np.abs(t2) + 1))
+    for k in range(36, 71):
+        cf[k - 1] = np.cos(k * np.log(np.abs(t1) + 1) - np.log(np.abs(t2) + 1))
+    cf[70] = t1 * t2 - (t1 + t2) ** 2
+    return cf
+
+def p123(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(71, dtype=np.complex128)
+    cf[0] = t1.real**2 - t2.imag**2
+    cf[1] = (t1 + t2)**2 - 7
+    cf[2] = t1**2 - t2**2
+    cf[3:10] = np.arange(3, 30, 4) * np.abs(t1 + 1j * t2)
+    cf[10:20] = (t1 - t2).real * np.arange(11, 21)
+    cf[20:30] = 1 / (1 + np.arange(21, 31)) * (t1 + t2).real
+    cf[30] = np.angle(t1) * t2.imag
+    cf[31:50] = 1000 * (-1)**np.arange(32, 51) * t1 * t2
+    cf[50:60] = 2000 * (-1)**np.arange(51, 61) * np.log(np.abs(t1) + 1)
+    cf[60:65] = 1j * np.conj(t1 * t2) * np.sqrt(np.arange(61, 66))
+    cf[65:70] = np.arange(66, 71) * (np.arange(66, 71) - 1) / (np.abs(t1) + np.abs(t2) + 1)
+    cf[70] = np.prod(np.arange(1, 6))
+    return cf
+
+def p184(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(71, dtype=np.complex128)
+    cf[0] = t1**5 + 2 * t2**4
+    cf[1] = -3 * t1**4 + 4 * t2**3
+    cf[2] = 5 * t1**3 - 6 * t2**2
+    cf[3] = -7 * t1**2 + 8 * t2
+    cf[4] = 9 * t1 - 10 * t2**0
+    cf[5:10] = (t1 * t2)**np.arange(1, 6) * np.array([11, -12, 13, -14, 15])
+    cf[10:20] = (t1 + t2)**(np.arange(6, 16) / 2) * np.array([-16, 17, -18, 19, -20, 21, -22, 23, -24, 25])
+    cf[20:30] = (t1 - t2)**(np.arange(16, 26) / 3) * np.array([26, -27, 28, -29, 30, 31, -32, 33, -34, 35])
+    cf[30:40] = (t1 * t2)**(np.arange(26, 36) / 4) * np.array([36, -37, 38, -39, 40, 41, -42, 43, -44, 45])
+    cf[40:50] = (t1 + np.conj(t2))**(np.arange(36, 46) / 5) * np.array([-46, 47, -48, 49, -50, 51, -52, 53, -54, 55])
+    cf[50:60] = (np.conj(t1) - t2)**(np.arange(46, 56) / 6) * np.array([56, -57, 58, -59, 60, 61, -62, 63, -64, 65])
+    cf[60:70] = (np.abs(t1) + np.abs(t2))**(np.arange(56, 66) / 7) * np.array([-66, 67, -68, 69, -70, 71, -72, 73, -74, 75])
+    cf[70] = np.log(np.abs(t1) + 1) + np.log(np.abs(t2) + 1)
+    return cf
+
+def p532(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for r in range(1, n + 1):
+        j = r % 7 + 1
+        k = np.floor(r / 5) + 1
+        magnitude = (np.log(np.abs(t1) + 1) * np.cos(r) + np.log(np.abs(t2) + 1) * np.sin(r)) * (1 + r / 10)
+        angle = np.angle(t1) * np.sin(r / 2) - np.angle(t2) * np.cos(r / 3) + np.sin(r) * np.cos(r / 4)
+        cf[r - 1] = magnitude * (np.cos(angle) + np.sin(angle) * 1j)
+    return cf
+
+def p600(z,a,state):
+    t1, t2 = z[0], z[1]
+    degree = 25
+    cf = np.zeros(degree + 1, dtype=np.complex128)
+    rec_step = np.linspace(t1.real, t2.real, num=degree + 1)
+    imc_step = np.linspace(t1.imag, t2.imag, num=degree + 1)
+    for j in range(1, degree + 2):
+        mag_part1 = np.log(np.abs(t1) + j) * np.sin(j * np.pi / 12)
+        mag_part2 = np.cos(j * np.pi / 8) * np.log(np.abs(rec_step[j - 1] - imc_step[j - 1]) + 1)
+        magnitude = mag_part1 + mag_part2 + j**0.8
+        
+        angle_part1 = np.angle(t1) * np.sin(j * np.pi / 10)
+        angle_part2 = np.angle(t2) * np.cos(j * np.pi / 14)
+        angle_part3 = np.sin(j * np.pi / 6) - np.cos(j * np.pi / 9)
+        angle = angle_part1 + angle_part2 + angle_part3
+        
+        cf[j - 1] = magnitude * (np.cos(angle) + 1j * np.sin(angle))
+    return cf
+
+def p597(z,a,state):
+    t1, t2 = z[0], z[1]
+    degree = 25
+    cf = np.zeros(degree + 1, dtype=np.complex128)
+    r1 = t1.real
+    i1 = t1.imag
+    r2 = t2.real
+    i2 = t2.imag
+    for j in range(0, degree + 1):
+        mag = 0
+        angle = 0
+        for k in range(1, j + 2):
+            term_mag = np.log(np.abs(t1) * k + 1) * np.sin(k * np.pi * r1) + np.cos(k * np.pi * i2)
+            term_angle = np.angle(t1) * k**2 - np.angle(t2) * np.sqrt(k)
+            mag += term_mag * np.exp(1j * term_angle)
+        if j < degree / 3:
+            mag *= (j + 1)
+        elif j < 2 * degree / 3:
+            mag /= (j + 1)
+        else:
+            mag *= (j + 1)**2
+        cf[j] = mag
+    cf[0] = (t1.real * t2.real) + 1j * (t1.imag - t2.imag) + np.sin(t1.real) * np.cos(t2.imag)
+    return cf
+
+def p344(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35 # was 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec_seq = np.linspace(np.real(t1), np.real(t2), n)
+    imc_seq = np.linspace(np.imag(t1), np.imag(t2), n)
+    for j in range(n):
+        mag = np.log(np.abs(rec_seq[j] * imc_seq[j]) + 1) * (1 + np.sin(j * np.pi / 3)) * (j % 4 + 1)
+        ang = np.angle(t1) * np.cos(j * np.pi / 5) + np.angle(t2) * np.sin(j * np.pi / 7) + np.log(np.abs(rec_seq[j] + imc_seq[j]) + 1)
+        cf[j] = mag * (np.cos(ang) + 1j * np.sin(ang))
+    return cf
+
+def p546(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    imc1 = t1.imag 
+    imc2 = t2.imag 
+    for j in range(1, n + 1):
+        theta = (imc1 - imc2) / n * j + np.sin(j * np.pi / 3)
+        magnitude = np.log(np.abs(t1) * j + np.abs(t2) * (n - j + 1)) + np.sqrt(j)
+        cf[j - 1] = magnitude * (np.cos(theta) + 1j * np.sin(theta))
+    return cf
+
+def p440(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n+1):
+        # Calculate real and imaginary parts
+        real_part = np.real(t1)**j * np.log(np.abs(j) + 1) + np.sin(j * np.real(t2)) * np.cos(j**2)
+        imag_part = np.imag(t1) * j**0.5 + np.cos(j * np.imag(t2)) * np.log(np.abs(t1 + t2) + 1)
+        # Assign to complex coefficient with scaling
+        cf[j-1] = (real_part+imag_part * 1j) * (1 + 0.1 * j)
+    return cf
+
+def p371(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n + 1):
+        mag_part = np.log(np.abs(t1) + j) * np.sqrt(j) + np.sin(j * np.angle(t2))**2
+        angle_part = np.angle(t1) * np.cos(j) + np.angle(t2) * np.sin(j)
+        cf[j - 1] = mag_part * (np.cos(angle_part) + 1j * np.sin(angle_part)) + np.conj(t1)**j - np.log(np.abs(t2) + 1) * np.sin(j)
+    return cf
+
 ALLOWED = {
     "poly_giga_1":    poly_giga_1,
     "poly_giga_2":    poly_giga_2,
@@ -397,10 +569,23 @@ ALLOWED = {
     "poly_giga_17":   poly_giga_17,
     "poly_giga_18":   poly_giga_18,
     "poly_giga_19":   poly_giga_19,
+    "poly_giga_47":   poly_giga_47,
     "poly_giga_62":   poly_giga_62,
     "poly_giga_87":   poly_giga_87,
-    "p7f":            p7f,
     "giga_221":       giga_221,
+    "p7f":            p7f,
+    "p1":             p1,
+    "p8":             p8,
+    "p52":            p52,
+    "p123":            p123,
+    "p184":            p184,
+    "p344":            p344,
+    "p371":            p371,
+    "p440":            p440,
+    "p532":            p532,
+    "p546":            p546,
+    "p597":            p597,
+    "p600":            p600,
 }
 
 def main():

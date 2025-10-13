@@ -1,4 +1,6 @@
-# ops_basic.py
+# ops_coeff.py
+# moebius-type transforms
+# used pre-solver
 import numpy as np
 from numba.typed import Dict
 from numba import types
@@ -8,22 +10,27 @@ import ast
 def op_coeff1(z,a,state):
     zz = (z.real).astype(np.complex128)
     return zz
+
 def op_coeff2(z,a,state):
     tt1 = z[0] + z[1]
     tt2 = z[0] * z[1]
     return np.array([tt1,tt2],dtype=np.complex128)
+
 def op_coeff3(z,a,state):
     tt1 = 1 / ( z[0] + 2 )
     tt2 = 1 / ( z[1] + 2 )
     return np.array([tt1,tt2],dtype=np.complex128)
+
 def op_coeff4(z,a,state):
     tt1 = np.cos(z[0])
     tt2 = np.sin(z[1])
     return np.array([tt1,tt2],dtype=np.complex128)
+
 def op_coeff5(z,a,state):
     tt1 = z[0] + (1.0+0.0j) / z[1]
     tt2 = z[1] + (1.0+0.0j) / z[0]
     return np.array([tt1,tt2],dtype=np.complex128)
+
 def op_coeff6(z,a,state):
     num1 = z[0]*z[0]*z[0] + 1j
     den1 = z[0]*z[0]*z[0] - 1j
@@ -32,6 +39,7 @@ def op_coeff6(z,a,state):
     den2 = z[1]*z[1]*z[1] - 1j
     val2 = num2 / den2
     return np.array([val1,val2],dtype=np.complex128)
+
 def op_coeff7(z,a,state):
     t1, t2 = z[0], z[1]
     top1  = t1 + np.sin(t1)
@@ -41,41 +49,63 @@ def op_coeff7(z,a,state):
     bot2  = t2 + np.cos(t2)
     val2  = top2 / bot2 
     return np.array([val1,val2],dtype=np.complex128)
+
 def op_coeff8(z,a,state):
-    tt1 = z[0] + z[1]
-    tt2 = z[0] * z[1]
-    return np.array([tt1,tt2],dtype=np.complex128)
+    t1, t2 = z[0], z[1]
+    top1  = t1 + np.sin(t2)
+    bot1  = t2 + np.cos(t1)
+    val1  = top1 / bot1
+    top2  = t2 + np.sin(t1)
+    bot2  = t1 + np.cos(t2)
+    val2  = top2 / bot2
+    return np.array([val1,val2],dtype=np.complex128)
+
 def op_coeff9(z,a,state):
-    tt1 = z[0] + z[1]
-    tt2 = z[0] * z[1]
-    return np.array([tt1,tt2],dtype=np.complex128)
+    t1, t2 = z[0], z[1]
+    top1  = t1*t1 + 1j * t2
+    bot1  = t1*t1 - 1j * t2
+    val1  = top1 / bot1
+    top2  = t2*t2 + 1j * t1
+    bot2  = t2*t2 - 1j * t1
+    val2  = top2 / bot2
+    return np.array([val1,val2],dtype=np.complex128)
+
 def op_coeff10(z,a,state):
-    tt1 = z[0] + z[1]
-    tt2 = z[0] * z[1]
-    return np.array([tt1,tt2],dtype=np.complex128)
+    t1, t2 = z[0], z[1]
+    top1 = t1*t1*t1*t1 - t2
+    bot1 = t1*t1*t1*t1 + t2
+    val1 = top1/bot1
+    top2 = t2*t2*t2*t2 - t1
+    bot2 = t2*t2*t2*t2 + t1
+    val2 = top2/bot2
+    return np.array([val1,val2],dtype=np.complex128)
+
 def op_coeff11(z,a,state):
-    tt1 = z[0] + z[1]
-    tt2 = z[0] * z[1]
-    return np.array([tt1,tt2],dtype=np.complex128)
+    t1, t2 = z[0], z[1]
+    val1 = np.log( t1**4 + 2 )
+    val2 = np.log( t2**4 + 2 )
+    return np.array([val1,val2],dtype=np.complex128)
+
 def op_coeff12(z,a,state):
-    tt1 = z[0] + z[1]
-    tt2 = z[0] * z[1]
-    return np.array([tt1,tt2],dtype=np.complex128)
+    t1, t2 = z[0], z[1]
+    val1 = 2*t1**4 - 3*t2**3 + 4*t1**2 - 5*t2
+    val2 = 2*t2**4 - 3*t1**3 + 4*t2**2 - 5*t1
+    return np.array([val1,val2],dtype=np.complex128)
 
 
 ALLOWED = {
-    "coeff1":    op_coeff1,
-    "coeff2":    op_coeff2,
-    "coeff3":    op_coeff3,
-    "coeff4":    op_coeff4,
-    "coeff5":    op_coeff5,
-    "coeff6":    op_coeff6,
-    "coeff7":    op_coeff7,
-    "coeff8":    op_coeff8,
-    "coeff9":    op_coeff9,
-    "coeff10":   op_coeff10,
-    "coeff11":   op_coeff11,
-    "coeff12":   op_coeff12,
+    "cf1":    op_coeff1,
+    "cf2":    op_coeff2,
+    "cf3":    op_coeff3,
+    "cf4":    op_coeff4,
+    "cf5":    op_coeff5,
+    "cf6":    op_coeff6,
+    "cf7":    op_coeff7,
+    "cf8":    op_coeff8,
+    "cf9":    op_coeff9,
+    "cf10":   op_coeff10,
+    "cf11":   op_coeff11,
+    "cf12":   op_coeff12,
 }
 
 
@@ -92,3 +122,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+

@@ -57,6 +57,8 @@ CONST_MAP = {
     'pi': np.pi, 
     'tau': 2*np.pi, 
     'e': np.e,
+    'zero': 0+0j,
+    'one' : 1+1j,
     '1m': 1_000_000,
     '2m': 2_000_000,
     '3m': 3_000_000,
@@ -70,6 +72,9 @@ CONST_MAP = {
     '100m': 100_000_000,
     '1b': 1_000_000_000
 }
+
+def set_const(name,value):
+    CONST_MAP[name]=complex(value,0)
 
 def _parse_scalar(tok: str) -> complex:
     t = tok.strip().lower()
@@ -99,6 +104,7 @@ def parse_chain_with_args(chain_str: str, name2op: dict, MAXA=4):
             raise ValueError(f"Unknown op '{name}'. Allowed: {list(name2op)}")
         opcodes[k] = name2op[name]
         for j, tok in enumerate(parts[1:MAXA+1], start=0):
-            args[k, j] = _parse_scalar(tok)
+            v = _parse_scalar(tok)
+            args[k, j] = v
     return opcodes, args
 

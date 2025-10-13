@@ -155,17 +155,20 @@ def rasterize(
 # compute view
 # =======================
 
+def str2view(view_string):
+    match_sq = re.match(r"^sq([0-9.]+)$", view_string)
+    if match_sq:
+        val = float(match_sq.group(1))
+        return -val, -val, val, val
+    # its an expression, try to evaluate it
+    ll, ur = ast.literal_eval(view_string)
+    llx, lly, ury, urx = ll.real, ll.imag, ur.real, ur.imag
+    return llx, lly, urx, ury
+
 def view(roots_mat: np.ndarray, view_string=None,pad=0.05):
 
     if view_string is not None:
-        match_sq = re.match(r"^sq([0-9.]+)$", view_string)
-        if match_sq:
-            val = float(match_sq.group(1))
-            return -val, -val, val, val
-        # its an expression, try to evaluate it
-        ll, ur = ast.literal_eval(view_string)
-        llx, lly, ury, urx = ll.real, ll.imag, ur.real, ur.imag
-        return llx, lly, urx, ury
+        return str2view(view_string)
 
     zs = roots_mat.ravel()
     if zs.size == 0: return -1.0, -1.0, 1.0, 1.0
@@ -192,6 +195,120 @@ def write_raster(img_arr,out="out.png"):
     px = img_arr.shape
     img = vips.Image.new_from_memory(img_arr.data, px[0], px[1], 1, "uchar")
     img.pngsave(out, compression=1, effort=1, filter="none", interlace=False, strip=True, bitdepth=1)
+
+def add_header_label(
+    base: vips.Image,
+    header: str,
+    top_margin_px: int | None = None,
+    dpi: int = 150,
+    font_family: str = "Helvetica",
+    font_weight: str = "Bold",
+    position: str = "top",   # "top" or "bottom"
+) -> vips.Image:
+    """
+    Return a new image with a centered, bilevel header rendered at the top.
+    `base` must be a 1-band uchar image with values 0/255.
+    """
+    H, W = base.height, base.width
+
+    # 1) Target header height and margins
+    target_h = max(12, H // 100)
+    if top_margin_px is None:
+        top_margin_px = max(10, target_h // 2)
+    margin_x = max(10, W // 100)
+    max_w = max(1, W - 2 * margin_x)
+
+    # 2) Pick a point size so pixel height ≈ target_h (pt ~= px * 72 / dpi)
+    pt = max(6, int(round(target_h * 72.0 / dpi)))
+
+    def render(pt_size: int) -> vips.Image:
+        return vips.Image.text(
+            header,
+            dpi=dpi,
+            font=f"{font_family} {font_weight} {pt_size}",
+            align="centre",
+        )
+
+    text = render(pt)
+    # shrink a few times if needed (avoid scaling glyphs)
+    for _ in range(8):
+        if text.width <= max_w or pt <= 6:
+            break
+        scale = (max_w / text.width)
+        pt = max(6, int(pt * scale * 0.98))
+        text = render(pt)
+
+    # 3) Binary glyph mask (auto-polarity)
+    mask_a = (text > 0)         # candidate: letters = 255 where ink
+    mask_b = (text == 0)        # candidate: letters = 255 where invert
+    nz_a = mask_a.avg()
+    nz_b = mask_b.avg()
+    glyph = mask_a if nz_a < nz_b else mask_b  # choose sparser as letters
+
+    # 4) Choose black/white text by contrast with top strip
+    sample_h = max(1, min(H // 20, target_h * 3))
+    top_strip = base.crop(0, 0, W, sample_h)
+    mean_top = top_strip.avg()
+    text_val = 0 if mean_top > 127 else 255  # dark on light, else light on dark
+
+    # 5) Place glyph at top, centered
+    gx = max(0, (W - glyph.width) // 2)
+    if position == "bottom":
+        gy = max(0, min(H - glyph.height - (top_margin_px or 0), H - glyph.height))
+    else:
+        gy = max(0, min(top_margin_px or 0, H - glyph.height))
+    canvas = vips.Image.black(W, H, bands=1)
+    full_mask = canvas.insert(glyph, gx, gy)
+
+    # 6) Paint glyph: where mask!=0 set to text_val, else keep base
+    painted = full_mask.ifthenelse(text_val, base)
+    return painted
+
+def write_raster_header(
+    img_arr: np.ndarray,
+    out: str = "out.png",
+    header: str | None = None,
+    top_margin_px: int | None = None,
+    dpi: int = 150,
+    font_family: str = "Helvetica",
+    font_weight: str = "Bold",
+    position="top"
+):
+    """
+    Save a bilevel (1-bit) PNG from a numpy array, with optional centered header.
+    img_arr must be uint8 with values 0 (black) or 255 (white).
+    """
+    if img_arr.dtype != np.uint8:
+        raise ValueError("img_arr must be uint8.")
+    # enforce strictly bilevel + contiguity
+    img_arr = np.where(img_arr > 0, 255, 0).astype(np.uint8, copy=False)
+    img_arr = np.ascontiguousarray(img_arr)
+
+    H, W = img_arr.shape
+    base = vips.Image.new_from_memory(img_arr.data, W, H, 1, "uchar")
+
+    if header:
+        base = add_header_label(
+            base,
+            header=header,
+            top_margin_px=top_margin_px,
+            dpi=dpi,
+            font_family=font_family,
+            font_weight=font_weight,
+            position=position
+        )
+
+    # Final clamp to 0/255 then write as 1-bit PNG
+    base = (base > 0).ifthenelse(255, 0)
+    base.pngsave(
+        out,
+        compression=1,
+        effort=1,
+        filter="none",
+        interlace=False,
+        strip=True,
+        bitdepth=1,
+    )
 
 # =======================
 # test

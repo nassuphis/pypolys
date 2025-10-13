@@ -12,91 +12,6 @@ def op_nop(z,a,state):
 def op_const(z,a,state):      
     return a
 
-def op_runif(z,a,state):
-    t1 = complex(np.random.random(),0)
-    t2 = complex(np.random.random(),0)
-    u = np.array([t1,t2],dtype=np.complex128)
-    return u
-
-def serp(z,a,state):
-    i = z[0]
-    i = np.real(i)
-    i = int(i)
-    n = a[0]
-    n = n.real
-    n = int(n) 
-    ll = a[1]
-    ur = a[2]
-    i = i % n
-    if n <= 0 or i < 0 or i >= n:
-        return z
-    cols = int(math.ceil(math.sqrt(float(n))))
-    rows = int(math.ceil(n / cols))
-    r = i // cols              # row
-    c = i - r * cols           # col within row (pre serpentine flip)
-    if (r & 1) == 1:
-        c = cols - 1 - c
-    fx = (c + 0.5) / cols
-    fy = (r + 0.5) / rows
-    llx, lly = ll.real, ll.imag
-    urx, ury = ur.real, ur.imag
-    x = llx + fx * (urx - llx)
-    y = lly + fy * (ury - lly)
-    t1 = complex(x,0)
-    t2 = complex(y,0)
-    u = np.array([t1,t2],dtype=np.complex128)
-    return u
-
-def dither(z,a,state):
-
-    serp_len = a[0].real
-    dither_width = a[1].real
-
-    dither_fact = dither_width/math.sqrt(serp_len)
-
-    t1 = dither_fact * (np.random.random()-0.5)
-    t1 = complex( t1,0 ) 
-    t1 = t1 + z[0]
-
-    t2 = dither_fact * (np.random.random()-0.5)
-    t2 = complex( t2,0 ) 
-    t2 = t2 + z[1]
-
-    u = np.array([t1,t2],dtype=np.complex128)
-
-    return u
-
-def op_round(z,a,state):
-    n=int(a[0].real)
-    return np.round(z,n)
-
-def op_uc(z,a,state):       
-    zz = np.exp(1j*2*np.pi*z)
-    return zz
-
-def op_zzz(z,a,state):       
-    t1 = z[0]
-    t1 = t1.real
-    t2 = z[1]
-    t2 = t2.real
-    v = t1+t2*1j
-    u = np.array([v,v],dtype=np.complex128)
-    return u
-
-def sort_by_abs(z,a,state):
-    idx = np.argsort(np.abs(z))
-    out = np.empty_like(z)
-    for i in range(z.size):
-        out[i] = z[idx[i]]
-    return out
-
-def rev(z,a,state):
-    return np.flip(z)
-
-def sort_moduli_keep_angles(z,a,state):
-    angles = np.angle(z)
-    sorted_moduli = np.sort(np.abs(z))
-    return sorted_moduli * np.exp(1j * angles)
 
 def invuc(z,a,state):
    sa = np.max(np.abs(z))
@@ -134,27 +49,6 @@ def rotate_poly(z,a,state):
     rotated *= np.exp(1j * n * theta) / a0
     return rotated
 
-def roots_toline(z,a,state):
-   num = 1+z
-   den = 1-z
-   line = 1j * num/den
-   return line
-
-def pull_unit_circle(z,a,state):
-    alpha: float = 1.0
-    sigma: float = 0.75
-    n = z.shape[0]
-    out = np.empty_like(z)
-    for i in range(n):
-        x = z[i].real
-        y = z[i].imag
-        r = np.hypot(x, y)
-        theta = np.arctan2(y, x)
-        d = r - 1.0
-        rprime = r - alpha * d * np.exp(- (d / sigma) ** 2)
-        out[i] = rprime * (np.cos(theta) + 1j * np.sin(theta))
-    return out
-
 def swirler(z,a,state):
     a = np.abs( z *100 ) % 1
     b = np.abs( z *10  ) % 1
@@ -173,7 +67,8 @@ def numba_poly(z,a,state):
         coeffs = new_coeffs
     return coeffs
 
-def op_roots(z,a,state):     return np.roots(z)
+def op_roots(z,a,state):     
+    return np.roots(z)
 
 @njit(cache=True, fastmath=True)
 def _horner_and_deriv(cf: np.ndarray, z: complex):
@@ -257,23 +152,12 @@ def aberth( z, a, state):
 ALLOWED = {
     "nop":       op_nop,
     "const":     op_const,
-    "runif":     op_runif,
-    "dither":    dither,
-    "serp":      serp,
-    "uc":        op_uc,
-    "zzz":       op_zzz,
-    "rev":       rev,
-    "round":     op_round,
-    "sabs":      sort_by_abs,
-    "smka":      sort_moduli_keep_angles,
     "invuc":     invuc,
     "normalize": normalize,
     "hflip":     poly_flip_horizontal,
     "vflip":     poly_flip_vertical,
     "rotate":    rotate_poly,
     "swirler":   swirler,
-    "toline":    roots_toline,
-    "unitpull":  pull_unit_circle,
     "poly":      numba_poly,
     "roots":     op_roots,
     "aberth":    aberth,
