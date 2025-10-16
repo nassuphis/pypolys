@@ -42,6 +42,7 @@ def op_pz(z,a,state):
     p1 = a0+a1*z1+a2*z1**2+a3*z1**3
     return np.array([p0,p1],dtype=np.complex128)
 
+
 ############################################
 # Baker's map (mod1 mapping)
 ############################################

@@ -41,7 +41,9 @@ def roots_toline(z,a,state):
 ALLOWED = {
     "rrot":      rotate_roots,
     "unitpull":  pull_unit_circle,
+    "puc":       pull_unit_circle,
     "toline":    roots_toline,
+    "line":      roots_toline,
 }
 
 

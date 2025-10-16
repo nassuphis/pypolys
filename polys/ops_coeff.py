@@ -3,9 +3,20 @@
 # used pre-solver
 import numpy as np
 from numba.typed import Dict
-from numba import types
+from numba import types, njit
 import argparse
 import ast
+
+@njit(cache=True, fastmath=True)
+def _safe_div(top: np.complex128, bot: np.complex128, eps: float = 1e-12) -> np.complex128:
+    # Tikhonov-regularized division: top / bot ≈ top*conj(bot)/( |bot|^2 + eps^2 )
+    br = bot.real; bi = bot.imag
+    denom = br*br + bi*bi + eps*eps
+    tr = top.real; ti = top.imag
+    num_r = tr*br + ti*bi
+    num_i = ti*br - tr*bi
+    return (num_r/denom) + 1j*(num_i/denom)
+
 
 def op_coeff1(z,a,state):
     zz = (z.real).astype(np.complex128)
@@ -21,6 +32,12 @@ def op_coeff3(z,a,state):
     tt2 = 1 / ( z[1] + 2 )
     return np.array([tt1,tt2],dtype=np.complex128)
 
+def op_coeff3_safe(z,a,state):
+    t1, t2 = z[0], z[1] 
+    tt1 = _safe_div( 1, t1 + 2)
+    tt2 = _safe_div( 1, t2 + 2 )
+    return np.array([tt1,tt2],dtype=np.complex128)
+
 def op_coeff4(z,a,state):
     tt1 = np.cos(z[0])
     tt2 = np.sin(z[1])
@@ -30,6 +47,12 @@ def op_coeff5(z,a,state):
     tt1 = z[0] + (1.0+0.0j) / z[1]
     tt2 = z[1] + (1.0+0.0j) / z[0]
     return np.array([tt1,tt2],dtype=np.complex128)
+
+def op_coeff5_safe(z,a,state):
+    t1, t2 = z[0], z[1] 
+    tt1 = t1 + _safe_div( 1.0 + 0.0j, t2 )
+    tt2 = t2 + _safe_div( 1.0 + 0.0j, t1 )
+    return  np.array([tt1,tt2],dtype=np.complex128)
 
 def op_coeff6(z,a,state):
     num1 = z[0]*z[0]*z[0] + 1j
@@ -97,8 +120,10 @@ ALLOWED = {
     "cf1":    op_coeff1,
     "cf2":    op_coeff2,
     "cf3":    op_coeff3,
+    "cf3s":   op_coeff3_safe,
     "cf4":    op_coeff4,
     "cf5":    op_coeff5,
+    "cf5s":   op_coeff5_safe,
     "cf6":    op_coeff6,
     "cf7":    op_coeff7,
     "cf8":    op_coeff8,

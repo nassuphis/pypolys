@@ -21,7 +21,7 @@ import argparse
 import time
 
 # =======================
-# compiler
+# compiler OPCODES
 # =======================
 
 ALLOWED =  ( # commands
@@ -35,19 +35,6 @@ ALLOWED =  ( # commands
     ops_param.ALLOWED |
     ops_rfrm.ALLOWED
 )  
-
-ORDER   = None  # or pass an explicit list
-
-SIG = types.complex128[:](
-    types.complex128[:], 
-    types.complex128[:], 
-    types.DictType(types.int8, types.complex128[:])
-)
-
-ORDERED, NAME2OP = compiler.make_registry(ALLOWED, order=ORDER)
-JITTED = compiler.jit_ops(ALLOWED, SIG, cache=True)
-APPLY_OPCODE = compiler.build_dispatcher_codegen(ORDERED, JITTED)
-APPLY_PROGRAM = compiler.build_executor(APPLY_OPCODE)
 
 # =======================
 # shared memory
@@ -93,7 +80,7 @@ def _pixel_scan_worker(args):
         print(f"worker {wid}/{wcount} shared mem: {result.shape}")
 
     compiler.set_const("runs",samples)
-    opcodes, a = compiler.parse_chain_with_args(chain, NAME2OP, MAXA=4)
+    APPLY_PROGRAM, opcodes, a = compiler.compile_chain(chain, ALLOWED)
 
     state  = Dict.empty(key_type=types.int8,value_type=types.complex128[:])
 
@@ -130,7 +117,7 @@ def pixel_scan(
 ) -> np.ndarray:
 
     compiler.set_const("runs",runs)
-    opcodes, a = compiler.parse_chain_with_args(chain, NAME2OP, MAXA=4)
+    APPLY_PROGRAM, opcodes, a = compiler.compile_chain(chain, ALLOWED)
 
     if verbose:
         print(f"opcodes {opcodes}")
@@ -188,7 +175,7 @@ def _scan_worker(args):
         print(f"worker {wid}/{wcount} shared mem: {result.shape}")
 
     compiler.set_const("runs",rows)
-    opcodes, a = compiler.parse_chain_with_args(chain, NAME2OP, MAXA=4)
+    APPLY_PROGRAM, opcodes, a = compiler.compile_chain(chain, ALLOWED)
 
     state  = Dict.empty(key_type=types.int8,value_type=types.complex128[:])
     for i in range(wid, rows, wcount):
@@ -210,7 +197,7 @@ def _scan_worker(args):
 def scan( chain: str, runs: int, verbose: bool = False) -> np.ndarray:
 
     compiler.set_const("runs",runs)
-    opcodes, a = compiler.parse_chain_with_args(chain, NAME2OP, MAXA=4)
+    APPLY_PROGRAM, opcodes, a = compiler.compile_chain(chain, ALLOWED)
 
     if verbose:
         print(f"opcodes {opcodes}")

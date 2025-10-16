@@ -5,16 +5,18 @@ from numba.typed import Dict
 from numba import types
 
 # ---------- registry & JIT ----------
-def make_registry(allowed: dict, order=None):
-    """allowed: {'name': py_func}. order: iterable of names or None (sorted)."""
-    ordered = tuple(order) if order is not None else tuple(sorted(allowed))
-    name2op = {n: np.int8(i) for i, n in enumerate(ordered)}
+def make_registry(allowed: dict):
+    """allowed: {'name': py_func}"""
+    ordered = tuple(sorted(allowed))
+    name2op = {n: np.int16(i) for i, n in enumerate(ordered)}
     return ordered, name2op
 
 def jit_ops(allowed: dict, sig, fastmath=True, cache=True):
     """Return dict of name -> jitted (CPUDispatcher) with explicit signature."""
-    return {name: njit(sig, cache=cache, fastmath=fastmath)(fn)
-            for name, fn in allowed.items()}
+    return {
+        name: njit(sig, cache=cache, fastmath=fastmath)(fn)
+        for name, fn in allowed.items()
+    }
 
 def build_dispatcher_codegen(ordered_names, jitted_dict):
     """
@@ -29,7 +31,7 @@ def build_dispatcher_codegen(ordered_names, jitted_dict):
     g = {"np": np}
     for i, n in enumerate(ordered_names):
         g[n] = jitted_dict[n]          # compiled callees
-        g[n.upper()] = np.int8(i)      # opcode constants
+        g[n.upper()] = np.int16(i)     # opcode constants
 
     lines = ["def _apply_opcode_impl(op, z, a, state):"]
     for i, n in enumerate(ordered_names):
@@ -59,18 +61,6 @@ CONST_MAP = {
     'e': np.e,
     'zero': 0+0j,
     'one' : 1+1j,
-    '1m': 1_000_000,
-    '2m': 2_000_000,
-    '3m': 3_000_000,
-    '4m': 4_000_000,
-    '5m': 5_000_000,
-    '6m': 6_000_000,
-    '7m': 7_000_000,
-    '8m': 8_000_000,
-    '9m': 9_000_000,
-    '10m': 10_000_000,
-    '100m': 100_000_000,
-    '1b': 1_000_000_000
 }
 
 def set_const(name,value):
@@ -83,18 +73,31 @@ def _parse_scalar(tok: str) -> complex:
     t = t.replace('i', 'j')
     return complex(t)
 
+def extract_used_names(chain: str) -> set[str]:
+    """Return a set of opcode names used in a chain like 'uc:0.1,coeff5:2,nop'."""
+    parts = [s.strip() for s in chain.split(",") if s.strip()]
+    names = [p.split(":")[0].lower() for p in parts]
+    return set(names)
+
+def extract_used_funcs(chain: str, allowed: dict) -> dict:
+    """Return subset of allowed functions"""
+    used_names = extract_used_names(chain)
+    allowed_used = {k: allowed[k] for k in used_names}
+    return allowed_used
+
+
 def parse_chain_with_args(chain_str: str, name2op: dict, MAXA=4):
     """
     'uc:0.1:0.3,coeff5:10,nop'
-    -> (opcodes int8[n_ops], args complex128[n_ops, MAXA])
+    -> (opcodes int16[n_ops], args complex128[n_ops, MAXA])
     """
     if not chain_str.strip():
-        return (np.empty(0, dtype=np.int8),
+        return (np.empty(0, dtype=np.int16),
                 np.empty((0, MAXA), dtype=np.complex128))
 
     items = [s.strip() for s in chain_str.split(',') if s.strip()]
     n_ops = len(items)
-    opcodes = np.empty(n_ops, dtype=np.int8)
+    opcodes = np.empty(n_ops, dtype=np.int16)
     args    = np.zeros((n_ops, MAXA), dtype=np.complex128)
 
     for k, item in enumerate(items):
@@ -108,3 +111,17 @@ def parse_chain_with_args(chain_str: str, name2op: dict, MAXA=4):
             args[k, j] = v
     return opcodes, args
 
+
+def compile_chain(chain: str, allowed: dict):
+    sig= types.complex128[:](
+        types.complex128[:], 
+        types.complex128[:], 
+        types.DictType(types.int8, types.complex128[:])
+    )
+    allowed_used = extract_used_funcs(chain,allowed)
+    ordered, name2op = make_registry(allowed_used)
+    jitted = jit_ops(allowed_used, sig, cache=True)
+    apply_opcode = build_dispatcher_codegen(ordered, jitted)
+    apply_program = build_executor(apply_opcode)
+    opcodes, args = parse_chain_with_args(chain, name2op)
+    return apply_program, opcodes, args

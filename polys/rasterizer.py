@@ -34,9 +34,12 @@ def get_shm(name,rows,cols,type):
 # =======================
 
 def _raster_worker(args):
-    (rid, rows_range, shm_roots_name, N, M,
-     llx, lly, urx, ury, pixels,
-     shm_img_name) = args
+    (
+        rid, 
+        rows_range, shm_roots_name, N, M,
+        llx, lly, urx, ury, pixels,
+        shm_img_name
+    ) = args
 
     # attach to shared buffers
     shm_roots, R = get_shm(shm_roots_name, N, M, np.complex128)
@@ -196,30 +199,24 @@ def write_raster(img_arr,out="out.png"):
     img = vips.Image.new_from_memory(img_arr.data, px[0], px[1], 1, "uchar")
     img.pngsave(out, compression=1, effort=1, filter="none", interlace=False, strip=True, bitdepth=1)
 
-def add_header_label(
-    base: vips.Image,
-    header: str,
-    top_margin_px: int | None = None,
-    dpi: int = 150,
-    font_family: str = "Helvetica",
-    font_weight: str = "Bold",
-    position: str = "top",   # "top" or "bottom"
-) -> vips.Image:
-    """
-    Return a new image with a centered, bilevel header rendered at the top.
-    `base` must be a 1-band uchar image with values 0/255.
-    """
+def add_header_label(base: vips.Image, header: str,
+                     top_margin_px: int | None = None,
+                     dpi: int = 150,
+                     font_family: str = "Helvetica",
+                     font_weight: str = "Bold",
+                     position: str = "top") -> vips.Image:
     H, W = base.height, base.width
 
-    # 1) Target header height and margins
-    target_h = max(12, H // 100)
+    # --- layout targets ---
+    target_h = max(12, H // 100)                        # ~1% of image height
     if top_margin_px is None:
         top_margin_px = max(10, target_h // 2)
     margin_x = max(10, W // 100)
     max_w = max(1, W - 2 * margin_x)
 
-    # 2) Pick a point size so pixel height ≈ target_h (pt ~= px * 72 / dpi)
-    pt = max(6, int(round(target_h * 72.0 / dpi)))
+    # --- safety limits (Cairo/Pango hard-ish caps) ---
+    SAFE_MAX_DIM = 30000  # stay under ~32767
+    MIN_PT = 6
 
     def render(pt_size: int) -> vips.Image:
         return vips.Image.text(
@@ -229,40 +226,65 @@ def add_header_label(
             align="centre",
         )
 
-    text = render(pt)
-    # shrink a few times if needed (avoid scaling glyphs)
-    for _ in range(8):
-        if text.width <= max_w or pt <= 6:
-            break
-        scale = (max_w / text.width)
-        pt = max(6, int(pt * scale * 0.98))
+    # 1) Measure at a small reference size to estimate width scaling.
+    PT_REF = 64
+    ref = render(PT_REF)          # small, guaranteed-safe surface
+    w0, h0 = ref.width, ref.height
+    if w0 <= 0 or h0 <= 0:
+        # extremely short/empty string fallback
+        pt = max(MIN_PT, int(round(target_h * 72.0 / dpi)))
+        text = render(pt)
+    else:
+        # 2) Desired height-based point size
+        pt_h = max(MIN_PT, int(round(target_h * 72.0 / dpi)))
+
+        # 3) Width cap to fit inside max_w (scale from reference)
+        #    width scales ~linearly with pt
+        pt_w = int(w0 and max(MIN_PT, (max_w * PT_REF) // w0))  # floor
+
+        # 4) Hard cap so *rendered surface* stays under SAFE_MAX_DIM
+        #    Height in px ~ pt * dpi / 72; width ~ w0 * pt / PT_REF
+        pt_max_height = int((SAFE_MAX_DIM * 72) // dpi)         # ensure height < SAFE_MAX_DIM
+        pt_max_width  = int((SAFE_MAX_DIM * PT_REF) // max(w0, 1))  # ensure width < SAFE_MAX_DIM
+
+        pt = max(MIN_PT, min(pt_h, pt_w, pt_max_height, pt_max_width))
+
+        # Final guard against degenerate estimates
+        if pt < MIN_PT:
+            pt = MIN_PT
+
         text = render(pt)
 
-    # 3) Binary glyph mask (auto-polarity)
-    mask_a = (text > 0)         # candidate: letters = 255 where ink
-    mask_b = (text == 0)        # candidate: letters = 255 where invert
-    nz_a = mask_a.avg()
-    nz_b = mask_b.avg()
-    glyph = mask_a if nz_a < nz_b else mask_b  # choose sparser as letters
+        # If we’re still a bit wide, do a couple of tiny corrective shrinks,
+        # but we’re already safely under the Cairo max, so this won’t error.
+        for _ in range(3):
+            if text.width <= max_w or pt <= MIN_PT:
+                break
+            pt = max(MIN_PT, int(pt * 0.9))
+            text = render(pt)
 
-    # 4) Choose black/white text by contrast with top strip
+    # --- binary glyph (auto-polarity) ---
+    mask_a = (text > 0)
+    mask_b = (text == 0)
+    glyph = mask_a if mask_a.avg() < mask_b.avg() else mask_b
+
+    # --- choose ink by local background strip ---
     sample_h = max(1, min(H // 20, target_h * 3))
-    top_strip = base.crop(0, 0, W, sample_h)
-    mean_top = top_strip.avg()
-    text_val = 0 if mean_top > 127 else 255  # dark on light, else light on dark
+    strip_y = 0 if position == "top" else max(0, H - sample_h)
+    text_val = 0 if base.crop(0, strip_y, W, sample_h).avg() > 127 else 255
 
-    # 5) Place glyph at top, centered
+    # --- placement ---
     gx = max(0, (W - glyph.width) // 2)
     if position == "bottom":
-        gy = max(0, min(H - glyph.height - (top_margin_px or 0), H - glyph.height))
+        gy = max(0, H - glyph.height - (top_margin_px or 0))
     else:
-        gy = max(0, min(top_margin_px or 0, H - glyph.height))
-    canvas = vips.Image.black(W, H, bands=1)
-    full_mask = canvas.insert(glyph, gx, gy)
+        gy = max(0, (top_margin_px or 0))
 
-    # 6) Paint glyph: where mask!=0 set to text_val, else keep base
-    painted = full_mask.ifthenelse(text_val, base)
-    return painted
+    # --- ROI compose only on glyph rect ---
+    roi = base.crop(gx, gy, glyph.width, glyph.height)
+    roi_painted = glyph.ifthenelse(text_val, roi)
+    out = base.insert(roi_painted, gx, gy)
+    return out
 
 def write_raster_header(
     img_arr: np.ndarray,
@@ -318,8 +340,8 @@ def write_raster_header(
 def serpentine_grid_i(n: int, i: int, ll: complex, ur: complex):
     if n <= 0 or i < 0 or i >= n:
         raise ValueError("Invalid n or i")
-    cols = int(math.ceil(math.sqrt(float(n))))
-    rows = int(math.ceil(n / cols))
+    cols = int(math.sqrt(float(n)))
+    rows = int(n / cols)
     r = i // cols              # row
     c = i - r * cols           # col within row (pre serpentine flip)
     if (r & 1) == 1:
