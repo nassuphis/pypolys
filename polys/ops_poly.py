@@ -8194,6 +8194,419 @@ def p345(z,a,state):
 
 ALLOWED["p345"]=p345
 
+def p346(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(n):
+        rec_part = np.real(t1) * np.sin(j / 2) + np.real(t2) * np.cos(j / 3)
+        imc_part = np.imag(t1) * np.cos(j / 4) - np.imag(t2) * np.sin(j / 5)
+        magnitude = np.log(np.abs(rec_part + imc_part) + 1) * (j**(1.2)) * (1 + np.sin(j * np.pi / 6))
+        angle = np.angle(t1) * np.cos(j / 7) + np.angle(t2) * np.sin(j / 8)
+        cf[j] = magnitude * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p346"]=p346
+
+def p347(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(n):
+        mag = 0
+        angle = 0
+        for k in range(1, int(np.floor(j / 5)) + 2):
+            mag += np.real(t1) * np.sin(j * k) * np.log(k + 1)
+            angle += np.imag(t2) * np.cos(j + k) / (k + 1)
+        for r in range(1, 4):
+            mag *= (1 + np.real(t1) * 0.1 * r)
+            angle += np.angle(t2) * 0.05 * r
+        cf[j] = mag * (np.cos(angle) + 1j * np.sin(angle))
+    cf *= np.exp(1j * np.sin(np.abs(t1) * np.arange(1, n + 1)))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p347"]=p347
+
+def p348(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec = np.linspace(np.real(t1), np.real(t2), n)
+    imc = np.linspace(np.imag(t1), np.imag(t2), n)
+    for j in range(n):
+        magnitude = np.log(np.abs(t1) + j) * np.sin(j * np.pi / 7) + np.cos(j * np.pi / 5) * np.abs(t2)
+        angle = np.angle(t1) * np.sin(j) + np.angle(t2) * np.cos(j)
+        cf[j] = magnitude * np.exp(1j * angle)
+    for k in range(n):
+        cf[k] += (np.real(t1)**(k % 5 + 1) - np.imag(t2)**(k % 3 + 1)) * np.exp(1j * (np.sin(k) + np.cos(k)))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p348"]=p348
+
+def p349(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    base_mag = np.abs(t1) * 2 + np.abs(t2)
+    base_ang = np.angle(t1) - np.angle(t2)
+    for j in range(n):
+        mag = base_mag * j**1.2 + np.log(j + 1) * np.sqrt(n - j + 1)
+        ang = base_ang * np.sin(j * np.pi / n) + np.cos(j * np.pi / (n / 2))
+        cf[j] = mag * (np.cos(ang) + 1j * np.sin(ang))
+    for k in range(n):
+        increment = (np.real(t1) * np.real(t2) - np.imag(t1) * np.imag(t2)) + \
+                        (np.real(t1) * np.imag(t2) + np.imag(t1) * np.real(t2)) * 1j
+        angle_mod = np.sin(k) * np.cos(k) * np.angle(t1 + t2)
+        cf[k] = cf[k] * (np.cos(angle_mod) + 1j * np.sin(angle_mod)) + np.conj(cf[k]) * np.log(np.abs(cf[k]) + 1)
+    for r in range(1, int(np.floor(n / 5)) + 1):
+        idx = (r * 7) % n
+        adjustment = (np.real(t1)**2 - np.imag(t2)**2) + (2 * np.real(t1) * np.imag(t2)) * 1j
+        cf[idx] += adjustment * np.sin(r)
+    for m in range(n):
+        cf[m] = cf[m] * np.exp(1j * np.sin(m * np.pi / 4)) + np.exp(1j * np.cos(m * np.pi / 3))
+    return cf.astype(np.complex128)
+
+ALLOWED["p349"]=p349
+
+def p350(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(35):
+        mag_part1 = np.log(np.abs(t1) + j) * np.sin(j * np.pi / 6)
+        mag_part2 = np.log(np.abs(t2) + j) * np.cos(j * np.pi / 8)
+        magnitude = mag_part1 + mag_part2 + np.sqrt(j)
+        angle_part1 = np.angle(t1) * np.sin(j / 3)
+        angle_part2 = np.angle(t2) * np.cos(j / 4)
+        angle = angle_part1 + angle_part2 + np.sin(j) * np.cos(j / 2)
+        cf[j] = magnitude * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p350"]=p350
+
+def p351(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec1 = np.real(t1)
+    imc1 = np.imag(t1)
+    rec2 = np.real(t2)
+    imc2 = np.imag(t2)
+    for j in range(n):
+        mag_part = np.log(np.abs(rec1 * j**1.5 + imc2 / (j + 2)) + 1) * (1 + np.sin(j * np.pi / 4))
+        angle_part = np.angle(t1) * np.sin(j / 3) + np.angle(t2) * np.cos(j / 5) + np.sin(j * np.pi / 7)
+        cf[j] = mag_part * (np.cos(angle_part) + 1j * np.sin(angle_part))
+    return cf.astype(np.complex128)
+
+ALLOWED["p351"]=p351
+
+def p352(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(n):
+        sum_real = 0
+        sum_imag = 0
+        for k in range(1, j + 1):
+            sum_real += np.real(t1)**k * np.cos(k * np.pi / j)
+            sum_imag += np.imag(t2)**k * np.sin(k * np.pi / j)
+        mag = np.log(np.abs(sum_real) + 1) * np.abs(t1)**(0.5) + np.log(np.abs(sum_imag) + 1) * np.abs(t2)**(0.3)
+        angle = np.angle(t1) * np.sin(j) + np.angle(t2) * np.cos(j / 2)
+        cf[j] = mag * (np.cos(angle) + 1j * np.sin(angle))
+    for r in range(n):
+        cf[r] *= (1 + 0.1 * np.sin(r) + 0.1j * np.cos(r))
+    return cf.astype(np.complex128)
+
+ALLOWED["p352"]=p352
+
+def p353(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec = np.linspace(np.real(t1), np.real(t2), n)
+    imc = np.linspace(np.imag(t1), np.imag(t2), n)
+    for j in range(n):
+        mag_variation = np.log(np.abs(rec[j] + imc[j]) + 1) * (1 + np.sin(j) + np.cos(j / 2))
+        angle_variation = np.angle(rec[j] + 1j * imc[j]) + np.sin(rec[j] * np.pi / (j + 1)) - np.cos(imc[j] * np.pi / (j + 1))
+        cf[j] = mag_variation * np.exp(1j * angle_variation)
+    return cf.astype(np.complex128)
+
+ALLOWED["p353"]=p353
+
+def p354(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec = np.linspace(np.real(t1), np.real(t2), n)
+    imc = np.linspace(np.imag(t1), np.imag(t2), n)
+    for j in range(n):
+        part1 = np.sin(j * np.pi / 5) * np.cos(j * np.angle(t1)) 
+        part2 = np.log(np.abs(t2) + j) * np.sin(j * np.pi / 3)
+        part3 = np.cos(j * np.pi / 4) + np.sin(j * np.pi / 6)
+        magnitude = np.abs(t1)**(0.5 * j) + np.log(np.abs(j) + 1) * (j % 7 + 1)
+        angle = part1 + part2 + part3
+        cf[j] = magnitude * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+
+ALLOWED["p354"]=p354
+
+def p355(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(35):
+        mag = 0
+        angle = 0
+        for k in range(1, 36):
+            mag += (np.real(t1)**k * np.log(np.abs(t2) + k)) / (1 + k**2)
+            angle += np.sin(k * np.angle(t1)) * np.cos(k * np.angle(t2))
+        cf[j] = mag * (np.cos(angle) + 1j * np.sin(angle))
+    for r in range(1, 36):
+        cf[r - 1] *= np.exp(1j * (np.real(t1) * r - np.imag(t2) / (r + 1)))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p355"]=p355
+
+def p356(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(35):
+        temp = 0
+        for k in range(1, j + 1):
+            temp += (np.real(t1)**k * np.sin(k * np.angle(t2))) + (np.imag(t2)**k * np.cos(k * np.angle(t1)))
+        magnitude = np.log(np.abs(t1) + np.abs(t2) + j) * temp
+        angle = np.angle(t1) * np.cos(j) + np.angle(t2) * np.sin(j)
+        cf[j] = magnitude * np.exp(1j * angle)
+    for r in range(35):
+        cf[r] += (np.real(t1) - np.real(t2)) * np.sin(r) + (np.imag(t1) + np.imag(t2)) * np.cos(r)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p356"]=p356
+
+def p357(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(n):
+        magnitude = np.log(np.abs(t1) + j) * np.sin(j / 2) + np.sqrt(np.abs(t2)) * np.cos(j / 3)
+        angle = np.angle(t1) * j + np.angle(t2) * (n - j)
+        cf[j] = magnitude * (np.cos(angle) + np.sin(angle) * 1j)
+    for k in range(n):
+        cf[k] += np.real(t1) * np.sin(k) - np.imag(t2) * np.cos(k)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p357"]=p357
+
+def p358(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    real_diff = np.real(t2) - np.real(t1)
+    im_diff = np.imag(t2) - np.imag(t1)
+    for j in range(n):
+        mag = 1 + np.abs(j - n / 2) * np.log(j + 1)
+        angle = np.angle(t1) + (j / n) * np.angle(t2) + np.sin(j) * np.cos(j / 2)
+        for k in range(1, 4):
+            mag *= (1 + 0.1 * k * np.sin(j * k / n))
+            angle += 0.5 * k * np.cos(j * k / n)
+            for r in range(1, 3):
+                mag += 0.05 * r * np.log(j + r)
+                angle += 0.3 * r * np.sin(j * r / n)
+        cf[j] = mag * (np.cos(angle) + np.sin(angle) * 1j)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p358"]=p358
+
+def p359(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    t_conj = np.conj(t1) + np.conj(t2)
+    for j in range(n):
+        real_part = np.real(t1) * np.sin(j * np.pi / 7) + np.real(t2) * np.cos(j * np.pi / 5)
+        imag_part = np.imag(t1) * np.cos(j * np.pi / 6) - np.imag(t2) * np.sin(j * np.pi / 4)
+        magnitude = np.log(np.abs(t_conj) + j) * (np.abs(real_part) + np.abs(imag_part))
+        angle = np.angle(t1) + np.angle(t_conj) * np.sin(j / 3) - np.angle(t2) * np.cos(j / 4)
+        cf[j] = magnitude * (np.cos(angle) + np.sin(angle) * 1j)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p359"]=p359
+
+#empty
+def p360(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec = np.linspace(np.real(t1), np.real(t2), n)
+    imc = np.linspace(np.imag(t1), np.imag(t2), n)
+    for j in range(n):
+        magnitude = np.log(np.abs(rec[j] * imc[j]) + 1) * (j**np.sin(j)) * (1 + np.cos(j))
+        angle = np.sin(2 * np.pi * rec[j]) + np.cos(3 * np.pi * imc[j]) + np.log(np.abs(rec[j] + imc[j]) + 1)
+        cf[j] = magnitude * np.exp(1j * angle)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p360"]=p360
+
+def p361(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    re1 = np.real(t1)
+    im1 = np.imag(t1)
+    re2 = np.real(t2)
+    im2 = np.imag(t2)
+    for j in range(n):
+        mag = np.log(np.abs(t1) + j * re1) * (1 + np.sin(j * im2)) if j % 2 == 0 else np.log(np.abs(t2) + j * im1) * (1 + np.cos(j * re2))
+        angle = np.sin(j * np.pi * re1 / n) + np.cos(j * np.pi * im2 / n) if j <= n / 2 else np.sin(j * np.pi * re2 / n) - np.cos(j * np.pi * im1 / n)
+        cf[j] = mag * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128).astype(np.complex128)
+    
+ALLOWED["p361"]=p361
+
+def p362(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(n):
+        k = (j * 4 + 5) % n + 1
+        r = j // 6 + 1
+        mag = np.log(np.abs(t1) + j**2) * np.abs(np.sin(j / 2 + k / 3)) + np.log(j + r)
+        angle = np.angle(t1) * np.cos(j / (k + 1)) + np.angle(t2) * np.sin(j / (r + 2)) + np.real(t1) * np.imag(t2) / (j + 1)
+        cf[j] = mag * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p362"]=p362
+
+def p363(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec_seq = np.linspace(np.real(t1), np.real(t2), n)
+    imc_seq = np.linspace(np.imag(t1), np.imag(t2), n)
+    for j in range(1, n + 1):
+        angle = np.sin(j * np.angle(t1)) + np.cos(j * np.angle(t2)) + np.sin(j**2 / n)
+        magnitude = (np.log(np.abs(t1) + 1) * j) + (np.abs(t2)**0.5 * np.sqrt(j))
+        cf[j - 1] = magnitude * np.exp(1j * angle) + np.conj(t1) * np.conj(t2) / (j + 1)
+    for k in range(1, n // 2 + 1):
+        cf[k - 1] += (np.real(t1) * np.real(t2) + np.imag(t1) * np.imag(t2)) * np.sin(k)
+    for r in range(n - 4, n + 1):
+        cf[r - 1] += (np.abs(t1) * np.abs(t2) * r) * np.cos(r)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p363"]=p363
+
+def p364(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec = np.linspace(np.real(t1), np.real(t2), n)
+    imc = np.linspace(np.imag(t1), np.imag(t2), n)
+    for j in range(1, n + 1):
+        mag = np.log(np.abs(rec[j - 1] + imc[j - 1]) + 1) * (j**np.sin(j)) + np.sqrt(j) * np.abs(np.cos(j * np.pi / 3))
+        ang = np.angle(t1) * np.sin(j) + np.angle(t2) * np.cos(j)
+        cf[j - 1] = mag * (np.cos(ang) + 1j * np.sin(ang))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p364"]=p364
+
+def p365(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    n = len(cf)
+    rec = np.linspace(np.real(t1), np.real(t2), n)
+    imc = np.linspace(np.imag(t1), np.imag(t2), n)
+    for j in range(1, n + 1):
+        mag_part = np.log(np.abs(rec[j - 1] + imc[j - 1]) + 1) * j**(np.sin(j) + 1)
+        angle_part = np.angle(t1) * np.cos(j / 3) + np.angle(t2) * np.sin(j / 4)
+        cf[j - 1] = mag_part * (np.cos(angle_part) + 1j * np.sin(angle_part))
+    for k in range(1, n + 1):
+        modifier = np.exp(1j * (np.sin(k * np.pi / 5) + np.cos(k * np.pi / 7)))
+        cf[k - 1] = cf[k - 1] * modifier + np.conj(cf[max(0, k - 2)]) / (k + 1)
+    for r in range(1, n + 1):
+        cf[r - 1] += np.real(t1) * np.imag(t2) / (r + 1) + np.real(t2) * np.imag(t1) / (n - r + 1)
+    return cf.astype(np.complex128)
+
+ALLOWED["p365"]=p365
+
+def p366(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, 36):
+        r = np.real(t1) * np.sin(j) + np.real(t2) * np.cos(j**2)
+        im = np.imag(t1) * np.cos(j) - np.imag(t2) * np.sin(j**2)
+        mag = np.log(np.abs(t1) + j) * np.sqrt(j) * (j % 5 + 1)
+        angle = np.angle(t1) + np.angle(t2) + np.sin(j) * np.cos(j)
+        cf[j - 1] = complex(r * np.cos(angle), im * np.sin(angle)) * mag
+    for k in range(1, 36):
+        cf[k - 1] += np.conj(cf[((k + 3) % 35)]) * np.sin(k / 2) - np.cos(k)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p366"]=p366
+
+def p367(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n + 1):
+        k = (j * 4 + 2) % n + 1
+        r = (j + 3) % n + 1
+        rec = np.real(t1) * np.sin(j) + np.real(t2) * np.cos(k)
+        imc = np.imag(t1) * np.cos(r) - np.imag(t2) * np.sin(k)
+        mag = np.log(np.abs(t1) + 1) * np.abs(rec) + np.sin(j) * np.cos(r) + (np.real(t1) * np.imag(t2) * j)
+        angle = np.angle(t1) * k - np.angle(t2) * r + np.sin(j * np.pi / n)
+        cf[j - 1] = mag * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p367"]=p367
+
+def p368(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n + 1):
+        mag = np.log(np.abs(t1) + j) * (1 + np.sin(j * np.angle(t2)))
+        angle = np.cos(j * np.real(t1)) + np.sin(j * np.imag(t2))**2
+        cf[j - 1] = mag * (np.cos(angle) + 1j * np.sin(angle))
+    for k in range(1, n + 1):
+        cf[k - 1] += (np.real(t1)**k - np.imag(t2)**k) * np.exp(1j * np.angle(t1 + k * t2))
+    for r in range(1, n + 1):
+        cf[r - 1] *= (np.abs(t1 + r * t2)**(1 + r / 10)) * np.cos(r * np.angle(t1 * t2))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p368"]=p368
+
+def p369(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, 36):
+        k = (j * 2 + 5) % 10 + 1
+        r = np.real(t1)**((j % 4) + 1) + np.real(t2) * np.log(np.abs(t1) + j)
+        im_part = np.imag(t2) + np.sin(j / 3) * np.cos(k / 2)
+        angle = np.angle(t1) * j - np.angle(t2) * k + np.sin(j) * np.cos(k)
+        magnitude = np.abs(t1)**(1 + (j % 5)) + np.abs(t2)**(2 + (k % 3))
+        cf[j - 1] = magnitude * (np.cos(angle) + 1j * np.sin(angle)) + np.conj(t1 + t2)**k
+    return cf.astype(np.complex128)
+
+ALLOWED["p369"]=p369
+
+def p370(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec = np.real(t1) + (np.real(t2) - np.real(t1)) * (np.arange(1, n + 1)) / n
+    imc = np.imag(t1) + (np.imag(t2) - np.imag(t1)) * (np.arange(1, n + 1)) / n
+    for j in range(1, n + 1):
+        mag = np.log(1 + rec[j - 1]**2 + imc[j - 1]**2) * np.sin(j * np.angle(t1) + np.cos(j * np.angle(t2)))
+        angle = np.angle(t1) * np.real(t2) / (j + 1) + np.angle(t2) * np.imag(t1) / (j + 2)
+        cf[j - 1] = mag * np.exp(1j * angle) + np.conj(t1) * np.prod(np.arange(1, j + 1)) / (j + 3)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p370"]=p370
+
 def p371(z,a,state):
     t1, t2 = z[0], z[1]
     n = 35
@@ -8205,6 +8618,435 @@ def p371(z,a,state):
     return cf
 
 ALLOWED["p371"]=p371
+
+def p372(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec = np.linspace(np.real(t1), np.real(t2), n)
+    imc = np.linspace(np.imag(t1), np.imag(t2), n)
+    for k in range(1, n + 1):
+        mag1 = np.log(np.abs(t1 * k) + 1) * np.sin(np.angle(t1) * k)
+        mag2 = np.log(np.abs(t2 / k) + 1) * np.cos(np.angle(t2) / (k + 1))
+        mag = mag1 + mag2
+        angle = np.sin(rec[k - 1] * np.pi / (k + 2)) + np.cos(imc[k - 1] * np.pi / (k + 3))
+        cf[k - 1] = mag * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p372"]=p372
+
+def p373(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec = np.linspace(np.real(t1), np.real(t2), 35)
+    imc = np.linspace(np.imag(t1), np.imag(t2), 35)
+    for j in range(1, 36):
+        mag_part = np.log(np.abs(t1) + j) * np.sin(j * np.pi / 7) + np.cos(j * np.pi / 11) * np.real(t2)
+        ang_part = np.angle(t1) + np.angle(t2) * j + np.sin(j * np.pi / 13)
+        cf[j - 1] = (mag_part + np.imag(t1) * np.cos(j * np.pi / 5)) * np.exp(1j * ang_part) + np.conj(t2) * np.sin(j * np.pi / 17)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p373"]=p373
+
+def p374(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n + 1):
+        r = np.real(t1) + np.real(t2) * j
+        im = np.imag(t1) - np.imag(t2) * j
+        mag = np.log(np.abs(t1) + j**2) * (1 + np.sin(j * np.pi / 5) * np.cos(j * np.pi / 7))
+        angle = np.angle(t1) * np.cos(j) + np.angle(t2) * np.sin(j)
+        cf[j - 1] = mag * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+
+ALLOWED["p374"]=p374
+
+def p375(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, 36):
+        r = np.real(t1) * j**2 - np.real(t2) / (j + 1)
+        im = np.imag(t2) * np.log(j + np.abs(t1)) + np.sin(j * np.angle(t1)) * np.cos(j * np.angle(t2))
+        cf[j - 1] = (r + 1j * im) * np.exp(1j * (np.real(t1) * np.sin(j) + np.imag(t2) * np.cos(j)))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p375"]=p375
+
+def p376(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, 36):
+        mag = 0
+        angle = 0
+        for k in range(1, j + 1):
+            mag += (np.real(t1) * np.log(k + 1)) / (k**0.5)
+            angle += np.sin(k * np.angle(t2)) + np.cos(k * np.real(t1))
+        cf[j - 1] = mag * np.exp(1j * angle) + np.conj(t1) * np.sin(j) - np.conj(t2) * np.cos(j)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p376"]=p376
+
+def p377(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n + 1):
+        angle = np.angle(t1) * np.log(j + 1) + np.sin(j) * np.angle(t2) / (j + 1)
+        magnitude = np.abs(t1)**np.sqrt(j) + np.abs(t2)**(1 + 1/j) + np.log(np.abs(j - n/2) + 1)
+        cf[j - 1] = magnitude * (np.cos(angle) + 1j * np.sin(angle)) + np.conj(t1) * np.real(t2) / (j + 1)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p377"]=p377
+
+def p378(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec = np.linspace(np.real(t1), np.real(t2), n)
+    imc = np.linspace(np.imag(t1), np.imag(t2), n)
+    for j in range(1, n + 1):
+        term1 = np.exp(1j * np.sin(5 * np.pi * rec[j - 1]))
+        term2 = np.exp(1j * np.cos(3 * np.pi * imc[j - 1]))
+        term3 = np.log(np.abs(rec[j - 1] * imc[j - 1]) + 1)
+        mag = term3 * (j**2) + np.sum(np.arange(1, j % 4 + 2))
+        angle = np.angle(term1) + np.angle(term2) + np.sin(j * np.angle(t1 + t2))
+        cf[j - 1] = mag * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+
+ALLOWED["p378"]=p378
+
+def p379(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    n = 35
+    for j in range(1, n + 1):
+        magnitude = np.log(np.abs(t1) + j) * (1 + np.sin(j * np.pi / 6)) + np.cos(j * np.pi / 4) * np.abs(t2)
+        angle = np.angle(t1) * np.sin(j / 3) + np.angle(t2) * np.cos(j / 5)
+        cf[j - 1] = magnitude * (np.cos(angle) + 1j * np.sin(angle)) + np.conj(t1)**(j % 7) * np.sin(j * np.angle(t2))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p379"]=p379
+
+def p380(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    n = 35
+    rec = np.linspace(np.real(t1), np.real(t2), n)
+    imc = np.linspace(np.imag(t1), np.imag(t2), n)
+    for j in range(1, n + 1):
+        r = rec[j - 1]
+        m = imc[j - 1]
+        mag = np.log(np.abs(r**2 + m**2) + 1) * (j + 1)**(np.sin(r) + np.cos(m))
+        angle = np.sin(j * r) + np.cos(j * m) + np.angle(t1) * np.sin(m) - np.angle(t2) * np.cos(r)
+        cf[j - 1] = mag * np.exp(1j * angle)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p380"]=p380
+
+def p381(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec_t1 = np.real(t1)
+    rec_t2 = np.real(t2)
+    imc_t1 = np.imag(t1)
+    imc_t2 = np.imag(t2)
+    for j in range(1, n + 1):
+        phase = np.sin(j * np.pi / 7) * np.cos(j * np.pi / 5)
+        magnitude = np.log(np.abs(t1) + 1) * np.sin(j) + np.log(np.abs(t2) + 1) * np.cos(j)
+        angle = np.angle(t1) * j**0.5 + np.angle(t2) / (j + 1)
+        cf[j - 1] = magnitude * (np.cos(angle + phase) + 1j * np.sin(angle - phase)) + np.conj(t1)**j * np.real(t2) / (j + 2) + np.imag(t1 + t2) * np.cos(j * np.angle(t1)) * np.sin(j * np.angle(t2))
+    return cf.astype(np.complex128)
+
+ALLOWED["p381"]=p381
+
+def p382(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n + 1):
+        coeff_real = 0
+        coeff_imag = 0
+        for k in range(1, 6):
+            coeff_real += np.real(t1)**k * np.sin(j * k * np.pi / 4) + np.real(t2)**(k / 2) * np.cos(j * k * np.pi / 3)
+            coeff_imag += np.imag(t1)**k * np.cos(j * k * np.pi / 5) - np.imag(t2)**(k / 2) * np.sin(j * k * np.pi / 6)
+        for r in range(1, 4):
+            coeff_real += np.log(np.abs(t1 + r) + 1) * np.sin(j * r * np.pi / 7) * np.angle(t1 + r)
+            coeff_imag += np.log(np.abs(t2 - r) + 1) * np.cos(j * r * np.pi / 8) * np.angle(t2 - r)
+        cf[j - 1] = coeff_real + 1j * coeff_imag
+    return cf.astype(np.complex128)
+
+ALLOWED["p382"]=p382
+
+def p383(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n + 1):
+        mag_part = np.log(np.abs(t1) + j) * np.sin(j * np.real(t2)) + np.prod(np.arange(1, j + 1)) / (j + 1)
+        angle_part = np.angle(t1) * np.cos(j * np.imag(t2)) + np.sin(j) * np.angle(t2)
+        cf[j - 1] = mag_part * (np.cos(angle_part) + 1j * np.sin(angle_part)) + np.conj(t1)**j - np.conj(t2)**(n - j)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p383"]=p383
+
+def p384(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, 36):
+        r = np.real(t1) + (np.real(t2) - np.real(t1)) * j / 35
+        im = np.imag(t1) + (np.imag(t2) - np.imag(t1)) * j / 35
+        magnitude = np.log(np.abs(t1) + j) * np.abs(np.sin(r * j)) + np.prod(np.arange(1, (j % 5) + 1))
+        angle = np.angle(t1) * np.cos(j) + np.angle(t2) * np.sin(im * j)
+        cf[j - 1] = magnitude * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p384"]=p384
+
+def p385(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for k in range(1, n + 1):
+        real_part = np.real(t1)**k + np.real(t2)**(n - k)
+        imag_part = np.imag(t1)**(k % 5 + 1) - np.imag(t2)**(k // 3 + 1)
+        magnitude = (np.abs(t1) + np.abs(t2))**k * np.log(k + 1)
+        angle = np.angle(t1) * np.sin(k) + np.angle(t2) * np.cos(k)
+        cf[k - 1] = magnitude * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+
+ALLOWED["p385"]=p385
+
+def p386(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, 36):
+        real_part = np.real(t1) * np.sin(j) + np.real(t2) * np.cos(j / 2)
+        imag_part = np.imag(t1) * np.cos(j) - np.imag(t2) * np.sin(j / 2)
+        magnitude = np.sqrt(real_part**2 + imag_part**2) * np.log(j + np.abs(t1) + np.abs(t2))
+        angle = np.angle(t1) * np.sqrt(j) + np.angle(t2) * np.cos(j)
+        cf[j - 1] = magnitude * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p386"]=p386
+
+def p387(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for k in range(1, n + 1):
+        j = k
+        mag_part = np.log(np.abs(t1) + k) * np.sin(j) + np.cos(j) * np.log(np.abs(t2) + 1)
+        angle_part = np.angle(t1) * j**0.5 + np.angle(t2) * np.log(j + 1) + np.sin(j * np.real(t1)) - np.cos(j * np.imag(t2))
+        cf[j - 1] = mag_part * np.exp(1j * angle_part)
+    return cf.astype(np.complex128)
+
+ALLOWED["p387"]=p387
+
+def p388(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n + 1):
+        r_part = np.real(t1) * j + np.real(t2) / (j + 1)
+        i_part = np.imag(t1) * np.sin(j) + np.imag(t2) * np.cos(j)
+        mag = np.log(np.abs(t1) + j) * (j % 5 + 1)
+        angle = np.angle(t1) * np.sin(j / 3) + np.angle(t2) * np.cos(j / 4)
+        cf[j - 1] = (r_part + 1j * i_part) * np.exp(1j * angle) * mag
+    return cf.astype(np.complex128)
+
+ALLOWED["p388"]=p388
+
+def p389(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n + 1):
+        coeff_real = 0
+        coeff_imag = 0
+        for k in range(1, 6):
+            coeff_real += np.real(t1)**k * np.cos(k * np.angle(t2) + j)
+            coeff_imag += np.imag(t2)**k * np.sin(k * np.angle(t1) + j)
+        for r in range(1, 4):
+            coeff_real += np.log(np.abs(t1 + t2) + 1) * np.real(t1) / r
+            coeff_imag += np.log(np.abs(t1 - t2) + 1) * np.imag(t2) / r
+        magnitude = np.sqrt(coeff_real**2 + coeff_imag**2) * (1 + j / n)
+        angle = np.arctan2(coeff_imag, coeff_real) + np.sin(j) * np.cos(j / 2)
+        cf[j - 1] = magnitude * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+
+ALLOWED["p389"]=p389
+
+def p390(z, a, state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+
+    r1 = math.hypot(t1.real, t1.imag)
+    r2 = math.hypot(t2.real, t2.imag)
+    ang1 = math.atan2(t1.imag, t1.real)
+
+    # main coefficients
+    for j in range(1, n + 1):
+        jf = float(j)
+        angle = ang1 * jf + math.sin(jf * math.pi / 4.0) * math.cos(jf * math.pi / 6.0)
+        # |t1|**j + log(|t2|+1) * (j%5 + 1)
+        magnitude = (r1 ** j) + math.log(r2 + 1.0) * (float(j % 5) + 1.0)
+        c = magnitude
+        cf[j - 1] = np.complex128(c * math.cos(angle) + 1j * c * math.sin(angle))
+
+    # lightweight deterministic PRNG (LCG) for indices (Numba-safe)
+    # seed derived from t1,t2; keep it deterministic across calls
+    s = np.uint64(1469598103934665603)  # FNV offset basis
+    s ^= np.uint64(np.abs(t1.real) * 1e6 + 3.0)
+    s ^= np.uint64(np.abs(t1.imag) * 1e6 + 5.0)
+    s ^= np.uint64(np.abs(t2.real) * 1e6 + 7.0)
+    s ^= np.uint64(np.abs(t2.imag) * 1e6 + 11.0)
+    A = np.uint64(1664525)
+    C = np.uint64(1013904223)
+    MASK = np.uint64(0xFFFFFFFFFFFFFFFF)  # 64-bit
+
+    # first perturbation block (≈ n//5 picks)
+    m1 = n // 5
+    for k in range(1, m1 + 1):
+        s = (A * s + C) & MASK
+        idx = int(s % np.uint64(n))
+        # multiply by exp(i*sin(k)) + add conj
+        ph = math.sin(float(k))
+        co = math.cos(ph)
+        si = math.sin(ph)
+        v = cf[idx]
+        v = v * np.complex128(co + 1j * si)
+        # manual conjugate (Numba-safe)
+        v_conj = np.complex128(v.real - 1j * v.imag)
+        cf[idx] = v + v_conj
+
+    # second perturbation block (≈ n//7 picks)
+    m2 = n // 7
+    for r in range(1, m2 + 1):
+        s = (A * s + C) & MASK
+        idx = int(s % np.uint64(n))
+        cf[idx] += np.complex128(r1 * math.cos(r * math.pi / 3.0) - 1j * math.sin(r * math.pi / 4.0))
+
+    return cf
+    
+ALLOWED["p390"]=p390
+
+def gpt1(z, a, state):
+    # Interface-compatible: z is complex pair, a/state unused
+    t1, t2 = z[0], z[1]
+
+    n = 121  # pick any degree; this gives a nice dense structure
+    cf = np.zeros(n, dtype=np.complex128)
+
+    # Basic polar bits (Numba-safe)
+    r1 = math.hypot(t1.real, t1.imag)
+    r2 = math.hypot(t2.real, t2.imag)
+    ang1 = math.atan2(t1.imag, t1.real)
+    ang2 = math.atan2(t2.imag, t2.real)
+
+    # Normalized controls in [0,1)
+    denom = 1.0 + r1 + r2
+    u = r1 / denom
+    v = r2 / denom
+
+    # Phase/chirp parameters (quasi-periodic & incommensurate)
+    alpha = ang1 + 0.37 * (2.0 * u - 1.0)              # linear term
+    beta  = ang2 + 0.53 * (2.0 * v - 1.0)              # quadratic chirp
+    gamma = 0.11 + 0.5 * (ang1 - ang2)                 # sinusoidal wobble
+
+    # Envelope shaping
+    kappa = 0.6 + 0.4 * math.cos(ang1 - ang2)          # decay/boost
+    dr = abs(t1.real - t2.real) + 1e-12                # avoid 0-div
+
+    # Conjugate once (Numba-safe)
+    t2_conj = np.complex128(t2.real - 1j * t2.imag)
+
+    # Ensure a proper constant term so the poly isn’t identically zero
+    cf[0] = 1.0 + 0.0j
+
+    for j in range(1, n):
+        jf = float(j)
+        x = jf / float(n)
+
+        # Smooth amplitude envelope: log1p for stability, mild decay by x
+        env = (math.sqrt(max(1e-16, math.log1p(r1 + r2 + jf))) /
+               (1.0 + 0.3 * dr)) * math.exp(-kappa * 0.35 * x)
+
+        # Slow AM from two incommensurate trigs
+        am = (1.0 + 0.28 * math.cos(jf * (0.7 + u)) *
+                     (1.0 + 0.22 * math.sin(jf * (0.5 + v))))
+
+        # Chirped phase: linear + quadratic + gentle wobble
+        phase = (alpha * jf) + (beta * (jf * jf) / float(n)) + gamma * math.sin((2.0 * jf + 1.0) * 0.5)
+
+        c = env * am
+        re = c * math.cos(phase)
+        im = c * math.sin(phase)
+        cf[j] = np.complex128(re + 1j * im)
+
+        # Sparse “comb” perturbation: inject conjugate spikes every 11th coef
+        if (j % 11) == 0:
+            cf[j] += t2_conj * (0.12 * (jf / n))
+
+        # Gentle palindromic bias to encourage interesting symmetry
+        if j >= 2 and j <= n - 2:
+            mirror = n - 1 - j
+            # blend a bit with the mirrored index to seed self-inversive flavor
+            cf[j] = 0.92 * cf[j] + 0.08 * np.conjugate(cf[mirror])  # conj is njit-safe on scalars
+
+    return cf
+
+ALLOWED["gpt1"]=gpt1
+
+def p391(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    n = 35
+    rec = np.linspace(np.real(t1), np.real(t2), n)
+    imc = np.linspace(np.imag(t1), np.imag(t2), n)
+    for j in range(1, n + 1):
+        magnitude = np.log(np.abs(rec[j - 1] + imc[j - 1]) + 1) * (j**0.5) * (1.2 if j % 2 == 0 else 0.8)
+        angle = np.angle(t1) * np.sin(j / 3) + np.angle(t2) * np.cos(j / 4) + np.sin(j) * np.cos(j / 2)
+        cf[j - 1] = magnitude * (np.cos(angle) + np.sin(angle) * 1j)
+    for k in range(1, n + 1):
+        cf[k - 1] += (np.prod(rec[:k] + imc[:k])**(1/k)) * np.exp(1j * np.angle(cf[k - 1]))
+    for r in range(1, n + 1):
+        cf[r - 1] *= np.conj(rec[r - 1] - imc[r - 1]) / (1 + np.abs(rec[r - 1] + imc[r - 1]))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p391"]=p391
+
+def p392(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n + 1):
+        mag = 0
+        ang = 0
+        for k in range(1, 6):
+            term1 = np.real(t1) * np.log(k + 1) * np.sin(j * k)
+            term2 = np.imag(t2) * np.cos(j + k)
+            mag += term1**2 + term2**2
+            ang += np.angle(t1) * np.sin(k) - np.angle(t2) * np.cos(k)
+        for r in range(1, 4):
+            mag += np.abs(t1 + r) * np.sqrt(r) / (j + r)
+            ang += np.sin(r * np.pi / j) * np.cos(r)
+        varied_mag = mag * (1 + j / n)
+        varied_ang = ang + np.log(np.abs(t1) + 1) - np.log(np.abs(t2) + 1)
+        cf[j - 1] = varied_mag * (np.cos(varied_ang) + 1j * np.sin(varied_ang))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p392"]=p392
 
 def p393(z,a,state):
     t1, t2 = z[0], z[1]
@@ -8219,6 +9061,584 @@ def p393(z,a,state):
     return cf
 
 ALLOWED["p393"]=p393
+
+def p394(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(35, dtype=np.complex128)
+    for j in range(1, 36):
+        k = j
+        r = np.real(t1) * np.sin(k) + np.real(t2) * np.cos(k**2)
+        im = np.imag(t1) * np.cos(k / 3) - np.imag(t2) * np.sin(k / 4)
+        mag = np.log(np.abs(t1) + np.abs(t2) + k) * (1 + np.sin(k) * np.cos(k))
+        ang = np.angle(t1) * np.sin(k / 5) + np.angle(t2) * np.cos(k / 7)
+        cf[j - 1] = mag * (np.cos(ang) + 1j * np.sin(ang))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p394"]=p394
+
+def p395(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec = np.linspace(np.real(t1), np.real(t2), n)
+    imc = np.linspace(np.imag(t1), np.imag(t2), n)
+    for j in range(1, n + 1):
+        mag_part1 = np.log(np.abs(rec[j - 1] * t1) + 1)
+        mag_part2 = (np.cos(rec[j - 1]) + np.sin(imc[j - 1])) / (j ** 0.5)
+        mag = mag_part1 * mag_part2 * (1 + np.sin(j * np.pi / 7))
+        ang_part1 = np.angle(t1) * np.sin(j / 2)
+        ang_part2 = np.angle(t2) * np.cos(j / 3)
+        ang = ang_part1 + ang_part2 + np.log(np.abs(j) + 1)
+        cf[j - 1] = mag * np.exp(1j * ang) + np.conj(t1 + t2) * np.sin(j) / (j + 1)
+    return cf.astype(np.complex128)
+
+ALLOWED["p395"]=p395
+
+def p396(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n + 1):
+        r_part = np.real(t1) * np.log(j + 1) + np.imag(t2) * np.sin(j * np.pi / 8)
+        i_part = np.real(t2) * np.cos(j * np.pi / 7) - np.imag(t1) * np.sin(j * np.pi / 5)
+        mag = np.sqrt(r_part**2 + i_part**2) + np.prod(np.arange(1, j + 1)) / (j + 2)
+        temp = r_part + 1j * i_part
+        theta = np.angle(temp) + np.cos(j * np.pi / 6)
+        cf[j - 1] = mag * (np.cos(theta) + 1j * np.sin(theta))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p396"]=p396
+
+def p397(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec = np.linspace(np.real(t1), np.real(t2), n)
+    imc = np.linspace(np.imag(t1), np.imag(t2), n)
+    for j in range(1, n + 1):
+        magnitude_part = np.log(np.abs(t1)**abs(j - n/2) + np.abs(t2)**(np.abs(j - n/3)) + 1)
+        angle_part = np.sin(j * np.angle(t1)) * np.cos(j * np.angle(t2)) + np.sin(np.imag(t1) * np.pi / j)
+        variation = (np.cos(np.angle(t1) * j) * np.sin(np.angle(t2) * (n - j)) if j % 3 == 0 
+                        else np.sin(np.angle(t1) * (j + 1)) - np.cos(np.angle(t2) * (j + 2)))
+        cf[j - 1] = magnitude_part * np.exp(1j * (angle_part + variation))
+    return cf.astype(np.complex128)
+
+ALLOWED["p397"]=p397
+
+def p398(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, 36):
+        r = np.real(t1) + (np.real(t2) * j) / 35
+        d = np.imag(t1) - (np.imag(t2) * j) / 35
+        mag = np.log(np.abs(r + 1j) + 1) * np.sin(j * np.pi / 4) + np.cos(j * np.pi / 6)
+        ang = np.angle(d) * np.cos(j) + np.angle(t2) * np.sin(j)
+        cf[j - 1] = mag * (np.cos(ang) + 1j * np.sin(ang))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p398"]=p398
+
+def p399(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, 36):
+        k = j % 7 + 1
+        r = j // 5 + 1
+        term1 = np.real(t1)**k * np.sin(k * np.pi / 3)
+        term2 = np.imag(t2)**r * np.cos(r * np.pi / 4)
+        magnitude = term1 + term2 + np.log(np.abs(t1) + np.abs(t2) + j)
+        angle = np.angle(t1) * r - np.angle(t2) / k + np.sin(j) * np.cos(j)
+        cf[j - 1] = magnitude * np.exp(1j * angle) + np.conj(t1 * t2) * (np.abs(t1) + np.abs(t2)) / j
+        if j % 4 == 0:
+            cf[j - 1] *= (np.sin(j * np.pi / 5) + np.cos(j * np.pi / 6))
+        if j % 6 == 0:
+            cf[j - 1] += np.real(t1)**2 - np.imag(t2)**2
+    return cf.astype(np.complex128)
+    
+ALLOWED["p399"]=p399
+
+def p400(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec_seq = np.linspace(np.real(t1), np.real(t2), n)
+    imc_seq = np.linspace(np.imag(t1), np.imag(t2), n)
+    for j in range(1, n + 1):
+        term1 = np.sin(rec_seq[j - 1] * np.pi / n) * np.cos(imc_seq[j - 1] * np.pi / (2 * n))
+        term2 = np.log(np.abs(rec_seq[j - 1] + imc_seq[j - 1]) + 1)
+        term3 = np.abs(t1)**j / (1 + j)
+        term4 = np.angle(t2) * j
+        magnitude = term1 + term2 + term3
+        angle = term4 + np.sin(j * imc_seq[j - 1]) - np.cos(j * rec_seq[j - 1])
+        cf[j - 1] = magnitude * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p400"]=p400
+
+def p401(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec1 = np.real(t1)
+    rec2 = np.real(t2)
+    imc1 = np.imag(t1)
+    imc2 = np.imag(t2)
+    for j in range(1, n + 1):
+        magnitude = (np.abs(t1) ** (j / 2)) * np.log(np.abs(j) + 1) + (np.abs(t2) ** (np.sqrt(j))) * np.sin(j)
+        angle = np.angle(t1) * np.cos(j) + np.angle(t2) * np.sin(j / 2) + np.log(np.abs(j) + 1)
+        cf[j - 1] = magnitude * np.exp(1j * angle)
+    for k in range(1, n + 1):
+        cf[k - 1] += (0.5 * np.real(t1) * np.sin(k)) + (0.3 * np.imag(t2) * np.cos(k))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p401"]=p401
+
+def p402(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n + 1):
+        temp_mag = 0
+        temp_angle = 0
+        for k in range(1, j + 1):
+            temp_mag += np.log(np.abs(t1) * k + 1) * np.sin(k * np.real(t2))
+            temp_angle += np.cos(k * np.imag(t1)) * np.angle(t2 + k)
+        cf[j - 1] = temp_mag * (np.cos(temp_angle) + np.sin(temp_angle) * 1j)
+    for r in range(1, n + 1):
+        cf[r - 1] = cf[r - 1] * (np.abs(t2)**(r / 2)) + np.conj(t1)**r
+    return cf.astype(np.complex128)
+    
+ALLOWED["p402"]=p402
+
+def p403(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec = np.linspace(np.real(t1), np.real(t2), n)
+    imc = np.linspace(np.imag(t1), np.imag(t2), n)
+    for j in range(1, n + 1):
+        phase = np.sin(j * np.pi / 7) * np.cos(j * np.pi / 5) + np.log(np.abs(t1 + t2) + 1)
+        magnitude = (np.real(t1)**j + np.imag(t2)**j) * np.sin(j) + np.cos(j * np.pi / 3)
+        cf[j - 1] = magnitude * np.exp(1j * phase) + np.conj(magnitude * np.exp(1j * phase))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p403"]=p403
+
+def p404(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, 36):
+        mag_part1 = np.real(t1) * np.log(j + 1)
+        mag_part2 = np.abs(t2)**np.sin(j)
+        mag_part3 = (1 + (j / 35))
+        magnitude = mag_part1 + mag_part2 * mag_part3
+        ang_part1 = np.angle(t1) * j
+        ang_part2 = np.cos(j * np.pi / 7)
+        angle = ang_part1 + ang_part2
+        cf[j - 1] = magnitude * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p404"]=p404
+
+def p405(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for k in range(1, n + 1):
+        phase = np.sin(k * np.angle(t1)) + np.cos(k * np.angle(t2))
+        magnitude = np.log(np.abs(t1) + k) * np.exp(-k / (np.abs(t2) + 1)) + np.sqrt(k) * np.abs(t1 - t2)
+        cf[k - 1] = magnitude * (np.cos(phase) + np.sin(phase) * 1j) + np.conj(t1) * np.sin(k) * np.cos(k)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p405"]=p405
+
+def p406(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec = np.linspace(np.real(t1), np.real(t2), n)
+    imc = np.linspace(np.imag(t1), np.imag(t2), n)
+    for r in range(1, n + 1):
+        term1 = np.sin(r * np.pi / 8) * np.real(t1) * rec[r - 1]
+        term2 = np.cos(r * np.pi / 6) * np.imag(t2) * imc[r - 1]
+        term3 = np.log(np.abs(rec[r - 1] + imc[r - 1]) + 1)
+        mag = term1 + term2 + term3
+        angle = np.angle(t1) * np.sin(r * np.pi / 5) + np.angle(t2) * np.cos(r * np.pi / 7) + imc[r - 1] / 3
+        cf[r - 1] = mag * (np.cos(angle) + np.sin(angle) * 1j)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p406"]=p406
+
+def p407(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec = np.linspace(np.real(t1), np.real(t2), n)
+    imc = np.linspace(np.imag(t1), np.imag(t2), n)
+    for j in range(1, n + 1):
+        mag = np.abs(t1)**j / (j + 1) + np.abs(t2)**(n - j) * np.sin(j) + np.log(np.abs(rec[j - 1] + imc[j - 1]) + 1)
+        angle = np.angle(t1) * np.cos(j) + np.angle(t2) * np.sin(j) + np.sin(j * np.pi / n)
+        cf[j - 1] = mag * (np.cos(angle) + 1j * np.sin(angle))
+    for k in range(1, n + 1):
+        cf[k - 1] += np.conj(cf[(k % n)]) * np.cos(k) - np.real(cf[k - 1]) * np.sin(k)
+    for r in range(1, n + 1):
+        if r % 3 == 0:
+            cf[r - 1] *= (1 + 0.5 * np.sin(r)) 
+        else:
+            cf[r - 1] += 0.3 * np.imag(cf[r - 1]) * np.cos(r)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p407"]=p407
+
+def p408(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec_t1 = t1.real
+    imc_t1 = t1.imag
+    rec_t2 = t2.real
+    imc_t2 = t2.imag
+    for j in range(1, n + 1):
+        angle_part = np.sin(j * np.pi * rec_t1) + np.cos(j * np.pi * imc_t2)
+        magnitude_part = np.log(np.abs(j * rec_t2 + 1)) * np.sqrt(j) + np.abs(t1) ** 0.5
+        phase_shift = np.angle(t1) * np.angle(t2) / j
+        cf[j - 1] = (
+            magnitude_part * np.exp(1j * (angle_part + phase_shift))
+            + np.conj(t1) * np.sin(j * np.angle(t2))
+            - np.cos(np.abs(t1))
+        )
+    for k in range(1, n // 2 + 1):
+        idx = k * 2
+        if idx <= n:
+            perturbation = np.exp(1j * (np.sin(k) + np.cos(k)))
+            cf[idx - 1] = cf[idx - 1] * perturbation + np.log(np.abs(cf[idx - 1]) + 1)
+    for r in range(1, n + 1):
+        scaling_factor = (r ** 2 + np.sqrt(r)) / (np.abs(t1) + np.abs(t2) + 1)
+        cf[r - 1] = cf[r - 1] * scaling_factor
+    return cf.astype(np.complex128)
+    
+ALLOWED["p408"]=p408
+
+def p409(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, 36):
+        # Calculate the real part
+        r_part = np.real(t1) * j**2 - np.real(t2) / (j + 1)
+        # Calculate the imaginary part
+        i_part = np.imag(t1) * np.log(np.abs(j) + 1) + np.imag(t2) * np.sin(j * np.pi / 7)
+        # Calculate magnitude
+        magnitude = np.sqrt(r_part**2 + i_part**2) * (1 + 0.1 * j)
+        # Calculate angle
+        angle = np.angle(t1) + np.angle(t2) + np.sin(j) - np.cos(j / 3)
+        # Assign the complex coefficient
+        cf[j-1] = magnitude * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p409"]=p409
+
+def p410(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, 36):
+        # Calculate magnitude parts
+        mag_part1 = np.log(np.abs(t1) + j**1.5)
+        mag_part2 = np.sin(j * np.real(t2)) * np.cos(j * np.imag(t1))
+        magnitude = mag_part1 * (1 + mag_part2**2)
+        # Calculate angle parts
+        angle_part1 = np.angle(t1) + np.angle(t2) * j
+        angle_part2 = np.log(np.abs(t1 * t2) + 1)
+        angle = angle_part1 + angle_part2
+        # Assign the complex coefficient
+        cf[j-1] = magnitude * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p410"]=p410
+
+def p411(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, 36):
+        # Calculate real and imaginary components
+        rec = np.real(t1) * j + np.real(t2) * (35 - j)
+        imc = np.imag(t1) - np.imag(t2) * np.sin(j * np.pi / 8)
+        # Calculate magnitude
+        mag = np.log(np.abs(t1) + 1) * (np.sin(j * np.pi / 5) + np.cos(j * np.pi / 7)) * (1 + j % 6)
+        # Calculate angle
+        ang = np.angle(t1) * np.sin(j * np.pi / 9) + np.angle(t2) * np.cos(j * np.pi / 11) + np.sin(j * np.pi / 13)
+        # Assign the complex coefficient
+        cf[j-1] = mag * (np.cos(ang) + 1j * np.sin(ang))
+    return cf.astype(np.complex128)
+
+ALLOWED["p411"]=p411 
+
+def p412(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n + 1):
+        k = (j % 7) + 1
+        r = np.floor(j / 5) + 1
+        angle = (np.sin(k * np.real(t1) + r * np.imag(t2)) +
+                    np.cos(k * np.imag(t1) - r * np.real(t2)) +
+                    np.angle(t1) * np.angle(t2) / j)
+        magnitude = (np.log(np.abs(t1) + 1) * (j**0.5 + r) +
+                        np.abs(t2) * r**1.2)
+        # Assign the complex coefficient using exponential form
+        cf[j-1] = magnitude * np.exp(1j * angle)
+    return cf.astype(np.complex128)
+
+ALLOWED["p412"]=p412
+
+def p413(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n + 1):
+        # Calculate angle and magnitude
+        angle = np.angle(t1) * np.sin(j) + np.angle(t2) * np.cos(j / 3)
+        magnitude = np.abs(t1)**j * np.log(np.abs(t2) + 1)**(n - j) * (j % 5 + 1)
+        # Assign the complex coefficient
+        cf[j-1] = magnitude * (np.cos(angle) + 1j * np.sin(angle))
+    # Modify coefficients symmetrically
+    for k in range(1, int(n/2) + 1):
+        r = k**2 + np.sqrt(k)
+        cf[k-1] *= np.exp(1j * r)
+        cf[-k] *= np.conj(np.exp(1j * r))
+    # Add variations based on index
+    for r in range(1, n + 1):
+        cf[r-1] += 0.1 * r * np.exp(-1j * r / n)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p413"]=p413
+
+def p414(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for k in range(1, n + 1):
+        j = (k % 5) + 1
+        r = (np.real(t1) * np.sin(k) + np.real(t2) * np.cos(j)) / (j + k)
+        mag = (np.log(np.abs(t1) + np.abs(t2) + k**1.5) * np.sin(r * np.pi / j) +
+                np.cos(r * np.pi / (k + 1))**2)
+        angle = (np.angle(t1) * np.cos(j / (k + 1)) +
+                    np.angle(t2) * np.sin(r))
+        # Assign the complex coefficient
+        cf[k-1] = mag * (np.cos(angle) + 1j * np.sin(angle)) * (1 + 0.05 * k**2)
+    return cf.astype(np.complex128)
+
+ALLOWED["p414"]=p414
+
+def p415(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n +1):
+        # Calculate magnitude and angle
+        mag = (np.log(np.abs(t1) + np.abs(t2) + j) * (1 + np.sin(j * np.pi / 7)) *
+                (1 + np.cos(j * np.pi / 5)))
+        ang = np.angle(t1) * np.sin(j / 3) + np.angle(t2) * np.cos(j / 4)
+        # Assign the complex coefficient with additional terms
+        cf[j-1] = mag * (np.cos(ang) + 1j * np.sin(ang)) + \
+                    np.conj(t1) * np.sin(j) - np.conj(t2) * np.cos(j)
+    return cf.astype(np.complex128)
+
+ALLOWED["p415"]=p415
+
+def p416(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, 36):
+        # Calculate magnitude parts
+        mag_part1 = np.log(np.abs(t1) * j + 1)
+        mag_part2 = np.sin(j * np.pi / 3) * np.abs(t2)
+        mag = mag_part1 + mag_part2 * np.cos(j / 2)
+        # Calculate angle parts
+        angle_part1 = np.angle(t1) * np.cos(j / 4)
+        angle_part2 = np.sin(j * np.pi / 5) * np.angle(t2)
+        angle = angle_part1 + angle_part2 + np.sin(j) * np.cos(j / 3)
+        # Assign the complex coefficient
+        cf[j-1] = mag * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p416"]=p416
+
+def p417(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    r1 = np.real(t1)
+    i1 = np.imag(t1)
+    r2 = np.real(t2)
+    i2 = np.imag(t2)
+    for j in range(1, n +1):
+        # Calculate magnitude and angle
+        mag = (np.log(np.abs(r1 + j) + 1) * (j**1.5 + np.sin(j * r2)) *
+                (1 + np.abs(np.cos(j * i1))))
+        ang = np.angle(t1) * np.sin(j * r2) + np.angle(t2) * np.cos(j * i1) + np.sin(j * i2)
+        # Assign the complex coefficient
+        cf[j-1] = mag * (np.cos(ang) + 1j * np.sin(ang))
+    return cf.astype(np.complex128)
+
+ALLOWED["p417"]=p417
+
+def p418(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec_seq = np.linspace(np.real(t1), np.real(t2), n)
+    imc_seq = np.linspace(np.imag(t1), np.imag(t2), n)
+    for j in range(1, n +1):
+        sum_re = 0
+        sum_im = 0
+        for k in range(1, j +1):
+            sum_re += rec_seq[k-1]**k * np.cos(k * np.pi / (j + 1))
+            sum_im += imc_seq[k-1]**k * np.sin(k * np.pi / (j + 1))
+        magnitude = np.log(1 + sum_re**2 + sum_im**2) * np.sin(j * np.pi / 5) + \
+                    np.log(1 + sum_re * sum_im) * np.cos(j * np.pi / 7)
+        angle = np.angle(t1) * sum_re - np.angle(t2) * sum_im + np.sin(j * np.pi / 3) - np.cos(j * np.pi / 7)
+        cf[j-1] = magnitude * np.exp(1j * angle)
+    # Additional modifications
+    for k in range(1, n +1):
+        cf[k-1] += (np.real(t1) * np.real(t2)) / (k + 1) * np.sin(k * np.pi / 6) + \
+                    (np.imag(t1) + np.imag(t2)) * np.cos(k * np.pi / 8)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p418"]=p418
+
+def p419(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, 36):
+        # Calculate magnitude and angle parts
+        mag_part = np.log(np.abs(t1) + np.abs(t2) + j) * np.sin(j * np.pi / 7) + np.cos(j * np.pi / 5)
+        angle_part = np.angle(t1) * np.sin(j) + np.angle(t2) * np.cos(j / 2)
+        # Assign the complex coefficient
+        cf[j-1] = mag_part * np.exp(1j * angle_part)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p419"]=p419
+
+def p420(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    r1 = np.real(t1)
+    i1 = np.imag(t1)
+    r2 = np.real(t2)
+    i2 = np.imag(t2)
+    for j in range(1, n +1):
+        # Calculate angle and magnitude
+        angle_component = np.angle(t1) * np.sin(j) + np.angle(t2) * np.cos(j)
+        magnitude_component = np.abs(t1)**(j % 5 +1) + np.log(np.abs(t2) +1) * j
+        phase_shift = np.sin(j * np.pi / 7) + np.cos(j * np.pi / 5)
+        # Assign the complex coefficient with additional terms
+        cf[j-1] = (magnitude_component * np.exp(1j * (angle_component + phase_shift)) + 
+                    (np.conj(t1) * r2) / (j + 1) + 
+                    (i1 + i2) * (j % 3))
+    # Introduce region-based variations
+    for k in range(1, n +1):
+        if k <= n/3:
+            cf[k-1] *= (1 + 0.5 * np.sin(k))
+        elif k <= 2*n/3:
+            cf[k-1] *= (1 + 0.3 * np.cos(k * 2))
+        else:
+            cf[k-1] *= (1 + 0.2 * np.sin(k * 3) * np.cos(k))
+    # Add interactions between coefficients
+    for r in range(1, n):
+        cf[r-1] += 0.1 * cf[r] * np.exp(1j * np.angle(cf[r-1]))
+    return cf.astype(np.complex128)
+
+ALLOWED["p420"]=p420
+
+def p421(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n +1):
+        if j <=10:
+            # First segment
+            mag = np.log(np.abs(t1) + j) * (1 + np.sin(j * np.real(t1)) * np.cos(j * np.imag(t2)))
+            angle = np.angle(t1) * np.sin(j / 2) + np.angle(t2) * np.cos(j / 3)
+        elif j <=20:
+            # Second segment
+            mag = np.log(np.abs(t1 * t2) + j) * (1 + np.sin(j)**2 - np.cos(j)**2)
+            angle = np.angle(t1 + t2) * np.sin(j / 4) + np.log(j + 1)
+        else:
+            # Third segment
+            mag = np.log(np.abs(t1)**2 + np.abs(t2)**2 + j) * (1 + np.sin(j * np.real(t1) + np.cos(j * np.real(t2))))
+            angle = np.angle(t1) * np.cos(j /5) + np.angle(t2) * np.sin(j /6)
+        # Assign the complex coefficient
+        cf[j-1] = mag * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p421"]=p421
+
+def p422(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, 36):
+        # Calculate real and imaginary parts
+        r_part = np.real(t1) * np.sin(j * np.pi / 7) + np.real(t2) * np.cos(j * np.pi / 5)
+        im_part = np.imag(t1) * np.cos(j * np.pi / 6) - np.imag(t2) * np.sin(j * np.pi / 8)
+        # Calculate magnitude and angle
+        magnitude = np.log(np.abs(t1) + np.abs(t2) + j) * np.sin(j * np.pi /4) + np.cos(j * np.pi /3)
+        angle = np.angle(t1) * np.cos(j /3) + np.angle(t2) * np.sin(j /4)
+        # Assign the complex coefficient
+        cf[j-1] = magnitude * (np.cos(angle) + 1j * np.sin(angle)) + \
+                    np.conj(t1) * np.sin(j) - np.conj(t2) * np.cos(j)
+    return cf.astype(np.complex128)
+
+ALLOWED["p422"]=p422
+
+def p423(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, 36):
+        if j <=10:
+            mag = np.real(t1) * j**2 + np.log(np.abs(t2) + 1) * np.sin(j * np.real(t1))
+            angle = np.angle(t1) + np.cos(j * np.imag(t2))
+        elif j <=25:
+            mag = np.exp(np.real(t2) / (j + 1)) + np.sqrt(j) * (np.real(t1) + np.real(t2))
+            angle = np.sin(j) + np.angle(t2) * np.cos(j * np.real(t1))
+        else:
+            mag = np.log(np.abs(t1) + j) * np.exp(-np.real(t2) / j) + np.sin(j * np.imag(t1))
+            angle = np.angle(t1 * t2) / j + np.cos(j * np.imag(t2))
+        # Assign the complex coefficient
+        cf[j-1] = mag * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p423"]=p423
+
+def p424(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n +1):
+        # Calculate magnitude parts
+        mag_part1 = np.real(t1) * j**2
+        mag_part2 = np.log(np.abs(t2) + j) * np.sin(j * np.angle(t1))
+        mag_part3 = np.cos(j * np.real(t2)) * np.sqrt(j)
+        magnitude = mag_part1 + mag_part2 + mag_part3
+        # Calculate angle parts
+        angle_part1 = np.angle(t1) + np.sin(j * np.real(t1))
+        angle_part2 = np.cos(j * np.imag(t2)) - np.angle(t2) / j
+        angle = angle_part1 + angle_part2
+        # Assign the complex coefficient
+        cf[j-1] = magnitude * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p424"]=p424
 
 def p425(z,a,state):
     t1, t2 = z[0], z[1]
@@ -8237,6 +9657,273 @@ def p425(z,a,state):
 
 ALLOWED["p425"]=p425
 
+def p426(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for k in range(1, n +1):
+        j = 36 - k
+        term1 = np.real(t1) * np.sin(k) * np.cos(j)
+        term2 = np.imag(t2) * np.cos(k) * np.sin(j)
+        term3 = np.log(np.abs(t1) + k)
+        term4 = np.log(np.abs(t2) + j)
+        angle = np.angle(t1) * np.sin(k / 2) + np.angle(t2) * np.cos(j / 3)
+        magnitude = term1 + term2 + term3 - term4
+        # Assign the complex coefficient
+        cf[k-1] = magnitude * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p426"]=p426
+
+def p427(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n +1):
+        # Intermediate real and imaginary sequences
+        rec = np.real(t1) + (np.real(t2) - np.real(t1)) * j / n
+        imc = np.imag(t1) + (np.imag(t2) - np.imag(t1)) * j / n
+        
+        # Complex transformations (these variables are calculated but not used directly)
+        conj_t1 = np.conj(t1)
+        conj_t2 = np.conj(t2)
+        
+        # Magnitude calculations with intricate patterns
+        mag_part1 = np.log(np.abs(rec) +1) * np.sin(j * np.pi /3)
+        mag_part2 = np.log(np.abs(imc) +1) * np.cos(j * np.pi /4)
+        magnitude = mag_part1 + mag_part2
+        
+        # Angle calculations with varying functions
+        angle = np.angle(t1) * j + np.angle(t2) / (j +1) + np.sin(j * imc) * np.cos(j * rec)
+        
+        # Assigning the complex coefficient
+        cf[j-1] = magnitude * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+
+ALLOWED["p427"]=p427
+
+def p428(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec = np.linspace(np.real(t1), np.real(t2), n)
+    imc = np.linspace(np.imag(t1), np.imag(t2), n)
+    for j in range(1, n +1):
+        mag_part = np.log(np.abs(rec[j-1] * imc[j-1]) + 1) * (1 + np.sin(j * np.pi /5))
+        angle_part = np.angle(t1) * np.cos(j) + np.angle(t2) * np.sin(j /3)
+        cf[j-1] = mag_part * (np.cos(angle_part) + 1j * np.sin(angle_part))
+        cf[j-1] += np.prod(rec[:j] + imc[:j])**(1/j)
+        if j %5 ==0:
+            cf[j-1] *= np.exp(1j * np.angle(cf[j-1]))
+    return cf.astype(np.complex128)
+
+ALLOWED["p428"]=p428
+
+def p429(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, 36):
+        mag_part = np.log(np.abs(t1) + j**2) * np.sin(j * np.real(t2)) + np.cos(j * np.imag(t1))
+        angle_part = np.angle(t1) * j + np.angle(t2) * np.sqrt(j) + np.sin(j) * np.angle(t2)
+        # Assign the complex coefficient
+        cf[j-1] = mag_part * (np.cos(angle_part) + 1j * np.sin(angle_part))
+    # Modify coefficients based on additional terms
+    for k in range(1, 36):
+        r = np.real(t1) * k
+        angle = np.angle(t2) * np.cos(k /4) + np.sin(k /6)
+        cf[k-1] += (np.log(np.abs(t1 + t2) +1) * np.cos(angle) + 
+                    1j * np.log(np.abs(t1 - t2) +1) * np.sin(angle))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p429"]=p429
+
+def p430(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec = np.linspace(np.real(t1), np.real(t2), n)
+    imc = np.linspace(np.imag(t1), np.imag(t2), n)
+    for j in range(1, n +1):
+        mag = np.log(np.abs(rec[j-1] * imc[j-1]) +1) * (1 + np.sin(j * np.pi /4)) + \
+                (1 + np.cos(j * np.pi /3))
+        ang = np.angle(t1) + np.angle(t2) + np.sin(j) - np.cos(j)
+        # Assign the complex coefficient with additional terms
+        cf[j-1] = mag * (np.cos(ang) + 1j * np.sin(ang)) + \
+                    np.conj(t1) * np.real(t2) * np.sin(j /2)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p430"]=p430
+
+def p431(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec_seq = np.linspace(np.real(t1), np.real(t2), n)
+    imc_seq = np.linspace(np.imag(t1), np.imag(t2), n)
+    for j in range(1, n +1):
+        term_real = np.sin(rec_seq[j-1] * j) + np.cos(imc_seq[j-1] * j**1.5)
+        term_imag = np.log(np.abs(t1) + j) - np.sin(imc_seq[j-1] * np.pi / (j +1))
+        mag = np.sqrt(term_real**2 + term_imag**2) * (1 + 0.1 * j)
+        angle = np.angle(t1) * np.log(j +1) + np.cos(j * np.pi /7)
+        # Assign the complex coefficient
+        cf[j-1] = mag * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p431"]=p431
+
+def p432(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n +1):
+        mag_part1 = np.log(np.abs(t1) + j) * np.sin(j * np.real(t2))
+        mag_part2 = np.cos(j * np.imag(t1)) * (np.abs(t2)**(1 + j/10))
+        magnitude = mag_part1 + mag_part2
+        angle_part1 = np.angle(t1) * np.cos(j /5)
+        angle_part2 = np.angle(t2) * np.sin(j /3)
+        angle = angle_part1 + angle_part2
+        # Assign the complex coefficient
+        cf[j-1] = magnitude * (np.cos(angle) + 1j * np.sin(angle))
+    for k in range(1, n +1):
+        cf[k-1] *= np.exp(1j * (np.real(t1) * k /n + np.imag(t2) * (n -k) /n))
+    for r in range(1, n +1):
+        cf[r-1] += np.conj(t1) * np.conj(t2) / (r +1)
+    return cf.astype(np.complex128)
+
+ALLOWED["p432"]=p432
+
+def p433(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n +1):
+        real_component = (np.real(t1)**j) * np.cos(j * np.angle(t2)) + \
+                            np.sin(j * np.real(t1)) * np.log(np.abs(t2) + j)
+        imag_component = np.imag(t1) * np.log(j +1) + \
+                            np.cos(np.imag(t2)) * (np.abs(t1)**0.5)
+        cf[j-1] = real_component + 1j * imag_component
+    return cf.astype(np.complex128)
+    
+ALLOWED["p433"]=p433
+
+def p434(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec_seq = np.linspace(np.real(t1), np.real(t2), n)
+    imc_seq = np.linspace(np.imag(t1), np.imag(t2), n)
+    for j in range(1, n +1):
+        magnitude = (np.log(np.abs(rec_seq[j-1]) + np.abs(imc_seq[j-1]) + j) *
+                        (np.log(np.abs(t1) + np.abs(t2))**(j/10)))
+        angle_part = np.sin(np.sin(j /2) * np.cos(j /3))
+        angle = np.angle(t1) + np.angle(t2) + angle_part
+        # Assign the complex coefficient with additional terms
+        cf[j-1] = magnitude * np.exp(1j * angle) + \
+                    np.conj(t1) * np.sin(j)**2
+    return cf.astype(np.complex128)
+    
+ALLOWED["p434"]=p434
+
+def p435(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n +1):
+        mag_part = np.log(np.abs(t1) * j + np.abs(t2)**(n -j) +1)
+        angle_part = np.angle(t1) * np.sin(j * np.pi /7) + np.angle(t2) * np.cos(j * np.pi /5)
+        # Calculate real_sum and imag_sum
+        real_sum = 0
+        imag_sum =0
+        for k in range(1, j +1):
+            real_sum += np.real(t1)**k * np.real(t2)**(j -k)
+            imag_sum += np.imag(t1)**k * np.imag(t2)**(j -k)
+        intricate_mag = mag_part * (1 + np.sin(real_sum / (j +1)))
+        intricate_angle = angle_part + np.cos(imag_sum / (j +1))
+        # Assign the complex coefficient
+        cf[j-1] = intricate_mag * (np.cos(intricate_angle) + 1j * np.sin(intricate_angle))
+    return cf.astype(np.complex128)
+
+ALLOWED["p435"]=p435
+
+def p436(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, 36):
+        # Calculate magnitude components
+        mag_part1 = np.log(np.abs(t1) + j) * np.sin(j / 3)
+        mag_part2 = np.abs(t2)**(1 + (j % 4))
+        magnitude = mag_part1 + mag_part2 * np.cos(j / 2)
+        
+        # Calculate angle components
+        angle_part1 = np.angle(t1) * np.cos(j)
+        angle_part2 = np.angle(t2) * np.sin(j / 2)
+        angle = angle_part1 + angle_part2 + np.real(t1) * np.imag(t2) / j
+        
+        # Assign complex coefficient
+        cf[j-1] = magnitude * (np.cos(angle) + 1j * np.sin(angle)) + np.conj(t1)**((j % 5) + 1)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p436"]=p436
+
+def p437(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, 36):
+        # Linear interpolation between real and imaginary parts
+        r = np.real(t1) + (np.real(t2) - np.real(t1)) * j / 35
+        im = np.imag(t1) + (np.imag(t2) - np.imag(t1)) * j / 35
+        
+        # Calculate magnitude
+        mag = np.log(np.abs(r * im) + 1) * (np.sin(j * np.angle(t1)) + np.cos(j * np.angle(t2))) + np.sqrt(r**2 + im**2)
+        
+        # Calculate angle
+        angle = np.angle(t1) * np.sin(j / 3) - np.angle(t2) * np.cos(j / 4)
+        
+        # Assign complex coefficient
+        cf[j-1] = mag * np.exp(1j * angle) + np.conj(t1) * np.cos(im * np.pi / 5) * np.sin(r * np.pi / 7)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p437"]=p437
+
+def p438(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    # First loop: initial coefficients
+    for j in range(1, 36):
+        # Calculate angle and magnitude
+        angle = np.angle(t1) * np.sin(j) + np.angle(t2) * np.cos(j/2)
+        magnitude = np.abs(t1)**(j%4 + 1) + np.log(np.abs(t2) + 1) * np.sqrt(j)
+        # Assign to complex coefficient
+        cf[j-1] = magnitude * (np.cos(angle) + 1j * np.sin(angle))
+    
+    # Second loop: modify coefficients
+    for k in range(1, 36):
+        cf[k-1] = cf[k-1] + np.conj(t1)**k * np.cos(k) - np.real(t2) * np.sin(k/3) + np.abs(t1 + t2)**(1 + (k % 5))
+    
+    return cf.astype(np.complex128)
+    
+ALLOWED["p438"]=p438
+
+def p439(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec = np.linspace(np.real(t1), np.real(t2), n)
+    imc = np.linspace(np.imag(t1), np.imag(t2), n)
+    for j in range(n):
+        r = rec[j]
+        im = imc[j]
+        mag = np.log(np.abs(r + im*1j) + 1) * (1 + np.sin((j+1) * np.pi / 4)) * (1 + np.cos((j+1) * np.pi / 3))
+        angle = np.angle(r + im*1j) + np.sin((j+1) * np.pi / 5) - np.cos((j+1) * np.pi / 6)
+        cf[j] = mag * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p439"]=p439
+
 def p440(z,a,state):
     t1, t2 = z[0], z[1]
     n = 35
@@ -8251,9 +9938,542 @@ def p440(z,a,state):
 
 ALLOWED["p440"]=p440
 
+def p441(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec_seq = np.linspace(t1.real, t2.real, num=n)
+    imc_seq = np.linspace(t1.imag, t2.imag, num=n)
+    for j in range(n):
+        mag_part = np.log(np.abs(rec_seq[j]) + np.abs(imc_seq[j]) + (j + 1)) * (np.abs(t1) + np.abs(t2)) ** ((j + 1) / 10)
+        angle_part = np.sin((j + 1) * np.angle(t1)) * np.cos((j + 1) * np.angle(t2)) + np.log(np.abs(t1) + np.abs(t2) + (j + 1))
+        cf[j] = mag_part * np.exp(1j * angle_part) + np.conj(mag_part * np.exp(-1j * angle_part))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p441"]=p441
+
+def p442(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n + 1):
+        mag_part = np.log(np.abs(t1) + j**2) * np.sin(j * np.pi / 4) + np.cos(j * np.pi / 6)
+        angle_part = np.angle(t2) + np.sin(j) * np.cos(j / 2) + np.log(np.abs(t1) + 1)
+        cf[j - 1] = mag_part * (np.cos(angle_part) + 1j * np.sin(angle_part))
+    for k in range(1, n + 1):
+        if k % 2 == 0:
+            cf[k - 1] = cf[k - 1] * np.exp(1j * np.angle(t1) * k / 10)
+        else:
+            cf[k - 1] = cf[k - 1] * np.exp(-1j * np.angle(t2) * k / 15)
+    for r in range(1, n + 1):
+        cf[r - 1] = cf[r - 1] + np.conj(cf[n - r]) * (np.abs(t1) / (r + 1))
+    return cf.astype(np.complex128)
+
+ALLOWED["p442"]=p442
+
+def p443(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    real_seq = np.linspace(t1.real, t2.real, num=n)
+    imag_seq = np.linspace(t1.imag, t2.imag, num=n)
+    for j in range(1, n + 1):
+        mag = np.log(np.abs(real_seq[j - 1] + t2) + 1) * np.sin(j * np.pi / 4) + np.cos(j * np.pi / 5) * np.abs(t1)
+        angle = np.angle(t1) * j + np.sin(j * np.pi / 6) - np.cos(j * np.pi / 7)
+        cf[j - 1] = mag * np.exp(1j * angle)
+        for k in range(1, j + 1):
+            cf[j - 1] += (t1.real * t2.real / (k + 1)) * np.exp(1j * (np.sin(k) - np.cos(k)))
+    for r in range(1, n + 1):
+        cf[r - 1] = cf[r - 1] * (1 + 0.05 * r**2) + np.conj(t2) * np.sin(r * np.pi / 8) - t1.real * np.cos(r * np.pi / 9)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p443"]=p443
+
+def p444(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n + 1):
+        mag = np.log(np.abs(t1)**j + np.abs(t2)**(n - j)) + np.sin(j * t1.real) * np.cos(j * t2.imag)
+        angle = np.angle(t1) * j - np.angle(t2) * (n - j) + np.sin(j) - np.cos(j)
+        cf[j - 1] = mag * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p444"]=p444
+
+def p445(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n + 1):
+        k = (j * 5 + 2) % 12 + 1
+        r_part = t1.real * np.sin(j * np.pi / k) + t2.real * np.cos(j * np.pi / (k + 1))
+        i_part = t1.imag * np.cos(j * np.pi / k) - t2.imag * np.sin(j * np.pi / (k + 1))
+        magnitude = np.log(np.abs(t1) + j) * np.abs(np.sin(j * np.pi / 10))
+        angle = np.angle(t1) * np.cos(j * np.pi / 8) + np.angle(t2) * np.sin(j * np.pi / 9)
+        cf[j - 1] = magnitude * (r_part + 1j * i_part) * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p445"]=p445
+
+def p446(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, 36):
+        mag = np.log(np.abs(t1)*j + np.abs(t2)/j + 1) * (1 + np.sin(j * np.pi / 4)) + (t1.real * t2.imag * j)
+        angle = np.angle(t1)*j + np.angle(t2)*np.cos(j * np.pi / 5) + np.sin(j)**2
+        cf[j-1] = mag * (np.cos(angle) + np.sin(angle)*1j)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p446"]=p446
+
+def p447(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n+1):
+        k = (j % 7) + 1
+        r = (j % 5) + 2
+        mag_part = np.log(np.abs(t1)*j + np.abs(t2)/k + 1) * np.sin(j * np.pi / r)
+        angle_part = np.angle(t1)*np.cos(j / k) + np.angle(t2)*np.sin(j / r) + t1.real * t2.imag / (k + 1)
+        cf[j-1] = mag_part * np.exp(1j * angle_part)
+    for j in range(1, n+1):
+        for r in range(1, j//3 +1):
+            k = (j % 7) + 1
+            cf[j-1] += (t1.real**r - t2.imag**k) * np.exp(1j * (np.angle(t1)*r - np.angle(t2)*k))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p447"]=p447
+
+def p448(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n+1):
+        rec = t1.real + (t2.real - t1.real)*j / n
+        imc = t1.imag + (t2.imag - t1.imag)*j / n
+        mag = np.log(np.abs(t1) + np.abs(t2) + j**3) * (1 + np.sin(j * np.pi / 5)) * (1 + np.cos(j * np.pi / 4))
+        angle = np.angle(t1)*np.sin(j * np.pi / 3) + np.angle(t2)*np.cos(j * np.pi / 4) + np.sin(j * rec) * np.cos(j * imc)
+        cf[j-1] = mag * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p448"]=p448
+
+def p449(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n+1):
+        r = t1.real + j * t2.real
+        k = t1.imag - j * t2.imag
+        mag = np.log(np.abs(t1) + np.abs(t2) + j) * (1 + np.sin(j * np.pi / 7))
+        angle = np.angle(t1)*np.sin(j / 3) + np.angle(t2)*np.cos(j / 5)
+        cf[j-1] = mag * (np.cos(angle) + 1j * np.sin(angle))
+    for k in range(1, n+1):
+        r = t1.real * k
+        angle = np.angle(t2)*np.cos(k / 4) + np.sin(k / 6)
+        cf[k-1] += (np.log(np.abs(t1 + t2) + 1) * np.cos(angle) + 1j * np.log(np.abs(t1 - t2) + 1) * np.sin(angle))
+    return cf.astype(np.complex128)
+
+ALLOWED["p449"]=p449
+
+def p450(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n+1):
+        angle_part = np.sin(j * np.angle(t1) + np.cos(j * np.angle(t2)))
+        mag_part = np.log(np.abs(t1) + np.abs(t2) + j) * (1 + 0.1 * j)
+        phase_shift = np.angle(t1) * np.cos(j / n * np.pi) - np.angle(t2) * np.sin(j / n * np.pi)
+        cf[j-1] = mag_part * (np.cos(angle_part + phase_shift) + 1j * np.sin(angle_part - phase_shift))
+    # Introduce variations using conjugates and nonlinear combinations
+    for k in range(1, 6):
+        idx = n - k
+        if idx >=0:
+            cf[idx] = cf[idx] * np.conj(t1)**((k % 3) + 1) + np.conj(t2)**(k % 4)
+    # Apply modulation based on cumulative product
+    cumulative = 1
+    for r in range(1, n+1):
+        cumulative *= (np.abs(t1) + np.abs(t2) + r)
+        cf[r-1] += cumulative / (r + 1)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p450"]=p450
+
+def p451(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n+1):
+        mag_part1 = np.log(np.abs(t1) + j) * np.sqrt(j)
+        mag_part2 = np.abs(t2)**(1 + np.sin(j))
+        magnitude = mag_part1 + mag_part2
+        phase_part1 = np.sin(j * t1.real) + np.cos(j * t2.imag)
+        phase_part2 = np.angle(t1)*j - np.angle(t2)*(n - j)
+        phase = phase_part1 * phase_part2 + np.sin(j / 3) * np.cos(j / 5)
+        cf[j-1] = magnitude * np.exp(1j * phase)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p451"]=p451
+
+def p452(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for k in range(1, n+1):
+        temp = 0
+        for j in range(1, k+1):
+            temp += np.sin(j * t1.real) * np.cos(j * t2.imag) / j
+        magnitude = np.log(np.abs(t1)*np.abs(t2) + k) * (1 + np.sin(k / 2) * 3)
+        angle = np.angle(t1) + np.angle(t2) * np.log(k + 1) + temp
+        cf[k-1] = magnitude * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+
+ALLOWED["p452"]=p452
+
+def p453(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n+1):
+        r_part = t1.real * j / n + t2.real * (n - j +1) /n
+        i_part = np.sin(j * np.pi / n) * t1.imag - np.cos(j * np.pi / n) * t2.imag
+        magnitude = np.log(np.abs(t1) + j) * (1 + np.abs(np.sin(j / 3)))
+        angle = np.angle(t1)*np.cos(j) + np.angle(t2)*np.sin(j)
+        cf[j-1] = magnitude * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+
+ALLOWED["p453"]=p453
+
+def p454(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec_seq = np.linspace(t1.real, t2.real, n)
+    imc_seq = np.linspace(t1.imag, t2.imag, n)
+    for j in range(1, n+1):
+        mag = np.log(np.abs(rec_seq[j-1] * imc_seq[j-1]) + 1) * (1 + np.sin(j * np.pi / 4)) + np.prod(rec_seq[:j])**(1/j)
+        angle = np.angle(t1)*j + np.sin(j * np.angle(t2)) + np.cos(j * imc_seq[j-1])
+        cf[j-1] = mag * np.exp(1j * angle)
+    return cf.astype(np.complex128)
+
+ALLOWED["p454"]=p454
+
+def p455(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, 36):
+        mag = np.log(np.abs(t1) + 1) * np.sin(j * t2.real) + np.cos(j * t1.imag)**2
+        angle = np.angle(t1)*j + np.angle(t2)/(j +1) + np.sin(j * t1.real * t2.imag)
+        cf[j-1] = mag * (np.cos(angle) + 1j * np.sin(angle))
+    for k in range(1, 36):
+        cf[k-1] = cf[k-1] * (1 + 0.05 * k * t1.real) / (1 + 0.03 * k * t2.imag)
+        cf[k-1] += np.conj(cf[35 -k]) * np.exp(-0.1 * k)
+    for r in range(1, 36):
+        cf[r-1] = np.abs(cf[r-1])**np.sin(r * np.pi /17) * (np.cos(r * np.pi /23) + 1j * np.sin(r * np.pi /23))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p455"]=p455
+
+def p456(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, 36):
+        if j <=10:
+            mag = np.log(np.abs(t1) + j**2) * np.abs(np.sin(j * t2.real) + np.cos(j * t1.imag))
+            ang = np.angle(t1)**j + np.angle(t2)*np.sin(j)
+        elif j <=20:
+            mag = np.log(np.abs(t2) + j**1.5) * np.abs(np.cos(j * t1.real) - np.sin(j * t2.imag))
+            ang = np.angle(t2)**j - np.angle(t1) * np.log(j + 1)
+        else:
+            mag = np.log(np.abs(t1 * t2) + j) * np.abs(np.sin(j * t1.real + np.cos(j * t2.real)))
+            ang = np.angle(t1 + np.conj(t2)) * j + np.log(np.abs(t1 - t2) +1)
+        cf[j-1] = mag * np.exp(1j * ang)
+    return cf.astype(np.complex128)
+
+ALLOWED["p456"]=p456
+
+def p457(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec_seq = np.linspace(t1.real, t2.real, n)
+    imc_seq = np.linspace(t1.imag, t2.imag, n)
+    for j in range(1, n+1):
+        mag_part1 = np.log(np.abs(rec_seq[j-1]) + 1) * np.sin(j * np.pi /4)
+        mag_part2 = np.abs(t2)**((j %5)+1)
+        mag = mag_part1 + mag_part2 * np.cos(j * t1.real)
+        angle_part1 = np.angle(t1)*np.cos(j /3)
+        angle_part2 = np.sin(j * t2.imag) + np.cos(j * np.pi /6)
+        angle = angle_part1 + angle_part2
+        cf[j-1] = mag * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p457"]=p457
+
+def p458(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1,36):
+        k = (j%5)+1
+        r = np.sqrt(j)*np.log(np.abs(t1)+np.abs(t2)+1)
+        angle = np.angle(t1)*np.sin(k*j)+np.angle(t2)*np.cos(k*j)
+        magnitude = ((np.real(t1)**k)+(np.imag(t2)**k))*(1+np.cos(j*np.pi/7))*(1+np.sin(j*np.pi/5))
+        cf[j-1] = magnitude*(np.cos(angle)+1j*np.sin(angle))
+    return cf.astype(np.complex128)
+
+ALLOWED["p458"]=p458
+
+def p459(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for k in range(1, n+1):
+        temp_real = t1.real * np.log(np.abs(t1)*k + np.abs(t2) +1)
+        temp_imag = t2.imag * np.sin(k) + np.cos(k * t1.real)
+        temp_angle = (np.angle(t1 + t2)) / (k +1)
+        magnitude = temp_real + temp_imag * temp_angle
+        angle = np.sin(temp_real) + np.cos(temp_imag) * temp_angle
+        cf[k-1] = magnitude * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p459"]=p459
+
+def p460(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec_seq = np.linspace(t1.real, t2.real, n)
+    imc_seq = np.linspace(t1.imag, t2.imag, n)
+    for j in range(1, n+1):
+        phase = np.angle(t1)*j + np.angle(t2)/(j +1) + np.sin(j * rec_seq[j-1]) - np.cos(j * imc_seq[j-1])
+        magnitude = np.log(np.abs(t1) + np.abs(t2) + j) * (j**2 + np.sin(j)*np.cos(j))
+        cf[j-1] = magnitude * (np.cos(phase) + 1j * np.sin(phase))
+    return cf.astype(np.complex128)
+
+ALLOWED["p460"]=p460
+
+def p461(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec1 = t1.real
+    imc1 = t1.imag
+    rec2 = t2.real
+    imc2 = t2.imag
+    
+    for j in range(1, n+1):
+        magnitude = np.log(np.abs(t1) + j) * np.sin(j * np.pi /4) + np.cos(j * np.pi /3) * ((j %5) +1)
+        angle = np.angle(t1)*np.cos(j/3) + np.angle(t2)*np.sin(j /5) + np.sin(j * np.pi /6)
+        cf[j-1] = magnitude * (np.cos(angle) + 1j * np.sin(angle))
+    
+    for k in range(1, n+1):
+        cf[k-1] += (t1.real - t2.real) * np.sin(k * np.pi /7) + (t1.imag + t2.imag) * np.cos(k * np.pi /8)
+    
+    for r in range(1, n+1):
+        cf[r-1] *= np.exp(1j * (np.sin(r) + np.cos(r)))
+    
+    return cf.astype(np.complex128)
+    
+ALLOWED["p461"]=p461
+
+def p462(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec_seq = np.linspace(t1.real, t2.real, n)
+    imc_seq = np.linspace(t1.imag, t2.imag, n)
+    for j in range(1, n+1):
+        mag = np.log(np.abs(rec_seq[j-1]*imc_seq[j-1] +1) +1) * (1 + np.sin(j)*np.cos(j/3))
+        angle = np.angle(t1)*np.sin(j * np.pi /4) + np.angle(t2)*np.cos(j * np.pi /5)
+        cf[j-1] = mag * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p462"]=p462
+
+def p463(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n+1):
+        mag_part = np.log(np.abs(t1) + j) * np.sin(j * np.angle(t2)) + np.cos(j * np.angle(t1))
+        ang_part = np.angle(t1)*j + np.angle(t2)*(n -j) + np.sin(j * t2.real) - np.cos(j * t1.imag)
+        cf[j-1] = mag_part * np.exp(1j * ang_part)
+    for k in range(1,6):
+        for r in range(1, n+1):
+            cf[r-1] += (t1.real * np.cos(k*r) + t2.imag * np.sin(k*r)) * np.exp(1j * (t2.real * r - t1.imag * k))
+    for j in range(1, n+1):
+        cf[j-1] *= (1 + 0.1 * j) / (1 + np.log(j +1))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p463"]=p463
+
+def p464(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec_seq = np.linspace(t1.real, t2.real, n)
+    imc_seq = np.linspace(t1.imag, t2.imag, n)
+    for k in range(1, n+1):
+        mag_part = np.log(np.abs(t1) + k) * np.sin(k * np.pi /7) + np.cos(k * np.pi /5) * np.sqrt(k)
+        angle_part = np.angle(t1)*np.sin(k) + np.angle(t2)*np.cos(k) + np.sin(k * t1.real) * np.cos(k * t2.imag)
+        cf[k-1] = mag_part * np.exp(1j * angle_part)
+    for r in range(1, n+1):
+        cf[r-1] += (t1.real * t2.real / (r +1)) + 1j * (t1.imag - t2.imag) * np.sin(r)
+    for j in range(1, n+1):
+        cf[j-1] *= (1 + 0.1 * j) * np.exp(0.05j * j)
+    return cf.astype(np.complex128)
+
+ALLOWED["p464"]=p464
+
+def p465(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n+1):
+        mag_part = np.log(np.abs(t1) + j) * np.sin(j * np.angle(t1)) + np.cos(j * np.angle(t2))
+        ang_part = np.angle(t1)*j + np.angle(t2)*(n -j) + np.sin(j * t1.real) - np.cos(j * t2.imag)
+        cf[j-1] = mag_part * np.exp(1j * ang_part)
+    for k in range(1,6):
+        for r in range(1, n+1):
+            cf[r-1] += (t1.real * np.cos(k*r) + t2.imag * np.sin(k*r)) * np.exp(1j * (t2.real * r - t1.imag *k))
+    for j in range(1, n+1):
+        cf[j-1] *= (1 + 0.1 *j)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p465"]=p465
+
+def p466(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n+1):
+        magnitude = np.log(np.abs(t1) + j**2) * np.abs(np.sin(j * np.angle(t1))) + np.sqrt(j) * np.cos(j * np.angle(t2))
+        angle = np.angle(t1)*np.log(j +1) - t2.imag / (j +0.5) + np.sin(j * t1.real)*np.cos(j * t2.imag)
+        cf[j-1] = magnitude * np.exp(1j * angle)
+    return cf.astype(np.complex128)
+
+ALLOWED["p466"]=p466
+
+#FIXME
+def p467(z, a, state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+
+    # Numba-safe polar pieces
+    r1 = math.hypot(t1.real, t1.imag)   # |t1|
+    r2 = math.hypot(t2.real, t2.imag)   # |t2|
+    ang2 = math.atan2(t2.imag, t2.real) # angle(t2)
+
+    for j in range(1, n + 1):
+        mag_sum = 0.0
+
+        # sum_{k=1..j} log(|t1|+k) * sin(k*angle(t2))
+        for k in range(1, j + 1):
+            kf = float(k)
+            mag_sum += math.log(r1 + kf) * math.sin(kf * ang2)
+
+        # sum_{r=1..(n-j)} log(|t2|+r) * cos(r*angle(t2))
+        up = n - j
+        for r in range(1, up + 1):
+            rf = float(r)
+            mag_sum += math.log(r2 + rf) * math.cos(rf * ang2)
+
+        # stable magnitude (original had log(mag_sum+1); guard against negatives)
+        mag = math.log(abs(mag_sum) + 1.0)
+
+        # angle = mag_sum/(j+1) + mag_sum/(n-j+1)
+        angle = (mag_sum / (float(j) + 1.0)) + (mag_sum / (float(up) + 1.0))
+
+        # exp(1j*angle) via cos/sin
+        c = mag
+        cf[j - 1] = np.complex128(c * math.cos(angle) + 1j * c * math.sin(angle))
+
+    # post-perturbation (avoid np.conj)
+    for j in range(1, n + 1):
+        scale = 1.0 + 0.05 * float(j * j)
+        v = cf[j - 1]
+        v_conj = np.complex128(v.real - 1j * v.imag)
+        cf[j - 1] = v * scale + v_conj * 0.02
+
+    return cf
+    
+ALLOWED["p467"]=p467
+
+def p468(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n+1):
+        if j <=10:
+            mag = np.log(np.abs(t1) + j**2) * np.abs(np.sin(j * t2.real)) + np.cos(j * t1.imag)**2
+            ang = np.angle(t1)**j + np.angle(t2)*np.sin(j)
+        elif j <=20:
+            mag = np.log(np.abs(t2) + j**1.5) * np.abs(np.cos(j * t1.real) - np.sin(j * t2.imag))
+            ang = np.angle(t2)**j - np.angle(t1)*np.log(j+1)
+        else:
+            mag = np.log(np.abs(t1 * t2) + j) * np.abs(np.sin(j * t1.real + np.cos(j * t2.real)))
+            ang = np.angle(t1 + np.conj(t2))*j + np.log(np.abs(t1 - t2) +1)
+        cf[j-1] = mag * np.exp(1j * ang)
+    return cf.astype(np.complex128)
+
+ALLOWED["p468"]=p468    
+
+def p469(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n+1):
+        mag = np.log(np.abs(t1) + np.abs(t2) + j) * (1 + np.sin(j * np.angle(t1)) * np.cos(j * np.angle(t2)))
+        angle = np.angle(t1)**j - np.angle(t2)**(j %4) + np.sin(j * t1.real) - np.cos(j * t2.imag)
+        cf[j-1] = mag * (np.cos(angle) + 1j * np.sin(angle))
+        for k in range(1,4):
+            mag = mag * (1 + 0.1 * np.sin(k * t1.real + 0.0))  # Adjusted to numpy
+            angle = angle + 0.5 * np.angle(t1)**k - 0.3 * np.angle(t2)**k
+            cf[j-1] += mag * (np.cos(angle) + 1j * np.sin(angle))
+        cf[j-1] = cf[j-1] * (1 + 0.05 * j)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p469"]=p469
+
+def p470(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec_seq = np.linspace(t1.real, t2.real, n)
+    imc_seq = np.linspace(t1.imag, t2.imag, n)
+    for k in range(1, n+1):
+        r = rec_seq[k-1]
+        im = imc_seq[k-1]
+        mag = np.log(np.abs(r) + 1)*np.abs(t1)**0.5 + np.sin(r * k)*np.cos(im / (k +1)) + (k %3 +1)*np.abs(t2)
+        angle = np.angle(t1) * np.sin(k) + np.angle(t2) * np.cos(k * np.pi /4) + np.sin(im * k /2)
+        cf[k-1] = mag * (np.cos(angle) + np.sin(angle)*1j)
+    return cf.astype(np.complex128)
+
+ALLOWED["p470"]=p470
+
+def p471(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n+1):
+        mag_part = np.log(np.abs(t1) + j) * np.sin(j) + np.cos(j * t2.real)
+        angle_part = np.angle(t1)*np.sqrt(j) + t2.imag / (j +1)
+        cf[j-1] = mag_part * (np.cos(angle_part) + 1j * np.sin(angle_part))
+    for k in range(1, n+1):
+        cf[k-1] += (t2.real - t1.imag) * np.exp(1j * np.log(k +1)) * np.cos(k)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p471"]=p471
+
 def p472(z,a,state):
     t1, t2 = z[0], z[1]
-    n = 71
+    n = 35
     cf = np.zeros(n, dtype=np.complex128)
     for j in range(1, n+1):
         mag = np.log(np.abs(t1) + j) * (1 + np.sin(j * np.pi /7))
@@ -8266,6 +10486,226 @@ def p472(z,a,state):
     return cf
 
 ALLOWED["p472"]=p472
+
+def p473(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec_seq = np.linspace(t1.real, t2.real, n)
+    imc_seq = np.linspace(t1.imag, t2.imag, n)
+    for j in range(1, n+1):
+        mag = np.log(np.abs(rec_seq[j-1]*imc_seq[j-1] +1)**1) * (1 + np.sin(j * np.pi /4)*np.cos(j * np.pi /6))
+        angle = np.angle(t1)*np.sin(j /2) + np.angle(t2)*np.cos(j /3) + np.log(np.abs(j) +1)
+        cf[j-1] = mag * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p473"]=p473
+
+def p474(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n+1):
+        k = j**2
+        r = np.log(np.abs(t1) + j) * np.sin(j * np.angle(t2))
+        angle = np.angle(t1)*np.sin(k) - np.angle(t2)*np.cos(k) + np.log(np.abs(t2) +1)
+        magnitude = (t1.real * np.cos(k) + t2.imag * np.sin(k)) * (np.abs(t1)**2 / (k +1))
+        cf[j-1] = magnitude * (np.cos(angle) + np.sin(angle)*1j)
+    return cf.astype(np.complex128)
+
+ALLOWED["p474"]=p474
+
+def p475(z,a,state):
+    t1, t2 = z[0], z[1]
+    n =40
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n+1):
+        mag = t1.real**j + np.log(np.abs(t2) +j) + np.prod(np.arange(1, j+1))**(1/3)
+        angle = np.angle(t1)*np.sin(j * np.pi /6) + np.angle(t2)*np.cos(j * np.pi /4)
+        cf[j-1] = mag * np.exp(1j * angle) + np.conj(t1)*np.sin(j/2) - np.conj(t2)*np.cos(j/3)
+    return cf.astype(np.complex128)
+
+ALLOWED["p475"]=p475
+
+def p476(z,a,state):
+    t1, t2 = z[0], z[1]
+    n =35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n+1):
+        mag_part1 = np.log(np.abs(t1) + j) * np.sin(j * t1.real)
+        mag_part2 = np.abs(t2)**0.5 * np.cos(j /3)
+        magnitude = mag_part1 + mag_part2 + j**2
+        angle_part1 = np.angle(t1)*np.cos(j * np.pi /4)
+        angle_part2 = np.angle(t2)*np.sin(j * np.pi /5)
+        angle = angle_part1 + angle_part2 + np.sin(j)
+        cf[j-1] = magnitude * (np.cos(angle) + np.sin(angle)*1j)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p476"]=p476
+
+def p477(z,a,state):
+    t1, t2 = z[0], z[1]
+    n =40
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n+1):
+        r = t1.real + t2.real * j
+        i_part = t1.imag - t2.imag * j
+        phase = np.sin(r) * np.cos(i_part) + np.log(np.abs(t1) + j)
+        magnitude = np.abs(t1)**0.5 * np.abs(t2)**0.3 * j**np.sin(j) + np.cos(j * np.angle(t2))
+        cf[j-1] = magnitude * np.exp(1j * phase)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p477"]=p477
+
+def p478(z, a, state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+
+    # Polar bits (Numba-safe)
+    r1 = math.hypot(t1.real, t1.imag)
+    ang1 = math.atan2(t1.imag, t1.real)
+    ang2 = math.atan2(t2.imag, t2.real)
+
+    # early guard: avoid division by ~0 in cos(j / (t1.imag + 1))
+    if abs(t1.imag + 1.0) < 1e-10:
+        return cf  # already zeros
+
+    t1_conj = np.complex128(t1.real - 1j * t1.imag)
+    t2_conj = np.complex128(t2.real - 1j * t2.imag)
+
+    denom = t1.imag + 1.0  # safe by guard above
+
+    for j in range(1, n + 1):
+        jf = float(j)
+
+        # mag_part1: log(|t1| + j)
+        mag_part1 = math.log(r1 + jf)
+
+        # mag_part2: sin(j * Re(t1)) * cos(j / (Im(t1) + 1))
+        mag_part2 = math.sin(jf * t1.real) * math.cos(jf / denom)
+
+        # sqrt(j!) via exp(0.5 * lgamma(j+1))
+        sqrt_fact = math.exp(0.5 * math.lgamma(jf + 1.0))
+
+        magnitude = mag_part1 * mag_part2 + sqrt_fact
+
+        # angle parts: replace np.angle with atan2; keep trig in math
+        angle_part1 = ang1 * math.sin(jf) + ang2 * math.cos(jf)
+        angle_part2 = math.sin(jf * t1.real) - math.cos(jf * t2.imag)
+        angle = angle_part1 + angle_part2
+
+        # exp(i*angle) via cos/sin
+        ca = math.cos(angle)
+        sa = math.sin(angle)
+
+        base = np.complex128(magnitude * ca + 1j * magnitude * sa)
+        cf[j - 1] = base + t1_conj * math.sin(jf) - t2_conj * math.cos(jf)
+
+    return cf
+    
+ALLOWED["p478"]=p478
+
+def p479(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec_seq = np.linspace(t1.real, t2.real, n)
+    imc_seq = np.linspace(t1.imag, t2.imag, n)
+    for j in range(1, n+1):
+        mag_part1 = np.log(np.abs(rec_seq[j-1]) +1) * np.sin(j * np.pi /4)
+        mag_part2 = np.abs(t2)**((j %5) +1)
+        mag = mag_part1 + mag_part2 * np.cos(j * t1.real)
+        angle_part1 = np.angle(t1)*np.cos(j /3)
+        angle_part2 = np.sin(j * t2.imag) + np.cos(j * np.pi /6)
+        angle = angle_part1 + angle_part2
+        cf[j-1] = mag * (np.cos(angle) + np.sin(angle)*1j)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p479"]=p479
+
+def p480(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n+1):
+        mag_part1 = np.log(np.abs(t1) + j) * np.sin(j * t1.real)
+        mag_part2 = np.log(np.abs(t2) + j) * np.cos(j * t1.imag)
+        magnitude = mag_part1 + mag_part2 + j**0.5
+        angle_part1 = np.angle(t1)*np.cos(j / (t1.real +1))
+        angle_part2 = np.angle(t2)*np.sin(j / (t2.imag +1))
+        angle = angle_part1 - angle_part2 + np.sin(j * np.pi /6)
+        cf[j-1] = magnitude * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+
+ALLOWED["p480"]=p480
+
+def p481(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec_seq = np.linspace(t1.real, t2.real, n)
+    imc_seq = np.linspace(t1.imag, t2.imag, n)
+    for j in range(1, n+1):
+        term1 = np.exp(1j * np.sin(5 * np.pi * rec_seq[j-1])) * (t1.real + j)
+        term2 = np.exp(1j * np.cos(3 * np.pi * imc_seq[j-1])) * (t2.imag + j**2)
+        cf[j-1] = term1 + term2 + np.log(np.abs(t1)*np.abs(t2)+1)
+    for k in range(1, n+1):
+        cf[k-1] *= (1 + 0.05 * k * np.sin(cf[k-1].real) + 0.05j * k * np.cos(cf[k-1].imag))
+    for r in range(1, n+1):
+        cf[r-1] += np.conj(cf[r-1]) * np.sin(r * t1.real) * np.cos(r * t2.imag)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p481"]=p481
+
+def p482(z, a, state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+
+    r1   = math.hypot(t1.real, t1.imag)          # |t1|
+    ang1 = math.atan2(t1.imag, t1.real)          # angle(t1)
+    ang2 = math.atan2(t2.imag, t2.real)          # angle(t2)
+
+    denom = t1.imag + 1.0
+    if abs(denom) < 1e-10:
+        return cf  # avoid division by ~0 in cos(j/(Im(t1)+1))
+
+    t1_conj = np.complex128(t1.real - 1j * t1.imag)
+    t2_conj = np.complex128(t2.real - 1j * t2.imag)
+
+    for j in range(1, n + 1):
+        jf = float(j)
+
+        # mag_part1 = log(|t1| + j)
+        mag_part1 = math.log(r1 + jf)
+
+        # mag_part2 = sin(j * Re(t2)) * cos(j / (Im(t1) + 1))
+        mag_part2 = math.sin(jf * t2.real) * math.cos(jf / denom)
+
+        # sqrt(j!) = exp(0.5 * lgamma(j+1))  (stable, njit-safe)
+        sqrt_fact = math.exp(0.5 * math.lgamma(jf + 1.0))
+
+        magnitude = mag_part1 * mag_part2 + sqrt_fact
+
+        # angle parts (replace np.angle with atan2)
+        angle_part1 = ang1 * math.sin(jf) + ang2 * math.cos(jf)
+        angle_part2 = math.sin(jf * t1.real) - math.cos(jf * t2.imag)
+        angle = angle_part1 + angle_part2
+
+        # exp(i*angle) via cos/sin
+        ca = math.cos(angle)
+        sa = math.sin(angle)
+
+        cf[j - 1] = (
+            np.complex128(magnitude * ca + 1j * magnitude * sa)
+            + t1_conj * math.sin(jf)
+            - t2_conj * math.cos(jf)
+        )
+
+    return cf
+    
+ALLOWED["p482"]=p482
 
 def p483(z,a,state):
     t1, t2 = z[0], z[1]
@@ -8287,6 +10727,738 @@ def p483(z,a,state):
 
 ALLOWED["p483"]=p483
 
+def p484(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n+1):
+        mag = np.log(np.abs(t1) + j) * np.sqrt(j) + np.sin(j * t2.real)**2 + np.cos(j * t1.imag / (j +1))
+        angle = np.angle(t1)*j + np.sin(j * t1.real * t2.real) - np.cos(j * t2.imag)
+        cf[j-1] = mag * (np.cos(angle) +1j * np.sin(angle))
+    return cf.astype(np.complex128)
+
+ALLOWED["p484"]=p484
+
+def p485(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec_seq = np.linspace(t1.real, t2.real, n)
+    imc_seq = np.linspace(t1.imag, t2.imag, n)
+    for j in range(1, n+1):
+        phase = np.sin(j * np.pi /4) * np.cos(j * np.pi /3) + np.log(np.abs(rec_seq[j-1] + imc_seq[j-1]) +1)
+        magnitude = np.sqrt(rec_seq[j-1]**2 + imc_seq[j-1]**2)**(1 + 0.1 *j) * np.abs(np.sin(j)) + np.abs(np.cos(j /2))
+        cf[j-1] = magnitude * (np.cos(phase) + 1j * np.sin(phase))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p485"]=p485
+
+def p486(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n+1):
+        mag_real = np.log(np.abs(t1) + np.abs(t2) + j) * np.abs(np.sin(j * t1.real) + np.cos(j * t2.imag))
+        mag_imag = np.log(np.abs(t1) + np.abs(t2) + j) * np.abs(np.sin(j * t1.imag) - np.cos(j * t2.imag))
+        angle_real = np.angle(t1)*np.sin(j /n * np.pi) + np.angle(t2)*np.cos(j /n * np.pi)
+        angle_imag = np.angle(t1)*np.cos(j /n * np.pi) - np.angle(t2)*np.sin(j /n * np.pi)
+        cf[j-1] = (mag_real * np.cos(angle_real) + mag_imag * np.sin(angle_imag)) +\
+                    1j * (mag_real * np.sin(angle_real) - mag_imag * np.cos(angle_imag))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p486"]=p486
+
+def p487(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n+1):
+        rec_seq = np.linspace(t1.real, t2.real, n)
+        imc_seq = np.linspace(t1.imag, t2.imag, n)
+        mag_part1 = np.log(np.abs(rec_seq[j-1]) +1) * np.sin(j * np.pi /4)
+        mag_part2 = np.abs(t2)**((j %5) +1)
+        mag = mag_part1 + mag_part2 * np.cos(j * t1.real)
+        angle_part1 = np.angle(t1)*np.cos(j /3)
+        angle_part2 = np.sin(j * t2.imag) + np.cos(j * np.pi /6)
+        angle = angle_part1 + angle_part2
+        cf[j-1] = mag * (np.cos(angle) + 1j * np.sin(angle))
+    for k in range(1, n+1):
+        if k >1 and k <n:
+            cf[k-1] += 0.5 * (cf[k-2] * np.conj(cf[k])) * np.cos(k * np.pi /n)
+        elif k ==1:
+            cf[k-1] += 0.3 * np.conj(cf[k]) * np.sin(k * np.pi /n)
+        else:
+            cf[k-1] += 0.3 * np.conj(cf[k-2]) * np.sin(k * np.pi /n)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p487"]=p487
+
+def p488(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    r1 = t1.real
+    i1 = t1.imag
+    r2 = t2.real
+    i2 = t2.imag
+    for j in range(1, n+1):
+        mag = np.log(np.abs(t1) + j) * np.abs(np.sin(j * t1.real)) + np.log(np.abs(t2) + j) * np.abs(np.cos(j * t1.imag / (j +1)))
+        angle_part1 = np.angle(t1)*np.sin(j) + np.angle(t2)*np.cos(j)
+        angle_part2 = np.sin(j * t1.real) - np.cos(j * t2.imag)
+        angle = angle_part1 + angle_part2
+        cf[j-1] = mag * np.exp(1j * angle) + np.conj(t1) * np.sin(j) - np.conj(t2) * np.cos(j)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p488"]=p488
+
+def p489(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n+1):
+        sum_mag =0
+        for k in range(1, j+1):
+            sum_mag += t1.real**k * np.sin(k * np.angle(t1))
+        for r in range(1, (n-j)+1):
+            sum_mag += t2.imag**r * np.cos(r * np.angle(t2))
+        mag = np.log(sum_mag +1)
+        angle = sum_mag / (j +1) + sum_mag / (n -j +1)
+        cf[j-1] = mag * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p489"]=p489
+
+def p490(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n+1):
+        mag = t1.real**((j %5)+1) + np.abs(t2)**(np.floor(j /7)+1) + np.log(j +1)*np.sin(j * np.pi /4)
+        angle = np.angle(t1)*np.cos(j * np.pi /6) + np.angle(t2)*np.sin(j * np.pi /8)
+        cf[j-1] = mag * np.exp(1j * angle)
+    for k in range(1, n+1):
+        cf[k-1] += np.conj(t1) * np.cos(k * np.pi /5) + np.conj(t2) * np.sin(k * np.pi /3)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p490"]=p490
+
+def p491(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec_seq = np.linspace(t1.real, t2.real, n)
+    imc_seq = np.linspace(t1.imag, t2.imag, n)
+    for j in range(1, n+1):
+        r = rec_seq[j-1]
+        i_part = t1.imag * np.sin(j) + t2.imag * np.cos(j)
+        magnitude = np.log(np.abs(t1) + np.abs(t2) + j) * (j**1.5 + np.prod(np.arange(1, (j %5)+2)))
+        angle = np.angle(t1)*np.cos(j * np.pi /n) + np.angle(t2)*np.sin(j * np.pi /n)
+        cf[j-1] = magnitude * (np.cos(angle) +1j * np.sin(angle))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p491"]=p491
+
+def p492(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n+1):
+        real_part = t1.real * np.sin(j * np.pi /7) + t2.real * np.log(j +1)
+        imag_part = t1.imag * np.cos(j**2 /5) - t2.imag * np.exp(-j /10)
+        magnitude = (np.abs(t1) + np.abs(t2)) * (j**1.5 + (n -j)**1.2)
+        angle = np.angle(t1)*np.sqrt(j) + np.angle(t2)*np.sin(j * np.pi /3)
+        cf[j-1] = (real_part +1j * imag_part) * (np.cos(angle) + np.sin(angle)*1j) * magnitude
+    return cf.astype(np.complex128)
+    
+ALLOWED["p492"]=p492
+
+def p493(z,a,state):
+    t1, t2 = z[0], z[1]
+    n =40
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n+1):
+        mag = np.log(np.abs(t1) + np.abs(t2) +j) * (1 + np.sin(j) + np.cos(j /3))
+        angle = np.angle(t1)*j + np.angle(t2)*np.sin(j /2)
+        cf[j-1] = mag * (np.cos(angle) +1j * np.sin(angle))
+    return cf.astype(np.complex128)
+
+ALLOWED["p493"]=p493
+
+def p494(z,a,state):
+    t1, t2 = z[0], z[1]
+    n =35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n+1):
+        rec = t1.real * j
+        imc = t2.imag / j
+        mag = np.log(np.abs(t1) + j) * (1 + np.sin(j * np.pi /7)) * (1 + np.cos(j * np.pi /5))
+        angle = np.angle(t1)*np.sin(j /3) + np.angle(t2)*np.cos(j /4) + np.sin(j /2)
+        cf[j-1] = mag * (np.cos(angle) +1j * np.sin(angle))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p494"]=p494
+
+def p495(z,a,state):
+    t1, t2 = z[0], z[1]
+    n =35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec1 = t1.real
+    imc1 = t1.imag
+    rec2 = t2.real
+    imc2 = t2.imag
+    for j in range(1, n+1):
+        mag = (np.sin(rec1 * j) + np.cos(imc2 * j**1.2)) * np.log(1 +j) + np.abs(t1)**0.5 * np.abs(t2)**0.3
+        ang = np.angle(t1)*np.sin(j) + np.angle(t2)*np.cos(j**2)
+        cf[j-1] = mag * np.exp(1j * ang)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p495"]=p495
+
+def p496(z,a,state):
+    t1, t2 = z[0], z[1]
+    n =35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n+1):
+        mag = np.log(np.abs(t1)*j +1) * np.sin(j * np.pi * t2.real / (j +1)) +\
+                np.log(np.abs(t2)*(n -j +1) +1)*np.cos(j * np.pi * t1.imag / (j +1))
+        ang = np.angle(t1)*np.sin(j /2) + np.angle(t2)*np.cos(j /3) + np.log(j +1)
+        cf[j-1] = mag * (np.cos(ang) +1j * np.sin(ang))
+    return cf.astype(np.complex128)
+
+ALLOWED["p496"]=p496
+
+def p497(z,a,state):
+    t1, t2 = z[0], z[1]
+    n =35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec_seq = np.linspace(t1.real, t2.real, n)
+    imc_seq = np.linspace(t1.imag, t2.imag, n)
+    for j in range(1, n+1):
+        mag_part1 = np.log(np.abs(rec_seq[j-1] + imc_seq[j-1]) +1)
+        mag_part2 =1 + np.sin(j * np.pi /6)*np.cos(j * np.pi /4)
+        magnitude = mag_part1 * mag_part2 * (1 + (j * rec_seq[j-1] * imc_seq[j-1])**(1/3))
+        ang_part1 = np.angle(t1)*np.sin(j) + np.angle(t2)*np.cos(j)
+        ang_part2 = np.sin(j * np.pi /5)*np.cos(j * np.pi /7)
+        angle = ang_part1 + ang_part2
+        cf[j-1] = magnitude * np.exp(1j * angle)
+    for k in range(1, n+1):
+        if k >1 and k <n:
+            cf[k-1] += 0.5 * (cf[k-2] * np.conj(cf[k])) * np.cos(k * np.pi /n)
+        elif k ==1:
+            cf[k-1] += 0.3 * np.conj(cf[k]) * np.sin(k * np.pi /n)
+        else:
+            cf[k-1] += 0.3 * np.conj(cf[k-2]) * np.sin(k * np.pi /n)
+    return cf.astype(np.complex128)
+
+ALLOWED["p497"]=p497
+
+def p498(z,a,state):
+    t1, t2 = z[0], z[1]
+    n =35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n+1):
+        magnitude = np.log(np.abs(t1)*j + np.abs(t2)/(j +1) +1)
+        angle = np.angle(t1)*np.sin(j) + np.angle(t2)*np.cos(j)
+        cf[j-1] = magnitude * (np.cos(angle) +1j * np.sin(angle))
+    return cf.astype(np.complex128)
+
+ALLOWED["p498"]=p498
+
+def p499(z,a,state):
+    t1, t2 = z[0], z[1]
+    n =35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n+1):
+        mag_part1 = np.log(np.abs(t1) + j**1.5) * np.sin(j * np.pi /6)
+        mag_part2 = np.abs(t2)/(j +2) + np.cos(j * np.pi /4)
+        magnitude = mag_part1 + mag_part2 * np.exp(-j /10)
+        angle_part1 = np.angle(t1)*np.cos(j /3)
+        angle_part2 = np.angle(t2)*np.sin(j /5) + np.sin(j**2 /7)
+        angle = angle_part1 + angle_part2
+        cf[j-1] = magnitude * (np.cos(angle) +1j * np.sin(angle))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p499"]=p499
+
+def p500(z,a,state):
+    t1, t2 = z[0], z[1]
+    n =35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n+1):
+        angle = np.sin(j * np.angle(t1)) * np.cos(j * np.angle(t2)) + np.sin(j**2 * np.angle(t1 + t2))
+        magnitude = (np.abs(t1)**j + np.abs(t2)**(n -j)) * np.log(j + np.abs(t1 - t2)) / (1 + (j %5))
+        cf[j-1] = magnitude * (np.cos(angle) +1j * np.sin(angle)) + np.conj(t1)*np.sin(j * t2.imag)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p500"]=p500
+
+def p501(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n+1):
+        mag = np.abs(t1)**((j %5)+1) * np.log(np.abs(t2) +j) * np.sin(j *0.5) + np.angle(t2)*np.cos(j *0.3)
+        angle = np.angle(t1)*np.sin(j *0.5) + np.angle(t2)*np.cos(j *0.3)
+        cf[j-1] = mag * np.exp(1j * angle)
+        if j %3 ==1:
+            cf[j-1] += np.conj(t1)*np.sin(j * t2.real) - np.conj(t2)*np.cos(j * t1.imag)
+        elif j%3 ==2:
+            cf[j-1] += t1.real * t2.imag * np.sin(j)
+        else:
+            cf[j-1] += t2.real * t1.imag * np.cos(j)
+    for k in range(1, n+1):
+        cf[k-1] = cf[k-1] * (1 +0.05 *k) + 0.02 * np.sin(k * np.angle(t1)) * np.cos(k * np.angle(t2))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p501"]=p501
+
+def p502(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n+1):
+        phase_r = np.sin(j * t1.real) + np.cos(j * t2.real)
+        phase_i = np.cos(j * t1.imag) - np.sin(j * t2.imag)
+        magnitude = np.log(np.abs(t1)**j + np.abs(t2)**(n -j) +1)
+        angle = np.angle(t1)*j - np.angle(t2)*(n -j) + phase_r * phase_i
+        cf[j-1] = magnitude * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p502"]=p502
+
+def p503(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec1 = t1.real
+    imc1 = t1.imag
+    rec2 = t2.real
+    imc2 = t2.imag
+    for j in range(1, n+1):
+        mag_part1 = np.log(np.abs(t1) +j) * (1 + np.sin(j)*np.cos(j))
+        mag_part2 = np.angle(t1)*j + np.angle(t2)/(j +1) + np.sin(j * rec1) - np.cos(j *imc2)
+        magnitude = mag_part1 * mag_part2
+        angle = np.angle(t1)*j + np.angle(t2)/(j +1) + np.sin(j * rec1) - np.cos(j * imc2)
+        cf[j-1] = magnitude * np.exp(1j * angle) + np.conj(t1)*np.sin(j) + np.conj(t2)*np.cos(j)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p503"]=p503
+
+def p504(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec_seq = np.linspace(t1.real, t2.real, n)
+    imc_seq = np.linspace(t1.imag, t2.imag, n)
+    for j in range(1, n+1):
+        magnitude = np.log(np.abs(rec_seq[j-1] + imc_seq[j-1]) +1) * (np.abs(t1)**j + np.abs(t2)**(n -j))
+        angle = np.angle(t1)*np.sin(j) + np.angle(t2)*np.cos(j/2)
+        cf[j-1] = magnitude * (np.cos(angle) +1j * np.sin(angle))
+    for k in range(1, np.floor(n/2)+1):
+        if k <=n:
+            cf[k-1] += np.prod(rec_seq[:k]) * np.conj(t2)**k
+            cf[n -k] += np.sum(imc_seq[:k]) * np.sin(np.abs(t1)*k) * np.cos(np.abs(t2)/(k +1))
+    return cf.astype(np.complex128)
+   
+ALLOWED["p504"]=p504
+
+def p505(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec1 = t1.real
+    imc1 = t1.imag
+    rec2 = t2.real
+    imc2 = t2.imag
+    for j in range(1, n+1):
+        mag = (np.sin(rec1 * j) + np.cos(imc2 * j**1.2)) * np.log(1 +j) + np.abs(t1)**0.5 * np.abs(t2)**0.3
+        ang = np.angle(t1)*np.sin(j) + np.angle(t2)*np.cos(j**2)
+        cf[j-1] = mag * np.exp(1j * ang)
+    return cf.astype(np.complex128)
+
+ALLOWED["p505"]=p505
+
+def p506(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n+1):
+        r = t1.real + j * t2.real
+        im = t1.imag - j * t2.imag
+        mag = np.log(np.abs(t1) +j) * np.abs(np.sin(j * np.angle(t1)) + np.cos(j * np.angle(t2)))
+        angle = np.angle(t1)*j + np.angle(t2)*(n -j)
+        cf[j-1] = mag * (np.cos(angle) +1j * np.sin(angle))
+    for k in range(1, n+1):
+        cf[k-1] += np.conj(cf[k-1]) * np.sin(k * t1.real) / (1 +k)
+    return cf.astype(np.complex128)
+
+ALLOWED["p506"]=p506
+
+def p507(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec_seq = np.linspace(t1.real, t2.real, n)
+    imc_seq = np.linspace(t1.imag, t2.imag, n)
+    for j in range(1, n+1):
+        mag = np.log(np.abs(rec_seq[j-1] * imc_seq[j-1]) +1) * ((j %4) +1)
+        angle = np.sin(j * np.pi * t1.real) + np.cos(j * np.pi * t2.imag) + np.abs(t1.real)**0.5 * np.abs(t2.imag)**0.3
+        cf[j-1] = mag * (np.cos(angle) +1j * np.sin(angle))
+    for k in range(1, n+1):
+        cf[k-1] = cf[k-1] * (1 +0.5 * np.conj(cf[max(0, k -3)]) ) + 0.3 * np.sin(k)*np.cos(k)
+    for r in range(1, n+1):
+        cf[r-1] += cf[r-1] * (1 + 0.5 * np.conj(cf[max(0, r -2)])) + 0.3 * np.sin(r)*np.cos(r)
+    return cf.astype(np.complex128)
+
+ALLOWED["p507"]=p507
+
+def p508(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n+1):
+        k =j**2
+        angle_part = np.angle(t1)*np.sin(j * np.pi /4) + np.angle(t2)*np.cos(j * np.pi /6)
+        magnitude_part = np.log(np.abs(t1) + np.abs(t2) +j) * (1 + np.sin(j /3)) * (1 + np.cos(j /5))
+        perturbation = np.conj(t1)**0.5 * np.sin(j) + np.conj(t2)**0.3 * np.cos(j)
+        cf[j-1] = magnitude_part * np.exp(1j * angle_part) + 0.1 * perturbation
+    for k in range(1,6):
+        for r in range(1,8):
+            index = (k -1)*7 + r
+            if index <=n:
+                cf[index-1] = cf[index-1] * (1 +0.05 * np.sin(k * r)) +0.02 * np.cos(k +r)
+    return cf.astype(np.complex128)
+
+ALLOWED["p508"]=p508
+
+def p509(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, 36):
+        mag_part = np.log(np.abs(t1) + np.abs(t2) +j) * (1 + np.sin(j /4) * np.cos(j /6))
+        angle_part = np.angle(t1)*np.sqrt(j) - np.angle(t2)*np.cos(j /2)
+        cf[j-1] = mag_part * (np.cos(angle_part) +1j * np.sin(angle_part)) + np.conj(t1)*t2**j
+    return cf.astype(np.complex128)
+    
+ALLOWED["p509"]=p509
+
+def p510(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    r1 = t1.real
+    im1 = t1.imag
+    r2 = t2.real
+    im2 = t2.imag
+    for j in range(1, n+1):
+        mag_part1 = np.log(np.abs(r1 +j) +1) * np.sqrt(j)
+        mag_part2 = np.abs(t2)*np.sin(j /3)
+        magnitude = mag_part1 + mag_part2
+        ang_part1 = np.angle(t1) + np.cos(j * np.pi /5)
+        ang_part2 = np.sin(j * np.pi /7) * np.angle(t2)
+        angle = ang_part1 + ang_part2
+        cf[j-1] = magnitude * (np.cos(angle) +1j * np.sin(angle))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p510"]=p510
+
+def p511(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n+1):
+        term1 = np.sin(j) * t1.real + np.cos(j *2) * t2.imag
+        term2 = np.cos(j /3) * t2.real - np.sin(j /4) * t1.imag
+        magnitude = np.log(np.abs(term1 + term2) +1) *j
+        angle = np.angle(t1)*np.sin(j /2) + np.angle(t2)*np.cos(j /3) + np.sin(j)**2
+        cf[j-1] = magnitude * np.exp(1j * angle) +0.3 * np.exp(1j*(angle /2))
+    return cf.astype(np.complex128)
+
+ALLOWED["p511"]=p511
+
+def p512(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n+1):
+        mag = np.abs(t1)**j + np.abs(t2)**(n -j) + np.log(j + np.abs(t1 - t2))
+        angle = np.angle(t1)*j - np.angle(t2)*(n -j) + np.sin(j)*np.cos(j)
+        cf[j-1] = mag * (np.cos(angle) +1j * np.sin(angle))
+    for k in range(1,6):
+        cf[k-1] *= np.conj(t1) * np.sin(k)
+    for r in range(1,6):
+        cf[n -r] *= np.conj(t2) * np.cos(r)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p512"]=p512
+
+def p513(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    real_seq = np.linspace(t1.real, t2.real, n)
+    imag_seq = np.linspace(t1.imag, t2.imag, n)
+    for j in range(1, n+1):
+        magnitude = np.log(np.abs(t1 +j) +1) * np.sin(j * np.pi /7) + np.cos(j * np.pi /5) * np.prod(np.arange(1, (j %5)+2))
+        angle = np.angle(t2) + np.sin(j * np.pi /3) * np.cos(j * np.pi /4) + np.tan(j * np.pi /6)
+        cf[j-1] = magnitude * (np.cos(angle) +1j * np.sin(angle))
+    for k in range(1, (n //2)+1):
+        idx = k *2
+        if idx <=n:
+            cf[idx-1] *= np.exp(1j * real_seq[k-1]/(np.abs(imag_seq[k-1]) +1))
+    for r in range(1, (n%3)+2):
+        cf[r-1] = cf[r-1]**2 / (1 + np.abs(cf[r-1]))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p513"]=p513
+
+def p514(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec_seq = np.linspace(t1.real, t2.real, n)
+    imc_seq = np.linspace(t1.imag, t2.imag, n)
+    for r in range(1, n+1):
+        mag_part = np.log(np.abs(t1) + np.abs(t2) + r) * (np.sin(rec_seq[r-1] * np.pi / (r +1)) + np.cos(imc_seq[r-1] * np.pi / (r +2)))
+        angle_part = np.angle(t1)*np.sin(r /5) + np.angle(t2)*np.cos(r /7)
+        intricate_sum =0
+        for j in range(1,4):
+            intricate_sum += (t1.real**j - t2.imag**j) * np.sin(j * rec_seq[r-1]) * np.cos(j * imc_seq[r-1])
+        cf[r-1] = mag_part * np.exp(1j * angle_part) + intricate_sum * np.conj(t1)*t2**r
+    return cf.astype(np.complex128)
+    
+ALLOWED["p514"]=p514
+
+def p515(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n+1):
+        phase = np.sin(j * t1.real + np.cos(j * t2.imag)) + np.cos(j * t2.real - np.sin(j * t1.imag))
+        magnitude = np.log(np.abs(t1) +1) + np.sqrt(j)*t2.real - np.abs(t1.imag) + np.prod([t1.real, t2.real]) / (j +1)
+        cf[j-1] = magnitude * np.exp(1j * phase)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p515"]=p515
+
+def p516(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec = t1.real
+    imc = t2.imag
+    for j in range(1, n+1):
+        mag_part = np.log(np.abs(t1) +j) * np.sin(j * np.pi /7) + np.sqrt(j)*np.cos(j * np.angle(t2))
+        angle_part = np.angle(t1)*j**0.5 + np.angle(t2)*np.log(j +1)
+        cf[j-1] = mag_part * np.exp(1j * angle_part) + np.conj(t1)**j * np.cos(j * np.pi /5)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p516"]=p516
+
+def p517(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for r in range(1, n+1):
+        mag_part = np.log(np.abs(t1) + np.abs(t2) +r) * np.sin(r * t1.real / (1 +r)) + np.cos(r * t1.imag / (1 +r))
+        angle_part = np.angle(t1)*r + np.angle(t2)*(n -r) + np.sin(r * t1.real)*np.cos(r * t2.imag)
+        cf[r-1] = mag_part * np.exp(1j * angle_part) + np.conj(mag_part * np.exp(-1j * angle_part))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p517"]=p517
+
+def p518(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    r1 = t1.real
+    i1 = t1.imag
+    r2 = t2.real
+    i2 = t2.imag
+    for j in range(1, n+1):
+        mag = np.log(np.abs(t1) +1) * (j**(np.sin(j) + np.cos(j))) + np.sin(j * np.pi /7) * np.cos(j * np.pi /5)
+        angle = np.angle(t1)*np.sin(j /3) + np.angle(t2)*np.cos(j /4) + np.sin(j * np.pi /6)
+        for k in range(1, min(j,5)+1):
+            mag += r1**k * i2**(j -k) * np.log(k +1)
+            angle += np.angle(t1)**k - np.angle(t2)**(j -k) * np.cos(k * np.pi /8)
+        cf[j-1] = mag * np.exp(1j * angle)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p518"]=p518
+
+def p519(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n+1):
+        mag = np.log(np.abs(t1) +j) * np.abs(np.sin(j * np.pi /7)) + np.sqrt(j) * np.cos(j * np.angle(t2))
+        angle = np.angle(t1)*np.sin(j) + np.angle(t2)*np.cos(j /3)
+        cf[j-1] = mag * (np.cos(angle) +1j * np.sin(angle))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p519"]=p519
+
+def p520(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec_seq = np.linspace(t1.real, t2.real, n)
+    imc_seq = np.linspace(t1.imag, t2.imag, n)
+    for j in range(1, n+1):
+        magnitude = np.log(np.abs(rec_seq[j-1] + imc_seq[j-1]) +1) * (1 + np.sin(j * np.pi /5)) * (1 + np.cos(j * np.pi /7))
+        angle = np.angle(t1)*np.sin(j /3) + np.angle(t2)*np.cos(j /4) + np.sin(j * t1.real)*np.cos(j * t2.imag)
+        cf[j-1] = magnitude * (np.cos(angle) +1j * np.sin(angle))
+    for k in range(1, n+1):
+        cf[k-1] *= (1 +0.5 * np.conj(cf[max(0, k -2)]) ) +0.3 * np.sin(k)*np.cos(k)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p520"]=p520
+
+def p521(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n+1):
+        mag_part1 = np.log(np.abs(t1) +j)
+        mag_part2 = np.sin(j * np.angle(t2)) + np.cos(j /2 * np.angle(t1))
+        magnitude = mag_part1 * (1 + mag_part2**2)
+        angle_part1 = np.angle(t1 +j)
+        angle_part2 = np.cos(j * t2.imag)
+        angle = angle_part1 + angle_part2
+        cf[j-1] = magnitude * (np.cos(angle) +1j * np.sin(angle))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p521"]=p521
+
+def p522(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n+1):
+        mag =0
+        angle =0
+        for k in range(1, j+1):
+            mag += (t1.real**k * t2.real**(j -k) + t1.imag**k * t2.imag**(j -k))
+            angle += (np.angle(t1) * np.sin(k) - np.angle(t2) * np.cos(j -k))
+        mag *= np.log(np.abs(t1) + np.abs(t2) +j)
+        cf[j-1] = mag * (np.cos(angle) +1j * np.sin(angle))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p522"]=p522
+
+def p523(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    r1 = t1.real
+    i1 = t1.imag
+    r2 = t2.real
+    i2 = t2.imag
+    for j in range(1, n+1):
+        mag_part1 = np.log(np.abs(t1) +j) * np.sin(j * np.pi /6)
+        mag_part2 = (r2**j + i1**(n -j)) * np.cos(j * np.pi /4)
+        mag = mag_part1 + mag_part2
+        angle = np.angle(t1)*np.sin(j /3) + np.angle(t2)*np.cos(j /5) + np.sin(j * np.pi /7)
+        cf[j-1] = mag * np.exp(1j * angle) + np.conj(t2)*(j %4)
+    return cf.astype(np.complex128)
+
+ALLOWED["p523"]=p523
+
+def p524(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n+1):
+        phase = np.sin(j * np.angle(t1)) + np.cos(j * np.angle(t2)) + np.log(np.abs(t1) + np.abs(t2) + j)
+        magnitude = (j**2 + np.sqrt(j)) * np.abs(np.sin(j /3)) + np.exp(-j /10) * np.abs(t1 + t2)
+        cf[j-1] = magnitude * (np.cos(phase) +1j * np.sin(phase))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p524"]=p524
+
+def p525(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n+1):
+        mag_part = np.log(np.abs(t1) +1) * (j**np.abs(t2.real)) + np.sum(np.arange(1, j+1)) * np.sqrt(j)
+        angle_part = np.angle(t1)*np.sin(j) + np.angle(t2)*np.cos(j) + np.sin(j * t1.imag)*np.cos(j * t2.imag)
+        coeff = mag_part * np.exp(1j * angle_part)
+        for k in range(1,4):
+            coeff += (t1.real**k) * (t2.imag**k) * np.sin(k *j) / (k +1)
+        cf[j-1] = coeff + np.conj(t2)*t1.real**((j %5)+1)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p525"]=p525
+
+def p526(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n+1):
+        r = t1.real + t2.real *j
+        im = t1.imag - t2.imag *j
+        mag = np.log(np.abs(r + im*1j) +1) * np.sin(j * np.pi /n) + np.cos(j * np.pi /5)
+        angle = np.angle(t1)*np.sin(r * np.pi /7) + np.angle(t2)*np.cos(r * np.pi /4)
+        cf[j-1] = mag * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+
+ALLOWED["p526"]=p526
+
+def p527(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n+1):
+        angle = np.angle(t1)*j + np.angle(t2)/(j +1)
+        magnitude = np.abs(t1)**j + np.abs(t2)**(n -j) + np.log(np.abs(t1) + np.abs(t2) +j)
+        phase = np.sin(j * t1.real) * np.cos(j * t2.imag) + np.sin(t1.imag * j /2)
+        cf[j-1] = magnitude * (np.cos(angle + phase) +1j * np.sin(angle - phase))
+    for k in range(1, n//2 +1):
+        cf[k-1] *= np.conj(cf[n -k])
+    for r in range(1, n+1):
+        cf[r-1] += np.exp(1j * (t1.real * r - t2.imag / (r +1)))
+    return cf.astype(np.complex128)
+
+ALLOWED["p527"]=p527
+
+def p528(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n+1):
+        k = j**1.5
+        r = t1.real * np.log(k +1) + t2.real * np.sqrt(k +1)
+        im_part = t1.imag * np.sin(k) + t2.imag * np.cos(k)
+        magnitude = np.abs(t1)*k + np.abs(t2)/(k +1)
+        angle = np.angle(t1)*np.sin(k /10) + np.angle(t2)*np.cos(k /10)
+        cf[j-1] = (r +1j * im_part) * (1 + magnitude) * np.exp(1j * angle)
+    for k in range(1,6):
+        for r in range(1,8):
+            index = (k -1)*7 + r
+            if index <=n:
+                cf[index-1] *= (1 +0.05 * np.sin(k * r)) +0.02 * np.cos(k +r)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p528"]=p528
+
+def p529(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    r1 = t1.real
+    i1 = t1.imag
+    r2 = t2.real
+    i2 = t2.imag
+    for j in range(1, n+1):
+        mag = np.log(np.abs(r1 +j)) * np.sin(j * np.pi * i2) + np.sqrt(j) * np.cos(j * np.pi * r2)
+        angle = np.angle(t1)*np.log(j +1) + np.angle(t2)*np.sin(j*r1) + np.cos(j *i2)
+        cf[j-1] = mag * (np.cos(angle) +1j * np.sin(angle)) + np.conj(t1)*np.sin(j) / (j +1)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p529"]=p529
+
 def p530(z,a,state):
     t1, t2 = z[0], z[1]
     n = 35
@@ -8306,6 +11478,39 @@ def p530(z,a,state):
 
 ALLOWED["p530"]=p530
 
+def p531(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec1 = t1.real
+    imc1 = t1.imag
+    rec2 = t2.real
+    imc2 = t2.imag
+
+    for r in range(1, n + 1):
+        if r % 3 == 1:
+            mag = np.log(np.abs(t1 + r) + 1) * np.sin(r / n * np.pi) + np.cos(r * np.pi / 4)
+            ang = np.angle(t1) + np.sin(r * np.pi / 6) * np.angle(t2)
+        elif r % 3 == 2:
+            mag = np.log(np.abs(t2 + r) + 1) * np.cos(r / n * np.pi) + np.sin(r * np.pi / 3)
+            ang = np.angle(t2) + np.cos(r * np.pi / 5) * np.angle(t1)
+        else:
+            mag = np.log(np.abs(t1 * t2 + r) + 1) * np.sin(r / (2 * n) * np.pi) + np.cos(r * np.pi / 2)
+            ang = np.angle(t1 * t2) + np.sin(r * np.pi / 4) * np.cos(r * np.pi / 3)
+        cf[r - 1] = mag * np.exp(1j * ang)
+
+    for k in range(n):
+        if k < n / 3:
+            cf[k] = cf[k] * (k + 1)
+        elif k < 2 * n / 3:
+            cf[k] = cf[k] * (-(k + 1))
+        else:
+            cf[k] = cf[k] * (1 / (k + 1))
+    
+    return cf.astype(np.complex128)
+    
+ALLOWED["p531"]=p531
+
 def p532(z,a,state):
     t1, t2 = z[0], z[1]
     n = 35
@@ -8320,6 +11525,224 @@ def p532(z,a,state):
 
 ALLOWED["p532"]=p532
 
+def p533(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for k in range(1, n + 1):
+        r = t1.real * np.log(k + 1) + t2.real * np.sin(k)
+        im = t1.imag * np.cos(k) + t2.imag * np.log(k + 2)
+        mag = np.log(np.abs(t1) + k**2) * (1 + np.sin(k / 3))
+        ang = np.angle(t1) * np.cos(k / 4) + np.angle(t2) * np.sin(k / 5)
+        cf[k - 1] = (r + 1j * im) * mag * np.exp(1j * ang)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p533"]=p533
+
+def p534(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n + 1):
+        r1 = t1.real
+        r2 = t2.real
+        im1 = t1.imag
+        im2 = t2.imag
+        mag_part1 = np.log(np.abs(t1) + np.abs(t2) + j) * (1 + np.sin(j * r1) + np.cos(j * im2))
+        mag_part2 = np.sin(r2 * j**1.3) * np.cos(im1 * np.sqrt(j))
+        magnitude = mag_part1 * mag_part2 + np.log(j + 1)
+        angle = np.angle(t1) * np.sin(j / 2) + np.angle(t2) * np.cos(j / 3)
+        cf[j - 1] = magnitude * (np.cos(angle) + np.sin(angle) * 1j)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p534"]=p534
+
+def p535(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec = np.linspace(t1.real, t2.real, num=n)
+    imc = np.linspace(t1.imag, t2.imag, num=n)
+    for j in range(1, n + 1):
+        mag = np.log(np.abs(rec[j - 1] + imc[j - 1]*1j) + 1) * np.sin(j * np.pi / 5) + np.cos(j * np.pi / (j + 2))
+        ang = np.angle(rec[j - 1] + imc[j - 1]*1j) + np.sin(j / n * np.pi * 4) - np.cos(j / n * np.pi * 3)
+        cf[j - 1] = mag * (np.cos(ang) + np.sin(ang) * 1j)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p535"]=p535
+
+def p536(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n + 1):
+        r = t1.real * np.log(j + 1) + t2.real * np.sin(j / 3)
+        im = t1.imag * np.cos(j / 4) - t2.imag * np.log(j + 2)
+        magnitude = np.log(np.abs(t1) + j**1.2) * (1 + 0.5 * np.sin(j * np.pi / 6))
+        angle = np.angle(t1) * np.cos(j / 5) + np.angle(t2) * np.sin(j / 7) + np.log(np.abs(t2) + 1)
+        cf[j - 1] = magnitude * (np.cos(angle) + np.sin(angle) * 1j) + (r + im) * 1j
+    return cf.astype(np.complex128)
+
+ALLOWED["p536"]=p536
+
+def p537(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec_seq = np.linspace(t1.real, t2.real, num=n)
+    imc_seq = np.linspace(t1.imag, t2.imag, num=n)
+    for k in range(1, n + 1):
+        magnitude = np.log(np.abs(rec_seq[k - 1] + imc_seq[k - 1]) + 1) * (np.sin(k * np.pi / 7) + np.cos(k * np.pi / 5))
+        angle = np.angle(t1 * t2) + np.sin(k) - np.cos(k / 2)
+        cf[k - 1] = magnitude * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p537"]=p537
+
+def p538(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec = np.linspace(t1.real, t2.real, num=n)
+    imc = np.linspace(t1.imag, t2.imag, num=n)
+    for j in range(1, n + 1):
+        magnitude = np.log(np.abs(t1) + j) * (1 + np.sin(j * np.pi / 7)) + np.sqrt(j) * np.cos(j * np.pi / 5)
+        angle = np.angle(t1) * np.sin(j) + np.angle(t2) * np.cos(j / 3) + np.sin(j * imc[j - 1]) - np.cos(j * rec[j - 1])
+        cf[j - 1] = magnitude * (np.cos(angle) + np.sin(angle) * 1j)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p538"]=p538
+
+
+def p539(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n + 1):
+        k = j**2 + int(np.floor(t1.real))
+        r = np.log(np.abs(t1) + j) * (1 + np.sin(j * np.angle(t2)))
+        s = np.cos(j * t2.real) * np.sin(j * t1.imag) + np.cos(j * t2.imag)
+        magnitude = r + np.log(np.abs(t2) + j)
+        angle = s + np.sin(j * t1.real) * np.cos(np.angle(t1))
+        cf[j - 1] = magnitude * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+
+ALLOWED["p539"]=p539
+
+def p540(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, 36):
+        r1 = t1.real
+        i1 = t1.imag
+        r2 = t2.real
+        i2 = t2.imag
+
+        if j <= 10:
+            mag = np.log(np.abs(t1) + 1) * np.sin(j * r2) + (np.abs(t2)**j) / (j + 1)
+            angle = np.angle(t1) + j * np.angle(t2)
+        elif j <= 25:
+            mag = np.cos(j * i1) * np.log(np.abs(t2) + 1) + np.real(np.conj(t1)) / (j + 2)
+            angle = np.angle(t1) * np.sin(j * np.pi / 5) + np.angle(t2) * np.cos(j * np.pi / 7)
+        else:
+            mag = np.sin(j * r1 + np.cos(j * i2)) * np.log(np.abs(t1) + np.abs(t2) + 1)
+            angle = (np.angle(t1)**2) / (j + 3) + (np.angle(t2)**2) / (j + 4)
+        cf[j - 1] = mag * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p540"]=p540
+
+def p541(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n + 1):
+        mag_part1 = np.log(np.abs(t1) + j) * np.sin(0.3 * j * t2.real)
+        mag_part2 = np.log(np.abs(t2) + j) * np.cos(0.2 * j * t1.imag)
+        mag = mag_part1 + mag_part2
+        angle_part1 = np.angle(t1) + j * 0.1 * np.pi * np.sin(j / 5)
+        angle_part2 = np.angle(t2) + j * 0.1 * np.pi * np.cos(j / 3)
+        angle = angle_part1 + angle_part2
+        cf[j - 1] = mag * (np.cos(angle) + np.sin(angle) * 1j)
+    return cf.astype(np.complex128)
+
+ALLOWED["p541"]=p541
+
+def p542(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec = np.linspace(t1.real, t2.real, num=n)
+    imc = np.linspace(t1.imag, t2.imag, num=n)
+    for j in range(1, n + 1):
+        mag_sum = 0
+        for k in range(1, j + 1):
+            mag_sum += np.sin(k * t1.real) * np.cos(k * t2.imag)
+        magnitude = np.log(np.abs(rec[j - 1] + imc[j - 1]) + 1) * mag_sum
+        angle = 0
+        for r in range(1, j + 1):
+            angle += np.angle(t1) * np.sin(r) + np.angle(t2) * np.cos(r)
+        cf[j - 1] = magnitude * (np.cos(angle) + np.sin(angle) * 1j)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p542"]=p542
+
+def p543(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n + 1):
+        mag_part1 = np.log(np.abs(t1) * j + 1)
+        mag_part2 = np.log(np.abs(t2) + np.sqrt(j))
+        mag_variation = mag_part1 * np.sin(j * t1.real) + mag_part2 * np.cos(j * t2.imag)
+        angle_part1 = np.angle(t1) * j**1.3
+        angle_part2 = np.angle(t2) / (j + 1)
+        angle_variation = angle_part1 - angle_part2 + np.sin(j) * np.cos(j / 2)
+        cf[j - 1] = (np.abs(mag_variation) + 1) * np.exp(1j * angle_variation)
+    return cf.astype(np.complex128)
+
+ALLOWED["p543"]=p543
+
+def p544(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n + 1):
+        mag_part1 = np.log(np.abs(t1) + j) * np.sqrt(np.abs(t2) + j)
+        mag_part2 = np.sin(j * t1.real) * np.cos(j * t2.imag)
+        magnitude = mag_part1 + mag_part2 * (j % 5 + 1)
+        
+        angle_part1 = np.angle(t1) * np.sin(j / 3)
+        angle_part2 = np.angle(t2) * np.cos(j / 4)
+        angle_part3 = np.log(np.abs(t1) + np.abs(t2) + j)
+        angle = angle_part1 + angle_part2 + angle_part3
+        
+        cf[j - 1] = magnitude * (np.cos(angle) + np.sin(angle) * 1j)
+    for k in range(1, n + 1):
+        cf[k - 1] = cf[k - 1] * np.conj(t1) / (np.abs(t2) + 1)
+    return cf.astype(np.complex128)
+
+ALLOWED["p544"]=p544
+
+def p545(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec = np.linspace(t1.real, t2.real, num=n)
+    imc = np.linspace(t1.imag, t2.imag, num=n)
+    for j in range(1, n + 1):
+        mag = (rec[j - 1]**3 + imc[j - 1]**2) * np.log(np.abs(t1) + 1) + np.sin(j * np.pi / 4) * np.cos(j * np.pi / 3)
+        ang = np.angle(t1) + np.angle(t2) * j + np.sin(j * t1.real * t2.imag)
+        cf[j - 1] = mag * np.exp(1j * ang) + np.conj(t1)**(j % 5) * np.cos(j * imc[j - 1])
+    for k in range(1, n + 1):
+        cf[k - 1] += (np.prod(rec[:k] + imc[:k])) * np.sin(k * np.angle(t2))
+    for r in range(1, n + 1):
+        cf[r - 1] = cf[r - 1] * (1 + np.abs(t1 - t2) / (r + 1)) + np.log(np.abs(t1 + t2) + 1) * np.cos(r * np.angle(t1))
+    return cf.astype(np.complex128)
+
+ALLOWED["p545"]=p545
+
 def p546(z,a,state):
     t1, t2 = z[0], z[1]
     n = 35
@@ -8333,6 +11756,772 @@ def p546(z,a,state):
     return cf
 
 ALLOWED["p546"]=p546
+
+def p547(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n + 1):
+        mag = np.log(np.abs(t1) + j) * np.sin(j * t1.real) + np.log(np.abs(t2) + j) * np.cos(j * t1.imag)
+        angle = np.angle(t1) * j**2 - np.angle(t2) * np.sqrt(j)
+        cf[j - 1] = mag * (np.cos(angle) + np.sin(angle) * 1j)
+    for k in range(1, n + 1):
+        cf[k - 1] *= np.prod((k + t1.real) / (1 + k * t2.real)) + np.sum([np.cos(k * np.angle(t1)), np.sin(k * np.angle(t2))])
+    for r in range(1, n + 1):
+        cf[r - 1] += np.conj(cf[n - r]) * np.abs(t1)**(1/r)
+    return cf.astype(np.complex128)
+
+ALLOWED["p547"]=p547
+
+def p548(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n + 1):
+        r = t1.real * np.log(j + 1) + t2.real * np.sqrt(j)
+        im = t1.imag * np.sin(j) + t2.imag * np.cos(j * np.pi / 4)
+        mag = np.abs(t1)**(j % 5 + 1) + np.abs(t2)**(n - j + 1)
+        angle = np.angle(t1) * j + np.angle(t2) / (j + 1)
+        cf[j - 1] = (mag * np.exp(1j * angle)) + np.conj(t1) * np.conj(t2) / (j + 1)
+    return cf.astype(np.complex128)
+
+ALLOWED["p548"]=p548
+
+def p549(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n + 1):
+        mag = np.log(np.abs(t1) * j + 1) + np.sin(j * t2.real)**2 + np.cos(j * t1.imag)
+        angle = np.angle(t1) * j + np.angle(t2) / (j + 1) + np.sin(j / 3)
+        cf[j - 1] = mag * (np.cos(angle) + np.sin(angle) * 1j)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p549"]=p549
+
+def p550(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec = np.linspace(t1.real, t2.real, num=n)
+    imc = np.linspace(t1.imag, t2.imag, num=n)
+    for j in range(1, n + 1):
+        coeff = 0
+        for k in range(1, j + 1):
+            coeff += (rec[k - 1]**2 - imc[k - 1]**3) * np.exp(1j * np.sin(k * np.pi / n))
+            coeff += np.conj(t1) * np.cos(k * np.pi / (j + 1))
+        for r in range(1, n - j + 1):
+            coeff += np.log(np.abs(rec[j - 1] + imc[j - 1]) + 1) * r * np.sin(r * np.pi / n)
+            coeff += np.abs(t2)**r * np.cos(r * np.angle(t1 + t2))
+        cf[j - 1] = coeff
+    return cf.astype(np.complex128)
+    
+ALLOWED["p550"]=p550
+
+def p551(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 40
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n + 1):
+        rec_t1 = t1.real
+        imc_t1 = t1.imag
+        rec_t2 = t2.real
+        imc_t2 = t2.imag
+        mag_part1 = np.log(np.abs(t1) + 1) * np.sin(j * np.pi / n)
+        mag_part2 = np.log(np.abs(t2) + 1) * np.cos(j * np.pi / (n / 2))
+        mag_variation = mag_part1 + mag_part2 + np.prod([rec_t1, imc_t2])**(1 / j)
+        angle_part1 = np.angle(t1) * np.sin(j / 2)
+        angle_part2 = np.angle(t2) * np.cos(j / 3)
+        angle_variation = angle_part1 + angle_part2 + np.sin(j) * np.cos(j)
+        complex_component = np.cos(angle_variation) + 1j * np.sin(angle_variation)
+        cf[j - 1] = mag_variation * complex_component + np.conj(t1) * np.sin(j) + np.conj(t2) * np.cos(j)
+    return cf.astype(np.complex128)
+        
+ALLOWED["p551"]=p551
+
+def p552(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n + 1):
+        mag_part = np.log(np.abs(t1) + j) * np.sin(j * np.pi / 7) + np.log(np.abs(t2) + 1) * np.cos(j * np.pi / 11)
+        angle_part = np.angle(t1) * np.sin(j / 2) + np.angle(t2) * np.cos(j / 3)
+        intricate_sum = 0
+        for k in range(1, j + 1):
+            intricate_sum += (t1.real**k - t2.imag**k) * np.sin(k * np.pi / (j + 1))
+        cf[j - 1] = mag_part * np.exp(1j * angle_part) + np.conj(t1) * (t2**(j % 5)) + intricate_sum
+    return cf.astype(np.complex128)
+    
+ALLOWED["p552"]=p552
+
+def p553(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n + 1):
+        mag_sum = 0
+        ang_sum = 0
+        for k in range(1, j + 1):
+            term_mag = np.log(np.abs(t1) + k**2) * np.sin(k * t2.real) + np.cos(k * t1.imag)
+            term_ang = np.angle(t2) * np.sqrt(k) + np.sin(k / 2)
+            mag_sum += term_mag
+            ang_sum += term_ang
+        cf[j - 1] = (mag_sum * np.exp(1j * ang_sum)) + np.conj(t1) * (t2**j)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p553"]=p553
+
+def p554(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec1 = t1.real
+    rec2 = t2.real
+    imc1 = t1.imag
+    imc2 = t2.imag
+    for j in range(1, n + 1):
+        term1 = rec1**j * np.sin(j * np.pi / 4)
+        term2 = imc2 * np.cos(j * np.pi / 3)
+        term3 = np.log(np.abs(t1) + 1) * t2.real**((j % 5) + 1)
+        term4 = np.abs(t1 + t2)**(0.5 * j)
+        angle = np.angle(t1) + np.angle(t2) * j
+        magnitude = np.abs(term1 + term2 + term3) + term4
+        cf[j - 1] = magnitude * (np.cos(angle) + np.sin(angle) * 1j)
+    for k in range(1, n + 1):
+        cf[k - 1] = cf[k - 1] * np.exp(1j * np.sin(k)) + np.conj(cf[(k % n)])
+    return cf.astype(np.complex128)
+    
+ALLOWED["p554"]=p554
+
+def p555(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n + 1):
+        real_part = t1.real**j + t2.real**((j % 3) + 1)
+        imag_part = t1.imag**((j % 4) + 1) + t2.imag**((j % 5) + 1)
+        magnitude = real_part + imag_part + np.log(np.abs(t1 * t2) + 1)
+        angle = np.sin(j * np.angle(t1)) + np.cos(j * np.angle(t2))
+        cf[j - 1] = magnitude * (np.cos(angle) + np.sin(angle)*1j)
+    return cf.astype(np.complex128)
+
+ALLOWED["p555"]=p555
+
+def p556(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    rec = np.linspace(t1.real, t2.real, num=n)
+    imc = np.linspace(t1.imag, t2.imag, num=n)
+    for j in range(1, n + 1):
+        angle = np.sin(j * rec[j - 1]) + np.cos(j * imc[j - 1]) + np.angle(t1 + t2)
+        magnitude = np.log(np.abs(rec[j - 1]**2 + imc[j - 1]**2) + 1) * (j**1.5 + np.prod(rec[:j] + imc[:j]))
+        cf[j - 1] = magnitude * (np.cos(angle) + np.sin(angle) * 1j)
+    return cf.astype(np.complex128)
+
+ALLOWED["p556"]=p556
+
+def p557(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for k in range(1, n + 1):
+        mag_sum = 0
+        for j in range(1, k + 1):
+            mag_sum += np.sin(j * np.pi / 7) * np.cos(j * np.pi / 5) + np.log(np.abs(t1 * j + t2 / (j + 1)) + 1)
+        magnitude = mag_sum * (1 + np.abs(t1 - t2) / 10)
+        
+        angle_sum = 0
+        for j in range(1, k + 1):
+            angle_sum += np.angle(t1 + j * t2) * np.sin(j * np.pi / 9) - np.angle(t2) * np.cos(j * np.pi / 11)
+        angle = angle_sum / k
+        
+        cf[k - 1] = magnitude * (np.cos(angle) + np.sin(angle) * 1j)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p557"]=p557
+
+def p558(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n + 1):
+        r = t1.real * np.log(j + 1) + t2.real * np.sqrt(j)
+        theta = np.sin(j * t1.imag) + np.cos(j * t2.imag) + np.angle(t1 + t2)
+        for k in range(1, 4):
+            r += t1.real * k / (j + 1)
+            theta += np.sin(k * np.pi / j)
+        cf[j - 1] = r * (np.cos(theta) + 1j * np.sin(theta))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p558"]=p558
+
+def p559(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n + 1):
+        temp_real = 0
+        temp_imag = 0
+        for k in range(1, j + 1):
+            temp_real += (t1.real**k) * np.sin(k * t2.real) / (k + 1)
+            temp_imag += (t2.imag**(j - k + 1)) * np.cos((j - k + 1) * t1.imag) / (j - k + 2)
+        magnitude = np.log(np.abs(temp_real + temp_imag) + 1) * j
+        angle = t1.real * t2.imag / j + np.sin(j * np.angle(t1 + t2))
+        cf[j - 1] = magnitude * (np.cos(angle) + np.sin(angle) * 1j)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p559"]=p559
+
+def p560(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    re1 = t1.real
+    im1 = t1.imag
+    re2 = t2.real
+    im2 = t2.imag
+    for j in range(1, n + 1):
+        magnitude = np.log(np.abs(t1) + j) * np.sin(j * np.pi / n) + np.log(np.abs(t2) + np.sqrt(j)) * np.cos(j * np.pi / (n + 1))
+        angle = np.angle(t1) * np.sin(j / 3) + np.angle(t2) * np.cos(j / 5)
+        cf[j - 1] = magnitude * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+
+ALLOWED["p560"]=p560
+
+def p561(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n + 1):
+        r = t1.real * np.log(j + 1) + t2.imag * np.sin(j * t1.real)
+        theta = np.angle(t1) * np.cos(j) - np.angle(t2) * np.sin(j)
+        mag_variation = np.abs(t1)**j / (1 + j) + np.abs(t2)**(np.sqrt(j))
+        cf[j - 1] = (r + 1j * theta) * (mag_variation + np.sin(j) - np.cos(j))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p561"]=p561
+
+def p562(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n + 1):
+        rec = t1.real + (t2.real - t1.real) * j / n
+        imc = t1.imag + (t2.imag - t1.imag) * j / n
+        mag = np.log(np.abs(rec) + 1) * (j**2 + np.sqrt(n - j + 1)) * np.sin(j) + np.prod(np.arange(1, (j % 5) + 2))
+        angle = np.sin(rec * np.pi / 7) + np.cos(imc * np.pi / 5) + np.angle(t1) - np.angle(t2)
+        cf[j - 1] = mag * (np.cos(angle) + np.sin(angle) * 1j)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p562"]=p562
+
+def p563(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, 27):
+        mag_part = np.log(np.abs(t1) + j) * (j**2 + t2.real * np.sin(j * np.pi / 5))
+        angle_part = np.angle(t1) * np.cos(j * np.pi / 7) - np.angle(t2) * np.sin(j * np.pi / 3)
+        cf[j - 1] = mag_part * (np.cos(angle_part) + np.sin(angle_part) * 1j)
+    return cf.astype(np.complex128)
+
+ALLOWED["p563"]=p563
+
+def p564(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, 27):
+        mag_part1 = np.log(np.abs(t1) + j) * np.sin(j * t2.real)
+        mag_part2 = np.cos(j * t1.imag) * np.abs(t2 + j)
+        mag = mag_part1 + mag_part2
+        
+        angle_part1 = np.angle(t1) * j**0.5
+        angle_part2 = np.sin(j * np.pi / 7) + np.cos(j * np.pi / 11)
+        angle = angle_part1 + angle_part2
+        
+        cf[j - 1] = mag * np.exp(1j * angle)
+    return cf.astype(np.complex128)
+
+ALLOWED["p564"]=p564
+
+def p565(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, 27):
+        a = t1.real + np.sin(j) * t2.real
+        b = t1.imag + np.cos(j) * t2.imag
+        c = np.log(np.abs(t1) + np.abs(t2) + 1)
+        d = np.angle(t1) * j + np.angle(t2) / (j + 1)
+        cf[j - 1] = (a + 1j * b) * c * (np.cos(d) + 1j * np.sin(d)) + np.conj(t1)**j * np.cos(j) - np.conj(t2) * np.sin(j)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p565"]=p565
+
+def p566(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 35
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n + 1):
+        mag_part1 = np.log(np.abs(t1) + j)
+        mag_part2 = np.prod(np.arange(1, (j % 5) + 2))
+        magnitude = mag_part1 * (mag_part2 + np.sqrt(j))
+        
+        angle_part1 = np.sin(j * np.angle(t1))
+        angle_part2 = np.cos(np.angle(t2) / (j + 1))
+        angle = angle_part1 + angle_part2
+        
+        cf[j - 1] = magnitude * (np.cos(angle) + np.sin(angle) * 1j)
+        
+        # Introduce variation based on imaginary components
+        cf[j - 1] += (t1.imag - t2.imag) * np.sin(j)**2
+    return cf.astype(np.complex128)
+    
+ALLOWED["p566"]=p566
+
+def p567(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 25
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, 26):
+        mag = np.log(np.abs(t1) + np.abs(t2) + j) * (1 + np.sin(j * t1.real) + np.cos(j * t2.imag) + t1.real**0.5 * t2.imag**0.3)
+        angle = np.angle(t1) * j + np.angle(t2) * np.sin(j / 3) + np.cos(j / 5)
+        cf[j - 1] = mag * np.exp(1j * angle)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p567"]=p567
+
+def p568(z,a,state):
+    t1, t2 = z[0], z[1]
+    degree = 25
+    cf = np.zeros(degree + 1, dtype=np.complex128)
+    rec = np.linspace(t1.real, t2.real, num=degree + 1)
+    imc = np.linspace(t1.imag, t2.imag, num=degree + 1)
+    for r in range(1, degree + 2):
+        mag = np.log(np.abs(t1 * rec[r - 1] + t2 * imc[r - 1]) + 1) * (1 + np.sin(r * np.pi / 4)) + np.cos(r * np.pi / 5)
+        ang = np.angle(t1) * rec[r - 1] + np.angle(t2) * imc[r - 1] + np.sin(r * np.pi / 6)
+        cf[r - 1] = mag * (np.cos(ang) + np.sin(ang) * 1j)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p568"]=p568
+
+def p569(z,a,state):
+    t1, t2 = z[0], z[1]
+    degree = 25
+    cf = np.zeros(degree + 1, dtype=np.complex128)
+    rec = np.linspace(t1.real, t2.real, num=degree + 1)
+    imc = np.linspace(t1.imag, t2.imag, num=degree + 1)
+    for j in range(1, degree + 2):
+        mag_part = np.log(np.abs(t1) + j) + np.sin(rec[j - 1] * np.pi / (j + 1)) * np.cos(imc[j - 1] * np.pi / (j + 2))
+        angle_part = np.angle(t1) * j + np.sin(rec[j - 1] / (j + 1)) - np.cos(imc[j - 1] / (j + 2))
+        cf[j - 1] = mag_part * (np.cos(angle_part) + np.sin(angle_part) * 1j)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p569"]=p569
+
+def p570(z,a,state):
+    t1, t2 = z[0], z[1]
+    degree = 25
+    cf = np.zeros(degree + 1, dtype=np.complex128)
+    for j in range(1, degree + 2):
+        sum_mag = 0
+        sum_ang = 0
+        for k in range(1, j + 1):
+            term = t1 * k + t2 / k
+            sum_mag += np.log(np.abs(term) + 1)
+            angle_term = t1 * np.sin(k * t2.real) + t2 * np.cos(k * t1.imag)
+            sum_ang += np.angle(angle_term)
+        cf[j - 1] = sum_mag * (np.cos(sum_ang) + np.sin(sum_ang) * 1j)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p570"]=p570
+
+def p571(z,a,state):
+    t1, t2 = z[0], z[1]
+    degree = 25
+    cf = np.zeros(degree + 1, dtype=np.complex128)
+    for j in range(1, degree + 2):
+        k = j % 7 + 1
+        r = t1.real * np.sin(k * t2.real) + t2.real * np.cos(k * t1.imag)
+        i_part = t1.imag * np.cos(k * t2.real) - t2.imag * np.sin(k * t1.imag)
+        magnitude = np.log(np.abs(t1) + j) * (j**1.5) / (1 + np.log(j + 1))
+        angle = np.angle(t1) * j + np.log(j + 1) * np.angle(t2)
+        cf[j - 1] = magnitude * np.exp(1j * angle) * (r + 1j * i_part)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p571"]=p571
+
+def p572(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(25, dtype=np.complex128)
+    for j in range(1, 26):
+        summation_mag = 0
+        summation_ang = 0
+        for k in range(1, j + 1):
+            summation_mag += np.log(np.abs(t1 * k + t2) + 1) * np.sin(k * t1.real)
+            summation_ang += np.angle(t1 * k - t2) + np.cos(k * t2.imag)
+        cf[j - 1] = summation_mag * (np.cos(summation_ang) + np.sin(summation_ang) * 1j)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p572"]=p572
+
+def p573(z,a,state):
+    t1, t2 = z[0], z[1]
+    degree = 25
+    cf = np.zeros(degree + 1, dtype=np.complex128)
+    for j in range(1, degree + 2):
+        part1 = t1.real * np.sin(j * np.angle(t2)) + t2.real * np.cos(j * np.angle(t1))
+        part2 = t1.imag * np.cos(j * t2.real) - t2.imag * np.sin(j * t1.real)
+        magnitude = np.log(np.abs(t1) + j) + np.sum(np.sin(np.arange(1, j + 1) * t1.real) * np.cos(np.arange(1, j + 1) * t2.imag))
+        angle = np.angle(t1) * j + np.angle(t2) * j**0.5
+        cf[j - 1] = magnitude * (np.cos(angle) + np.sin(angle) * 1j)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p573"]=p573
+
+def p574(z,a,state):
+    t1, t2 = z[0], z[1]
+    deg = 25
+    cf = np.zeros(deg + 1, dtype=np.complex128)
+    for j in range(1, deg + 2):
+        r_part = t1.real**j * np.cos(j * np.angle(t2)) + t2.real**(deg + 1 - j) * np.sin(j * np.angle(t1))
+        im_part = t1.imag**j * np.sin(j * np.angle(t2)) - t2.imag**(deg + 1 - j) * np.cos(j * np.angle(t1))
+        magnitude = np.log(np.abs(r_part + im_part) + 1) * (j**1.5)
+        angle = np.angle(t1) * np.sin(j) + np.angle(t2) * np.cos(j)
+        cf[j - 1] = magnitude * (np.cos(angle) + np.sin(angle) * 1j)
+    for k in range(1, deg + 2):
+        factor = (k % 3) + 1
+        cf[k - 1] *= (t1.real**(k % 5) + t2.imag**(k % 4)) * np.sin(k * np.angle(cf[k - 1]))
+    for r in range(2, deg):
+        cf[r - 1] += (cf[r - 2] * cf[r]) / (1 + np.abs(cf[r - 1]))
+    return cf.astype(np.complex128)
+
+ALLOWED["p574"]=p574
+
+def p575(z,a,state):
+    t1, t2 = z[0], z[1]
+    degree = 25
+    cf = np.zeros(degree + 1, dtype=np.complex128)
+    for j in range(1, degree + 2):
+        k = (j * 3 + 7) % 10
+        r = t1.real * np.cos(j) + t2.real * np.sin(k)
+        im = t1.imag * np.sin(j) + t2.imag * np.cos(k)
+        magnitude = np.log(np.abs(t1) + np.abs(t2) + j) * (1 + j % 5) / (j + 1)
+        angle = np.angle(t1) * np.sin(k) + np.angle(t2) * np.cos(j)
+        cf[j - 1] = magnitude * (np.cos(angle) + np.sin(angle) * 1j)
+    return cf.astype(np.complex128)
+
+ALLOWED["p575"]=p575
+
+def p576(z,a,state):
+    t1, t2 = z[0], z[1]
+    degree = 25
+    cf = np.zeros(degree + 1, dtype=np.complex128)
+    for j in range(1, degree + 2):
+        r = j / degree
+        k = (j**2 + 3*j + 1)
+        mag = np.log(np.abs(t1) + np.abs(t2) + r * k) * (1 + np.sin(j) * np.cos(k))
+        angle = np.angle(t1) * np.sin(k) + np.angle(t2) * np.cos(r * j)
+        cf[j - 1] = mag * (np.cos(angle) + np.sin(angle) * 1j)
+    return cf.astype(np.complex128)
+
+ALLOWED["p576"]=p576
+
+def p577(z,a,state):
+    t1, t2 = z[0], z[1]
+    degree = 25
+    cf = np.zeros(degree + 1, dtype=np.complex128)
+    rec_seq = np.linspace(t1.real, t2.real, num=degree + 1)
+    imc_seq = np.linspace(t1.imag, t2.imag, num=degree + 1)
+    for j in range(1, degree + 2):
+        r = rec_seq[j - 1]
+        im = imc_seq[j - 1]
+        mag = np.log(np.abs(r) + np.abs(im) + 1) * np.sin(2 * np.pi * r) + np.cos(3 * np.pi * im)
+        ang = np.angle(t1) * j + np.sin(im * np.pi)
+        cf[j - 1] = mag * (np.cos(ang) + np.sin(ang) * 1j) + np.conj(t2) * np.cos(j * np.pi / degree)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p577"]=p577
+
+def p578(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(25, dtype=np.complex128)
+    for j in range(1, 26):
+        r = t1.real * j + t2.real / (j + 1)
+        im = t1.imag * np.sin(j) + t2.imag * np.cos(j / 2)
+        magnitude = np.log(np.abs(t1) + j) + np.sin(j * t2.real) * np.cos(j * t1.imag)
+        angle = np.angle(t1) * j - np.angle(t2) / (j + 0.5)
+        cf[j - 1] = magnitude * np.exp(1j * angle) + np.conj(t1) * t2**(j % 7)
+    for k in range(1, 26):
+        cf[k - 1] = cf[k - 1] * (1 + 0.05 * np.sin(k * t1.real)) + 0.05j * np.cos(k * t2.imag)
+    return cf.astype(np.complex128)
+
+ALLOWED["p578"]=p578
+
+def p579(z,a,state):
+    t1, t2 = z[0], z[1]
+    degree = 25
+    cf = np.zeros(degree + 1, dtype=np.complex128)
+    for j in range(1, degree + 2):
+        mag_part = np.abs(t1)**j * np.log(np.abs(t2) + 1) + np.abs(t2)**(degree +1 -j) * np.sin(j)
+        angle_part = np.angle(t1) * np.cos(j) + np.angle(t2) * np.sin(j)
+        cf[j - 1] = mag_part * np.exp(1j * angle_part)
+    for k in range(1, degree + 2):
+        cf[k - 1] += np.conj(t1) * t2.real / (k + 1)
+        cf[k - 1] = cf[k - 1] * (1 + np.sin(k * np.pi / 12)) + np.cos(k * np.pi / 18) * t1.imag
+    for r in range(1, degree + 2):
+        cf[r - 1] += np.prod([np.abs(t1), np.abs(t2)]) / (r + 2)
+        cf[r - 1] = cf[r - 1] * np.log(np.abs(cf[r - 1]) + 1) + np.exp(1j * np.sin(r))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p579"]=p579
+
+def p580(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(degree + 1, dtype=np.complex128)
+    for j in range(1, degree + 2):
+        mag_part1 = np.log(np.abs(t1) + j) * np.sin(2 * np.pi * t1.real / (j + 1))
+        mag_part2 = np.log(np.abs(t2) + j) * np.cos(2 * np.pi * t2.imag / (j + 1))
+        magnitude = mag_part1 + mag_part2 + np.prod([t1.real, t1.imag, j])
+        angle = np.angle(t1) * j + np.angle(t2) * (degree +1 - j) + np.sin(j) - np.cos(j)
+        cf[j - 1] = magnitude * np.exp(1j * angle)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p580"]=p580
+
+def p581(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 26
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n + 1):
+        term1 = t1.real * np.sin(j * np.angle(t2)) + t2.real * np.cos(j * t1.imag)
+        term2 = t1.imag * np.cos(j * t2.real) - t2.imag * np.sin(j * np.angle(t1))
+        magnitude = np.log(np.abs(t1) + j) + np.abs(t2)**j
+        angle = term1 + term2
+        cf[j - 1] = magnitude * (np.cos(angle) + np.sin(angle) * 1j) + np.conj(t1) * np.conj(t2) / (j + 1)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p581"]=p581
+
+def p582(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(26, dtype=np.complex128)
+    for j in range(1, 27):
+        r = t1.real**(j % 5 + 1) + t2.real**(j % 7 + 1)
+        imc = t1.imag**(j % 3 + 2) - t2.imag**(j % 4 + 1)
+        magnitude = np.log(np.abs(t1) + j) * np.sin(r) + np.cos(imc)
+        angle = np.angle(t1) * np.cos(j) + np.angle(t2) * np.sin(imc)
+        cf[j - 1] = magnitude * np.exp(1j * angle)
+    return cf.astype(np.complex128)
+
+ALLOWED["p582"]=p582
+
+def p583(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 26
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n + 1):
+        mag = np.log(np.abs(t1.real * j**2 + t2.imag / (j + 1)) + 1) * (1 + np.sin(j * np.pi / 4)) * (1 + np.cos(j * np.pi / 5))
+        angle = np.angle(t1) * np.sin(j) + np.angle(t2) * np.cos(j**2) + np.log(j + 1)
+        cf[j - 1] = mag * (np.cos(angle) + np.sin(angle) * 1j)
+    return cf.astype(np.complex128)
+
+ALLOWED["p583"]=p583
+
+def p584(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 26
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n + 1):
+        r = t1.real * np.sin(j) + t2.real * np.cos(j)
+        k = t1.imag * np.cos(j) - t2.imag * np.sin(j)
+        magnitude = np.log(np.abs(r) + 1) * (1 + (j % 5)) + np.abs(k)**1.5
+        angle = np.angle(t1) * j + np.angle(t2) * np.sqrt(j)
+        cf[j - 1] = magnitude * np.exp(1j * angle) + np.conj(t1) * np.conj(t2) / (j + 1)
+    return cf.astype(np.complex128)
+
+ALLOWED["p584"]=p584
+
+def p585(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 26
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n + 1):
+        k = j**2
+        r = t1.real * np.sin(k * np.pi / 7) + t2.real * np.cos(k * np.pi / 5)
+        s = t1.imag * np.cos(k * np.pi / 3) - t2.imag * np.sin(k * np.pi / 4)
+        mag = np.log(np.abs(t1) + np.abs(t2) + k) * (np.abs(r) + np.abs(s) + 1)
+        angle = np.angle(t1) * np.log(k + 1) + np.sin(r) - np.cos(s)
+        cf[j - 1] = mag * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p585"]=p585
+
+def p586(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 26
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n + 1):
+        mag_part1 = np.log(np.abs(t1) + j) * np.sin(j * np.pi / 7)
+        mag_part2 = np.log(np.abs(t2) + j) * np.cos(j * np.pi / 5)
+        magnitude = mag_part1 + mag_part2 + j
+        angle_part1 = np.angle(t1) * np.cos(j * np.pi / 4)
+        angle_part2 = np.angle(t2) * np.sin(j * np.pi / 3)
+        angle = angle_part1 + angle_part2
+        cf[j - 1] = magnitude * (np.cos(angle) + 1j * np.sin(angle))
+    for k in range(1, n + 1):
+        cf[k - 1] = cf[k - 1] * (1 + 0.05 * k**2) * np.exp(-k / n)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p586"]=p586
+
+def p587(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(25, dtype=np.complex128)
+    n = 25
+    for j in range(1, n + 1):
+        r1 = t1.real + j * t2.real
+        i1 = t1.imag - j * t2.imag
+        magnitude = np.log(np.abs(t1) + j) * np.sin(j * np.angle(t2)) + np.cos(j * np.pi / 12)
+        angle = np.angle(t1) * np.cos(j) + np.sin(j * np.angle(t2))
+        cf[j - 1] = magnitude * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p587"]=p587
+
+def p588(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(25, dtype=np.complex128)
+    degree = 25
+    cf = np.zeros(35, dtype=np.complex128)
+    for j in range(1, degree + 1):
+        mag = np.log(np.abs(t1) + j**1.3) * np.abs(np.sin(j * np.pi / 4)) + np.abs(t2) * np.cos(j * np.pi / 6)
+        angle = np.angle(t1) * np.sin(j / 3) + np.angle(t2) * np.cos(j / 5) + np.sin(j * np.pi / 7)
+        cf[j - 1] = mag * (np.cos(angle) + 1j * np.sin(angle))
+    for k in range(degree + 1, 36):
+        cf[k - 1] = np.log(k + 1) * (np.sin(k * np.angle(t1)) + 1j * np.cos(k / 2))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p588"]=p588
+
+def p589(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(25, dtype=np.complex128)
+    for j in range(1, 26):
+        k = j + 1
+        r = t1.real * np.log(np.abs(t2) + 1) / (j + 1)
+        theta = np.angle(t1) * np.sin(j) + np.angle(t2) * np.cos(j * np.pi / 8)
+        mag = (np.abs(t1)**j + np.abs(t2)**(25 - j)) * (1 + np.sin(j * np.pi / 5))
+        cf[j - 1] = mag * np.exp(1j * theta) + np.conj(t1) * np.cos(j * np.pi / 7)
+    for k in range(1, 26):
+        cf[k - 1] += (1 + 0.05 * np.sin(k * t1.real)) + 0.05j * np.cos(k * t2.imag)
+    for r in range(1, 26):
+        cf[r - 1] += np.prod([np.abs(t1), np.abs(t2)]) / (r + 2)
+        cf[r - 1] = cf[r - 1] * np.log(np.abs(cf[r - 1]) + 1) + np.exp(1j * np.sin(r))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p589"]=p589
+
+def p590(z,a,state):
+    t1, t2 = z[0], z[1]
+    degree = 25
+    cf = np.zeros(degree + 1, dtype=np.complex128)
+    for j in range(1, degree + 2):
+        r_part = t1.real * j + t2.real / (j +1)
+        i_part = t1.imag * np.sin(j) + t2.imag * np.cos(j)
+        magnitude = np.log(np.abs(r_part) + 1) + np.abs(t1) * np.abs(t2) / (j +1)
+        angle = np.angle(t1) * j - np.angle(t2) / (j +1) + np.sin(j * np.pi / 5)
+        cf[j - 1] = magnitude * (np.cos(angle) + np.sin(angle) * 1j)
+    for k in range(1, degree + 2):
+        cf[k - 1] *= (1 + 0.05 * k**2)
+    return cf.astype(np.complex128)
+
+ALLOWED["p590"]=p590
+
+def p591(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 25
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n + 1):
+        k = j * 3 + t1.real - t2.imag
+        r = np.log(np.abs(t1) + np.abs(t2) + j) * (np.sin(j * np.angle(t1)) + np.cos(j * np.angle(t2)))
+        angle = np.sin(k * np.angle(t1)) + np.cos(k * np.angle(t2))
+        cf[j - 1] = r * (np.cos(angle) + np.sin(angle) * 1j) + np.conj(t1)**k * np.sin(j)
+    return cf.astype(np.complex128)
+
+ALLOWED["p591"]=p591
+
+def p592(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 25
+    cf = np.zeros(n + 1, dtype=np.complex128)
+    for j in range(1, n + 2):
+        sum_val = 0
+        prod_val = 1
+        for k in range(1, j + 1):
+            sum_val += np.sin(k * t1.real) * np.cos(k * t2.imag)
+            prod_val *= (t1.real + t2.imag * k)
+        magnitude = np.log(np.abs(t1) + j) * sum_val + prod_val
+        angle = np.angle(t1) * j - np.angle(t2) * j**2
+        cf[j - 1] = magnitude * (np.cos(angle) + np.sin(angle) * 1j) + np.conj(t1) * np.conj(t2)
+    return cf.astype(np.complex128)
+
+ALLOWED["p592"]=p592
+
+def p593(z,a,state):
+    t1, t2 = z[0], z[1]
+    deg = 25
+    cf = np.zeros(deg + 1, dtype=np.complex128)
+    for j in range(1, deg + 2):
+        mag = np.log(np.abs(t1) + j) * (1 + np.sin(j * t2.real)) * (1 + np.cos(j * t1.imag))
+        ang = np.angle(t1) * j + np.angle(t2) * np.sqrt(j)
+        cf[j - 1] = mag * complex(np.cos(ang), np.sin(ang))
+    return cf.astype(np.complex128)
+
+ALLOWED["p593"]=p593
+
+def p594(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 26
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n + 1):
+        r = t1.real * (j**2 + np.sin(j)) + t2.real * np.log(j + 1)
+        im = t1.imag * (np.cos(j / 2) + j) + t2.imag * np.sin(j)
+        mag = np.abs(r + im * 1j) * (1 + np.cos(j * np.pi / 5))
+        angle = np.angle(r + im * 1j)
+        cf[j - 1] = mag * (np.cos(angle) + np.sin(angle) * 1j)
+    return cf.astype(np.complex128)
+
+ALLOWED["p594"]=p594
+
+def p595(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 26
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n + 1):
+        magnitude = np.log(np.abs(t1) + j) * np.sqrt(j) * (1 + np.sin(j)) + np.abs(t2) / (j + 1)
+        angle = np.angle(t1) * np.cos(j) + np.angle(t2) * np.sin(j) + np.sin(j * np.pi / 3)
+        cf[j - 1] = magnitude * (np.cos(angle) + np.sin(angle) * 1j) + np.conj(t1) * np.cos(j / n)
+    return cf.astype(np.complex128)
+
+ALLOWED["p595"]=p595
+
+def p596(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(26, dtype=np.complex128)
+    n = 25
+    for j in range(1, n + 1):
+        k = (j * 3 + 7) % 10
+        r = t1.real * np.sin(j) + t2.imag * np.cos(k)
+        mag = np.log(np.abs(t1) + j**2) * np.sin(k * np.pi / 4) + np.cos(r)
+        angle = np.angle(t1) * np.cos(j) + np.sin(k * np.angle(t2))
+        cf[j - 1] = mag * (np.cos(angle) + np.sin(angle) * 1j) + np.conj(t2)**k
+    cf[25] = np.sum(np.abs(cf[:n]) * np.cos(np.arange(1, n + 1) * np.pi / 6)) + np.prod([np.abs(t1), np.abs(t2)])
+    return cf.astype(np.complex128)
+    
+ALLOWED["p596"]=p596
 
 def p597(z,a,state):
     t1, t2 = z[0], z[1]
@@ -8359,6 +12548,36 @@ def p597(z,a,state):
 
 ALLOWED["p597"]=p597
 
+def p598(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 26
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n + 1):
+        rec1 = t1.real * np.log(j + 1)
+        rec2 = t2.real * np.sin(j * np.pi / 7)
+        imc1 = t1.imag * np.cos(j * np.pi / 5)
+        imc2 = t2.imag * np.sin(j * np.pi / 3)
+        mag = np.log(np.abs(t1) + j) * (1 + (j % 2)) + np.abs(t2)**(j / 2)
+        ang = np.angle(t1) * np.sin(j / 4) - np.angle(t2) * np.cos(j / 6)
+        cf[j - 1] = (rec1 + rec2) + 1j * (imc1 + imc2) + mag * np.exp(1j * ang)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p598"]=p598
+
+def p599(z,a,state):
+    t1, t2 = z[0], z[1]
+    degree = 25
+    cf = np.zeros(degree + 1, dtype=np.complex128)
+    for j in range(1, degree + 2):
+        part1 = np.sin(j * t1.real) * np.cos(j * t2.imag)
+        part2 = np.log(np.abs(t1) + j) + np.log(np.abs(t2) + j)
+        part3 = t1.real**j - t2.imag**j
+        angle = np.angle(t1) * j + t2.real * np.sin(j)
+        cf[j - 1] = (part1 * part2 + part3) * np.exp(1j * angle)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p599"]=p599
+
 def p600(z,a,state):
     t1, t2 = z[0], z[1]
     degree = 25
@@ -8380,6 +12599,918 @@ def p600(z,a,state):
 
 ALLOWED["p600"]=p600
 
+def p601(z,a,state):
+    t1, t2 = z[0], z[1]
+    degree = 25
+    cf = np.zeros(degree + 1, dtype=np.complex128)
+    for j in range(1, degree + 2):
+        mag = np.log(1 + np.abs(t1) * j) * (1 + np.sin(j * np.pi / 6)) + np.cos(j * np.pi / 7)
+        angle = np.angle(t1) * np.cos(j / 3) + np.angle(t2) * np.sin(j / 4) + np.log(j + 1)
+        cf[j - 1] = mag * (np.cos(angle) + 1j * np.sin(angle)) + np.conj(t2)**(j % 5)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p601"]=p601
+
+def p602(z,a,state):
+    t1, t2 = z[0], z[1]
+    degree = 25
+    cf = np.zeros(degree + 1, dtype=np.complex128)
+    rec = np.linspace(t1.real, t2.real, num=degree + 1)
+    imc = np.linspace(t1.imag, t2.imag, num=degree + 1)
+    for j in range(1, degree + 2):
+        mag_sum = 0
+        angle_sum = 0
+        for k in range(1, j + 1):
+            mag_sum += np.log(np.abs(rec[k - 1] + imc[k - 1]) + 1) * np.sin(k * np.pi / 4)
+            angle_sum += np.angle(rec[k - 1] + imc[k - 1] * 1j) * np.cos(k * np.pi / 3)
+        magnitude = mag_sum * np.cos(j * np.pi / 5) + np.abs(t1) / (j + 1)
+        angle = angle_sum + np.sin(j * np.angle(t2))
+        cf[j - 1] = magnitude * np.exp(1j * angle) + np.conj(t2) * np.cos(j)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p602"]=p602
+
+def p603(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(26, dtype=np.complex128)
+    for j in range(1, 27):
+        phase = np.sin(j * t1.real) + np.cos(j * t2.imag)
+        mag = np.log(np.abs(t1) + np.abs(t2) + j) * (j**1.5) * ((j % 5) + 1)
+        real_part = t1.real * np.cos(phase) - t2.imag * np.sin(phase)
+        imag_part = t2.real * np.sin(phase) + t1.imag * np.cos(phase)
+        cf[j - 1] = (real_part + 1j * imag_part) * mag
+    return cf.astype(np.complex128)
+
+ALLOWED["p603"]=p603
+
+def p604(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 25
+    cf = np.zeros(n, dtype=np.complex128)
+    rec = np.linspace(t1.real, t2.real, num=n)
+    imc = np.linspace(t1.imag, t2.imag, num=n)
+    for j in range(1, n + 1):
+        magnitude = np.log(np.abs(rec[j - 1]) + 1) * (np.abs(t1)**(j % 5 + 1)) + np.abs(t2)**((n - j) % 7 + 1)
+        angle = np.sin(rec[j - 1] * np.pi * j) + np.cos(imc[j - 1] * np.pi / (j + 1)) + np.angle(t1) * np.log(j + 2) - np.angle(t2) * np.sqrt(j)
+        cf[j - 1] = magnitude * np.exp(1j * angle)
+    # Introduce variation using product and sum
+    cf = cf * (np.prod(rec) / (np.sum(imc) + 1)) + np.sum(rec) * np.conj(t1) - np.sum(imc) * np.conj(t2)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p604"]=p604
+
+def p605(z,a,state):
+    t1, t2 = z[0], z[1]
+    degree = 25
+    cf = np.zeros(degree + 1, dtype=np.complex128)
+    for j in range(1, degree + 2):
+        mag_part1 = np.log(np.abs(t1) + j) * np.sin(2 * np.pi * t1.real / (j + 1))
+        mag_part2 = np.log(np.abs(t2) + j) * np.cos(2 * np.pi * t2.imag / (j + 1))
+        magnitude = mag_part1 + mag_part2 + np.prod([t1.real, t1.imag, j])
+        angle = np.angle(t1) * j + np.angle(t2) * (degree + 1 - j) + np.sin(j) - np.cos(j)
+        cf[j - 1] = magnitude * np.exp(1j * angle)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p605"]=p605
+
+def p606(z,a,state):
+    t1, t2 = z[0], z[1]
+    degree = 25
+    cf = np.zeros(degree + 1, dtype=np.complex128)
+    r1 = t1.real
+    i1 = t1.imag
+    r2 = t2.real
+    i2 = t2.imag
+    for j in range(1, degree + 2):
+        r_part = r1 * np.sin(j * np.pi / 7) + r2 * np.log(np.abs(j) + 1)
+        i_part = i1 * np.cos(j * np.pi / 5) - i2 * np.sin(j * np.pi / 3)
+        magnitude = np.log(np.abs(t1) + j**2) * (1 + np.sin(j * np.pi / 4)) + np.cos(j * np.pi / 6)
+        angle = np.angle(t1) * j + np.angle(t2) * (degree + 1 - j) + np.sin(j * np.pi / 8)
+        cf[j - 1] = magnitude * (np.cos(angle) + np.sin(angle) * 1j)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p606"]=p606
+
+def p607(z,a,state):
+    t1, t2 = z[0], z[1]
+    degree = 25
+    cf = np.zeros(degree + 1, dtype=np.complex128)
+    for j in range(1, degree + 2):
+        real_part = t1.real**j * np.log(np.abs(t2) + j) + np.cos(j * np.angle(t1 + t2))
+        imag_part = np.sin(j * np.angle(t1)) * np.abs(t2)**j + (t1.real + t2.real) / (j + 1)
+        cf[j - 1] = real_part + 1j * imag_part
+    return cf.astype(np.complex128)
+    
+ALLOWED["p607"]=p607
+
+def p608(z,a,state):
+    t1, t2 = z[0], z[1]
+    degree = 25
+    cf = np.zeros(degree + 1, dtype=np.complex128)
+    rec = np.linspace(t1.real, t2.real, num=degree + 1)
+    imc = np.linspace(t1.imag, t2.imag, num=degree + 1)
+    for j in range(1, degree + 2):
+        mag = np.log(np.abs(rec[j - 1]) + j) * np.sin(2 * np.pi * imc[j - 1]) + np.cos(3 * np.pi * rec[j - 1])
+        ang = np.angle(t1) * j + np.sin(np.pi * imc[j - 1]) - np.cos(np.pi * rec[j - 1])
+        cf[j - 1] = mag * (np.cos(ang) + np.sin(ang) * 1j)
+    return cf.astype(np.complex128)
+
+ALLOWED["p608"]=p608
+
+def p609(z,a,state):
+    t1, t2 = z[0], z[1]
+    degree = 25
+    cf = np.zeros(degree + 1, dtype=np.complex128)
+    for j in range(1, degree + 2):
+        rec_part = t1.real * np.sin(j * t2.real) + np.cos(j * np.angle(t1))
+        imc_part = t2.imag * np.cos(j * t1.imag) + np.sin(j * np.angle(t2))
+        mag = np.log(np.abs(t1) + j) * rec_part + np.abs(t2)**0.5 * imc_part
+        angle = np.angle(t1) * np.cos(j / 3) + np.angle(t2) * np.sin(j / 4)
+        cf[j - 1] = mag * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+
+ALLOWED["p609"]=p609
+
+def p610(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 26
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n + 1):
+        magnitude = np.log(np.abs(t1) + 1) * j**2 + np.log(np.abs(t2) +1) * (n - j +1)**1.5
+        angle = np.angle(t1) * np.sin(j / n * np.pi) + np.angle(t2) * np.cos(j / n * np.pi) + np.sin(j) * 0.5
+        cf[j - 1] = magnitude * (np.cos(angle) + np.sin(angle) * 1j) + np.conj(t1) * t2**j
+    for k in range(1, n + 1):
+        cf[k - 1] = cf[k - 1] * np.exp(1j * np.sin(k * t1.real)) + np.exp(1j * np.cos(k * t2.imag))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p610"]=p610
+
+def p611(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(26, dtype=np.complex128)
+    for j in range(1, 27):
+        mag_part = np.log(np.abs(t1) + j) * np.sin(j * t1.real) + np.cos(j * t2.imag)
+        angle_part = np.angle(t1) * j**2 - np.angle(t2) * np.log(j + 1) + np.sin(j) * np.cos(j)
+        intricate_sum = 0
+        for k in range(1, j + 1):
+            intricate_sum += (t1.real**k * np.cos(k)) / (k + 1)
+        for r in range(1, int(np.floor(j / 2)) +1):
+            intricate_sum += (t2.imag**r * np.sin(r)) / (r + 1)
+        cf[j - 1] = (mag_part + intricate_sum * 1j) * np.exp(1j * angle_part)
+    return cf.astype(np.complex128)
+
+ALLOWED["p611"]=p611
+
+def p612(z,a,state):
+    t1, t2 = z[0], z[1]
+    degree = 25
+    cf = np.zeros(degree + 1, dtype=np.complex128)
+    for j in range(1, degree + 2):
+        r_part = t1.real * np.sin(j * np.pi / 6) + t2.real * np.cos(j * np.pi / 7)
+        i_part = t1.imag * np.cos(j * np.pi / 5) - t2.imag * np.sin(j * np.pi / 8)
+        magnitude = np.log(np.abs(t1) + np.abs(t2) + j) * (1 + np.sin(j * np.pi / 4)) * (1 + np.cos(j * np.pi / 9))
+        angle = np.angle(t1) * np.sin(j * np.pi / 10) + np.angle(t2) * np.cos(j * np.pi / 11)
+        cf[j - 1] = magnitude * (np.cos(angle) + 1j * np.sin(angle))
+    for j in range(1, degree + 2):
+        cf[j - 1] += (t1.real - t2.imag) * np.sin(j * np.pi / 3) * np.cos(j * np.pi /5)
+    return cf.astype(np.complex128)
+
+ALLOWED["p612"]=p612
+
+def p613(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(25, dtype=np.complex128)
+    rec = np.linspace(t1.real, t2.real, num=25)
+    imc = np.linspace(t1.imag, t2.imag, num=25)
+    for j in range(1, 26):
+        mag = np.log(np.abs(rec[j -1] + imc[j -1]) +1) * (j**2 + np.sin(j))
+        ang = np.sin(rec[j -1] * j) + np.cos(imc[j -1] * j)
+        cf[j -1] = mag * np.exp(1j * ang) + np.conj(t1) * t2**j
+    return cf.astype(np.complex128)
+    
+ALLOWED["p613"]=p613
+
+def p614(z,a,state):
+    t1, t2 = z[0], z[1]
+    degree = 8
+    cf = np.zeros(degree + 1, dtype=np.complex128)
+    for j in range(0, degree + 1):
+        mag_part1 = t1.real * j**2
+        mag_part2 = np.log(np.abs(t1) + np.abs(t2) + 1) * (j + 1)
+        mag = mag_part1 + mag_part2 + np.abs(t2.imag)**(j % 3 + 1)
+        
+        angle_part1 = np.angle(t1) * np.sin(j * np.pi / 4)
+        angle_part2 = np.angle(t2) * np.cos(j * np.pi / 3)
+        angle = angle_part1 + angle_part2 + np.sin(j)
+        
+        cf[j] = mag * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p614"]=p614
+
+def p615(z,a,state):
+    t1, t2 = z[0], z[1]
+    degree = 8
+    cf = np.zeros(degree + 1, dtype=np.complex128)
+    for j in range(1, degree + 2):
+        mag_part = np.log(np.abs(t1) + j) * np.sin(j * t2.real) + np.log(np.abs(t2) + j) * np.cos(j * t1.imag)
+        angle_part = np.angle(t1) * j + np.angle(t2) / (j + 1)
+        cf[j -1] = mag_part * np.exp(1j * angle_part)
+    for k in range(1, degree + 2):
+        cf[k -1] += (t1.real - t2.imag) * np.sin(k * np.angle(t1)) + (t2.real + t1.imag) * np.cos(k * np.angle(t2))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p615"]=p615
+
+def p616(z,a,state):
+    t1, t2 = z[0], z[1]
+    degree = 8
+    cf = np.zeros(degree + 1, dtype=np.complex128)
+    for k in range(0, degree + 1):
+        j = k + 1
+        r_part = t1.real * np.sin(k * t2.real) + t2.real * np.cos(k * t1.real)
+        im_part = t1.imag * np.cos(k * t2.imag) - t2.imag * np.sin(k * t1.imag)
+        magnitude = np.log(np.abs(t1 + t2) + 1) * (k + 1) / (1 + k)
+        angle = np.angle(t1) * np.sin(k) + np.angle(t2) * np.cos(k)
+        cf[k] = magnitude * (np.cos(angle) + np.sin(angle) * 1j)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p616"]=p616
+
+def p617(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(9, dtype=np.complex128)
+    for j in range(1, 10):
+        real_sum = 0
+        imag_sum = 0
+        for k in range(1, j +1):
+            for r in range(1, k +1):
+                real_sum += (t1.real**k) * np.cos(r * np.angle(t2))
+                imag_sum += (t2.imag**r) * np.sin(k * np.angle(t1))
+        cf[j -1] = complex(np.log(real_sum + 1), np.log(imag_sum + 1))
+    return cf.astype(np.complex128)
+    
+ALLOWED["p617"]=p617
+
+def p618(z,a,state):
+    t1, t2 = z[0], z[1]
+    degree = 8
+    cf = np.zeros(degree + 1, dtype=np.complex128)
+    for j in range(0, degree + 1):
+        r = j + 1
+        mag = np.log(np.abs(t1) + r**2) * np.sin(r * t2.imag) + np.cos(r * t1.real)
+        ang = np.angle(t1) * r + t2.real / (j + 1)
+        cf[j] = mag * (np.cos(ang) + np.sin(ang) * 1j)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p618"]=p618
+
+def p619(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(9, dtype=np.complex128)
+    r1 = t1.real
+    i1 = t1.imag
+    r2 = t2.real
+    i2 = t2.imag
+    for j in range(1, 10):
+        mag = np.log(np.abs(t1 + j)**2 + np.abs(t2 - j)**2) * (1 + np.sin(j * np.angle(t1)) * np.cos(j * np.angle(t2)))
+        angle = np.angle(t1) * j**0.5 - np.angle(t2) * (9 - j)**0.5 + np.sin(j * np.pi / 5)
+        cf[j -1] = mag * (np.cos(angle) + np.sin(angle) * 1j)
+    return cf.astype(np.complex128)
+
+ALLOWED["p619"]=p619
+
+def p620(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(9, dtype=np.complex128)
+    r1 = t1.real
+    i1 = t1.imag
+    r2 = t2.real
+    i2 = t2.imag
+    for j in range(1, 10):
+        mag_real = np.log(np.abs(t1) + 1) * np.sin(j * np.angle(t1))
+        mag_imag = np.log(np.abs(t2) + 1) * np.cos(j * np.angle(t2))
+        magnitude = mag_real + mag_imag
+        angle = np.angle(t1)**j - np.angle(t2)**j
+        cf[j -1] = magnitude * (np.cos(angle) + np.sin(angle) * 1j)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p620"]=p620
+
+def p621(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(9, dtype=np.complex128)
+    for j in range(1, 10):
+        mag = (t1.real**j + t2.imag**(j/2)) * np.log(np.abs(t1) + j) + np.sin(j * t2.real) * np.cos(j * t1.imag)
+        angle = np.angle(t1) * np.sin(j) - np.angle(t2) * np.cos(j) + np.sin(j * t1.real) * np.cos(j * t2.imag)
+        cf[j -1] = mag * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+
+ALLOWED["p621"]=p621
+
+def p622(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(9, dtype=np.complex128)
+    for j in range(1, 10):
+        mag_part = np.log(np.abs(t1)**j + 1) * (t2.real + j)**2
+        angle_part = np.angle(t1) * np.sin(j * np.angle(t2)) + np.cos(j * t2.real)
+        cf[j -1] = mag_part * (np.cos(angle_part) + np.sin(angle_part) * 1j)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p622"]=p622
+
+def p623(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(9, dtype=np.complex128)
+    for k in range(1, 10):
+        j = k
+        magnitude = np.log(np.abs(t1) + j) * (np.sin(j * t1.real) + np.cos(j * t1.imag))
+        angle = np.angle(t1) * np.sin(j * t1.real) - np.angle(t2) * np.cos(j * t1.imag)
+        cf[j -1] = magnitude * np.exp(1j * angle) + np.conj(t1) * (t2**j)
+    return cf.astype(np.complex128)
+
+ALLOWED["p623"]=p623
+
+def p624(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(9, dtype=np.complex128)
+    for j in range(1, 10):
+        mag_part = np.log(np.abs(t1) + j) * np.sin(j * np.angle(t1)) + np.cos(j * t2.imag)
+        angle_part = np.angle(t1)**j + np.angle(t2)**(j/2) + np.log(j + 1)
+        mag = np.abs(mag_part) + np.prod([t1.real, t2.imag, j])
+        angle = angle_part + np.sum([np.abs(t1), np.abs(t2), j])
+        cf[j -1] = mag * (np.cos(angle) + np.sin(angle) * 1j)
+    return cf.astype(np.complex128)
+
+ALLOWED["p624"]=p624
+
+def p625(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(9, dtype=np.complex128)
+    for j in range(1, 10):
+        mag = np.log(np.abs(t1) + j) * (1 + np.sin(j * np.angle(t1)) + np.cos(j * np.angle(t2)))
+        angle = np.angle(t1)**j - np.angle(t2)**(j/2) + np.sin(j * t1.real) * np.cos(j * t2.imag)
+        cf[j -1] = mag * (np.cos(angle) + np.sin(angle) * 1j)
+    return cf.astype(np.complex128)
+
+ALLOWED["p625"]=p625
+
+def p626(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(9, dtype=np.complex128)
+    for j in range(1, 10):
+        mag_part1 = np.sin(j * np.pi * t1.real / (1 + j)) + np.cos(j * np.pi * t2.real / (1 + j))
+        mag_part2 = np.log(np.abs(t1) + 1) * np.log(np.abs(t2) + 1)
+        magnitude = mag_part1 * mag_part2 + j**2
+        angle_part1 = np.angle(t1) + np.angle(t2) * j
+        angle_part2 = np.cos(j * t2.real) - np.sin(j * t1.imag)
+        angle = angle_part1 + angle_part2
+        cf[j -1] = magnitude * np.exp(1j * angle)
+    return cf.astype(np.complex128)
+
+ALLOWED["p626"]=p626
+
+def p627(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(9, dtype=np.complex128)
+    for k in range(1, 10):
+        mag_part1 = np.log(np.abs(t1)**k + 1) * (t2.real + k)**2
+        angle_part = np.angle(t1) * np.sin(k * np.angle(t2)) + np.cos(k * t2.real)
+        mag_variation = mag_part1 * (np.abs(np.sin(k * t1.real)) + np.abs(np.cos(k * t2.real)))
+        angle = angle_part
+        cf[k -1] = mag_variation * np.exp(1j * angle)
+    return cf.astype(np.complex128)
+
+ALLOWED["p627"]=p627
+
+def p628(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(9, dtype=np.complex128)
+    for j in range(1, 10):
+        mag = 0
+        angle = 0
+        for k in range(1, 5):
+            mag += (t1.real**k * np.sin(k * j)) + (t2.imag**k * np.cos(k + j))
+            angle += (np.angle(t1) + np.angle(t2)) / (k + j)
+        cf[j -1] = mag * np.exp(1j * angle) + np.conj(t1) * np.log(np.abs(t2) + 1)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p628"]=p628
+
+def p629(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(9, dtype=np.complex128)
+    for j in range(1, 10):
+        r = t1.real * j
+        im = t2.imag / j
+        mag = np.log(np.abs(t1) + j) * (np.sin(r) + np.cos(im))
+        angle = np.angle(t1) * np.sin(j) + np.angle(t2) * np.cos(j)
+        cf[j -1] = mag * (np.cos(angle) + np.sin(angle) * 1j)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p629"]=p629
+
+def p630(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(9, dtype=np.complex128)
+    for j in range(1, 10):
+        r_part = t1.real * np.log(np.abs(t2) + j) + np.cos(j * np.angle(t1 + t2))
+        im_part = np.sin(j * np.angle(t1)) * np.abs(t2)**j + (t1.real + t2.real) / (j + 1)
+        magnitude = np.sqrt(r_part**2 + im_part**2) * j**1.5
+        angle = np.arctan2(im_part, r_part) + np.sin(j * np.pi / 3)
+        cf[j -1] = magnitude * (np.cos(angle) + np.sin(angle) * 1j)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p630"]=p630
+
+def p631(z,a,state):
+    t1, t2 = z[0], z[1]
+    degree = 8
+    cf = np.zeros(degree + 1, dtype=np.complex128)
+    for j in range(0, degree + 1):
+        real_part = t1.real**j * np.log(np.abs(t2) + j) + np.cos(j * np.angle(t1 + t2))
+        imag_part = np.sin(j * np.angle(t1)) * np.abs(t2)**j + (t1.real + t2.real) / (j + 1)
+        cf[j] = real_part + 1j * imag_part
+    return cf.astype(np.complex128)
+
+ALLOWED["p631"]=p631
+
+def p632(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(9, dtype=np.complex128)
+    for j in range(1, 10):
+        rec = t1.real + (t2.real - t1.real) * j / 8
+        imc = t1.imag + (t2.imag - t1.imag) * j / 8
+        mag = np.log(np.abs(rec * imc) + 1) * (j**2 + np.sin(j))
+        angle = np.angle(t1) * j - np.angle(t2) * (9 - j) + np.cos(j * np.pi / 4)
+        cf[j -1] = mag * (np.cos(angle) + np.sin(angle) * 1j)
+    return cf.astype(np.complex128)
+  
+ALLOWED["p632"]=p632
+
+def p633(z,a,state):
+    t1, t2 = z[0], z[1]
+    degree = 8
+    cf = np.zeros(degree + 1, dtype=np.complex128)
+    for j in range(0, degree + 1):
+        r = j + 1
+        mag = np.log(np.abs(t1) + r**2) * np.sin(r * t2.imag) + np.cos(r * t1.real)
+        ang = np.angle(t1) * r + t2.real / (j + 1)
+        cf[j] = mag * (np.cos(ang) + np.sin(ang) * 1j)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p633"]=p633
+
+def p634(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(9, dtype=np.complex128)
+    r1 = t1.real
+    im1 = t1.imag
+    r2 = t2.real
+    im2 = t2.imag
+    for j in range(1, 10):
+        mag_part1 = np.sin(j * np.pi * r1 / (1 + j)) + np.cos(j * np.pi * r2 / (1 + j))
+        mag_part2 = np.log(np.abs(t1) + 1) * np.log(np.abs(t2) + 1)
+        magnitude = mag_part1 * mag_part2 + j**2
+        angle_part1 = np.angle(t1) + np.angle(t2) * j
+        angle_part2 = np.cos(j * t2.real) - np.sin(j * im1)
+        angle = angle_part1 + angle_part2
+        cf[j -1] = magnitude * np.exp(1j * angle)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p634"]=p634
+
+def p635(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(9, dtype=np.complex128)
+    for j in range(0, 9):
+        mag_part1 = np.log(np.abs(t1.real + j) + 1)
+        mag_part2 = np.abs(t2)**(j / 3) + np.sin(j * np.pi / 5)
+        angle_part1 = np.sin(j * t1.real) + np.cos(j * t2.imag)
+        angle_part2 = np.angle(t1) * np.cos(j) - np.angle(t2) * np.sin(j)
+        magnitude = mag_part1 * mag_part2 + np.prod([t1.real, t2.imag + j])
+        angle = angle_part1 + angle_part2
+        cf[j] = magnitude * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+  
+ALLOWED["p635"]=p635
+
+def p636(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(9, dtype=np.complex128)
+    r1 = t1.real
+    i1 = t1.imag
+    r2 = t2.real
+    i2 = t2.imag
+    for j in range(1, 10):
+        mag_part = np.log(np.abs(t1) + j) * np.sin(j * np.angle(t2) / 2) + np.cos(j * np.angle(t1) / 3)
+        angle_part = np.angle(t1) * np.cos(j) + np.sin(np.angle(t2))
+        cf[j-1] = mag_part * (np.cos(angle_part) + 1j * np.sin(angle_part))
+    return cf.astype(np.complex128)
+
+ALLOWED["p636"]=p636
+
+def p637(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(9, dtype=np.complex128)
+    for j in range(1, 10):
+        mag = np.log(np.abs(t1 * t2) + 1) * (t1.real**j + t2.imag**(j/2))
+        angle = np.angle(t1) * np.sin(j) - np.angle(t2) * np.cos(j)
+        cf[j-1] = mag * (np.cos(angle) + 1j * np.sin(angle)) + np.conj(t1) * np.sin(j) - np.conj(t2) * np.cos(j)
+    return cf.astype(np.complex128)
+    
+ALLOWED["p637"]=p637
+
+def p638(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(9, dtype=np.complex128)
+    for j in range(1, 10):
+        rec_part = t1.real**j - t2.real**(9-j)
+        im_part = t1.imag * t2.imag + np.cos(j * np.angle(t1) + np.sin(j * np.angle(t2)))
+        mag = np.log(np.abs(t1) + np.abs(t2) + j) * (1 + np.sin(j * t1.real) * np.cos(j * t2.imag))
+        angle = np.angle(t1) * j + np.angle(t2) / (j + 1)
+        cf[j-1] = mag * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+   
+ALLOWED["p638"]=p638
+
+def p639(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(9, dtype=np.complex128)
+    for j in range(1, 10):
+        magnitude = np.log(np.abs(t1) + j) * np.sin(j * np.angle(t1)) + np.log(np.abs(t2) + j**2) * np.cos(j * np.angle(t2))
+        angle = np.angle(t1) * np.cos(j) + np.angle(t2) * np.sin(j)
+        cf[j-1] = magnitude * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+  
+ALLOWED["p639"]=p639
+
+def p640(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(9, dtype=np.complex128)
+    for j in range(1, 10):
+        k = j * 2
+        r = 9 - j
+        mag = np.log(np.abs(t1) + j) * (1 + np.sin(j)) + np.abs(t2)**(0.5 + np.cos(j))
+        angle = np.angle(t1) * j + np.angle(t2) * k + np.sin(j) * np.cos(r)
+        cf[j-1] = mag * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+
+ALLOWED["p640"]=p640
+
+def p641(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(9, dtype=np.complex128)
+    for j in range(1, 10):
+        r_part = t1.real**j + t2.real**(9-j)
+        im_part = t1.imag * np.sin(j) - t2.imag * np.cos(j)
+        magnitude = np.log(np.abs(t1) + np.abs(t2) + j) * (1 + np.sin(j) * np.cos(j))
+        angle = np.angle(t1) * j - np.angle(t2) / (j + 1) + np.sin(j * np.pi / 4)
+        cf[j-1] = magnitude * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+   
+ALLOWED["p641"]=p641
+
+def p642(z,a,state):
+    t1, t2 = z[0], z[1]
+    degree = 8
+    cf = np.zeros(degree + 1, dtype=np.complex128)
+    for j in range(0, degree + 1):
+        k = (j % 3) + 1
+        r = (j // 2) + 1
+        mag_part1 = np.log(np.abs(t1) + 1) * np.sin(j * np.pi / 4)
+        mag_part2 = np.cos(k * np.pi / 3) * np.abs(t2)**r
+        magnitude = mag_part1 + mag_part2
+        angle_part1 = np.angle(t1) * j
+        angle_part2 = np.sin(r * np.pi / 5) + np.angle(t2) * k
+        angle = angle_part1 + angle_part2
+        cf[j] = magnitude * np.exp(1j * angle)
+    return cf.astype(np.complex128)
+
+ALLOWED["p642"]=p642
+    
+def p643(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(9, dtype=np.complex128)
+    for k in range(1, 10):
+        mag = t1.real**k + t2.imag**(9 - k) + np.log(np.abs(t1) + np.abs(t2) + 1) * np.sin(k * np.angle(t1) * np.angle(t2))
+        angle = np.angle(t1) * np.cos(k * t2.real) - np.angle(t2) * np.sin(k * t1.imag)
+        cf[k-1] = mag * np.exp(1j * angle)
+    return cf.astype(np.complex128)
+
+ALLOWED["p643"]=p643
+
+def p644(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(9, dtype=np.complex128)
+    for j in range(1, 10):
+        part1 = t1.real**j + t2.imag**(j % 4 + 1)
+        part2 = np.sin(j * t1.real + np.cos(j * t2.imag))
+        part3 = np.log(np.abs(t1) + np.abs(t2) + j)
+        magnitude = part1 * part2 + part3
+        angle = np.angle(t1)**j + np.angle(t2) * np.sin(j) + np.angle(np.conj(t1)) - np.angle(np.conj(t2))
+        cf[j-1] = magnitude * np.exp(1j * angle)
+    return cf.astype(np.complex128)
+
+ALLOWED["p644"]=p644
+
+def p645(z,a,state):
+    t1, t2 = z[0], z[1]
+    degree = 8
+    cf = np.zeros(degree + 1, dtype=np.complex128)
+    real_seq = np.linspace(t1.real, t2.real, degree + 1)
+    im_seq = np.linspace(t1.imag, t2.imag, degree + 1)
+    for j in range(1, degree + 2):
+        mag_component = np.log(np.abs(t1) + j) * np.sin(j * np.pi / 4) + np.cos(j * np.pi / 3) * np.abs(t2)
+        angle_component = np.angle(t1) * j + np.angle(t2) * (degree + 1 - j)
+        intricate_part = np.exp(1j * (np.sin(real_seq[j-1]) + np.cos(im_seq[j-1])))
+        cf[j-1] = mag_component * intricate_part * np.conj(t2) + np.prod(np.arange(1, j+1)) * np.sin(j)
+    return cf.astype(np.complex128)
+
+ALLOWED["p645"]=p645
+    
+def p646(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(9, dtype=np.complex128)
+    rec = np.linspace(t1.real, t2.real, 9)
+    imc = np.linspace(t1.imag, t2.imag, 9)
+    for j in range(1, 10):
+        magnitude = np.log(np.abs(t1)**j + np.abs(t2)**(9-j) + 1) * (j**np.sin(j) + j**np.cos(j))
+        angle = np.angle(t1) * np.sin(j * np.pi / 4) + np.angle(t2) * np.cos(j * np.pi / 3)
+        cf[j-1] = magnitude * (np.cos(angle) + 1j * np.sin(angle))
+    for k in range(1, 10):
+        cf[k-1] = cf[k-1] * (1 + 0.1 * k) / (1 + 0.05 * k**2)
+    return cf.astype(np.complex128)
+
+ALLOWED["p646"]=p646
+
+def p647(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(9, dtype=np.complex128)
+    for k in range(0, 9):
+        j = k + 1
+        r = t1.real + t2.real * k
+        im = t1.imag - t2.imag * k
+        angle = np.sin(r) * np.cos(im) + np.angle(t1 * t2) / (k + 1) - np.log(np.abs(r * im) + 1)
+        mag = (np.abs(t1) * np.abs(t2))**k + (r + im + k) + (r * im * (k + 1))
+        cf[k] = mag * np.exp(1j * angle)
+    return cf.astype(np.complex128)
+
+ALLOWED["p647"]=p647
+
+def p648(z,a,state):
+    t1, t2 = z[0], z[1]
+    degree = 8
+    cf = np.zeros(degree + 1, dtype=np.complex128)
+    for j in range(0, degree + 1):
+        sum_real = 0
+        sum_imag = 0
+        for k in range(1, j + 2):
+            term_real = np.log(np.abs(t1) * k + 1) * np.sin(k * np.angle(t2))
+            term_imag = np.log(np.abs(t2) * (degree - j + k) + 1) * np.cos(k * np.angle(t1))
+            sum_real += term_real
+            sum_imag += term_imag
+        magnitude = sum_real**2 + sum_imag**2
+        angle = sum_real / (sum_imag + 1e-8)
+        cf[j] = np.sqrt(magnitude) * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+
+ALLOWED["p648"]=p648
+
+def p649(z,a,state):
+    t1, t2 = z[0], z[1]
+    degree = 8
+    cf = np.zeros(degree + 1, dtype=np.complex128)
+    for j in range(0, degree + 1):
+        k = j + 1
+        mag_part1 = np.log(np.abs(t1) + 1) * (j + 1)**1.5
+        mag_part2 = np.log(np.abs(t2) + 1) * (degree - j + 1)**1.2
+        magnitude = mag_part1 + mag_part2
+        angle_part1 = np.sin(j * np.angle(t1)) 
+        angle_part2 = np.cos(j * np.angle(t2))
+        angle = angle_part1 + angle_part2
+        cf[k-1] = magnitude * np.exp(1j * angle) + np.conj(t1) * np.conj(t2) * j
+    return cf.astype(np.complex128)
+ 
+ALLOWED["p649"]=p649
+
+def p650(z,a,state):
+    t1, t2 = z[0], z[1]
+    degree = 8
+    cf = np.zeros(degree + 1, dtype=np.complex128)
+    for j in range(1, degree + 2):
+        mag_factor = np.log(np.abs(t1) + j) * np.sin(j * t2.real) + np.cos(j * t1.imag)
+        angle_factor = np.angle(t1) * np.sqrt(j) - np.angle(t2) / (j + 1) + np.sin(j)
+        cf[j-1] = mag_factor * np.exp(1j * angle_factor)
+    return cf.astype(np.complex128)
+
+ALLOWED["p650"]=p650
+    
+def p651(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(9, dtype=np.complex128)
+    rec = np.linspace(t1.real, t2.real, 9)
+    imc = np.linspace(t1.imag, t2.imag, 9)
+    for j in range(1, 10):
+        mag = np.log(np.abs(rec[j-1]) + 1) * np.cos(j) + np.abs(t2)**j
+        ang = np.angle(t1) * np.sin(j * np.pi * imc[j-1]) + np.angle(t2) * np.cos(j * np.pi * rec[j-1])
+        cf[j-1] = mag * (np.cos(ang) + 1j * np.sin(ang))
+    return cf.astype(np.complex128)
+
+ALLOWED["p651"]=p651
+
+def p652(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(9, dtype=np.complex128)
+    for j in range(1, 10):
+        angle_part = np.angle(t1) * np.sin(j) + np.angle(t2) * np.cos(j)
+        magnitude_part = np.abs(t1)**j + np.log(np.abs(t2) + 1) * j
+        phase_variation = np.sin(j * t1.real) + np.cos(j * t2.imag)
+        real_component = t1.real * magnitude_part * np.cos(angle_part) + phase_variation
+        imag_component = t2.imag * magnitude_part * np.sin(angle_part) + phase_variation
+        cf[j-1] = complex(real_component, imag_component)
+    return cf.astype(np.complex128)
+
+ALLOWED["p652"]=p652
+
+def p653(z,a,state):
+    t1, t2 = z[0], z[1]
+    degree = 8
+    cf = np.zeros(degree + 1, dtype=np.complex128)
+    rec_seq = np.linspace(t1.real, t2.real, degree + 1)
+    imc_seq = np.linspace(t1.imag, t2.imag, degree + 1)
+    for k in range(1, degree + 2):
+        mag = 0
+        ang = 0
+        for j in range(1, k + 1):
+            mag += np.sin(rec_seq[j-1] * j) * np.cos(imc_seq[j-1] * j)
+            ang += np.angle(rec_seq[j-1] + imc_seq[j-1] * 1j) * j
+        mag = mag * np.log(np.abs(rec_seq[k-1] + imc_seq[k-1] * 1j) + 1)
+        ang = ang / k
+        cf[k-1] = mag * (np.cos(ang) + 1j * np.sin(ang))
+    return cf.astype(np.complex128)
+
+ALLOWED["p653"]=p653
+
+def p654(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(9, dtype=np.complex128)
+    for j in range(0, 9):
+        k = (j % 3) + 1
+        r = np.log(np.abs(t1) + np.abs(t2)*j) * (j**1.5)
+        angle = np.angle(t1)**k - np.angle(t2)**j + np.sin(j * np.pi / 5)
+        cf[j] = r * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+  
+ALLOWED["p654"]=p654
+
+def p655(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(9, dtype=np.complex128)
+    for j in range(1, 10):
+        if j % 2 == 0:
+            mag = np.log(np.abs(t1) + j**2) * np.sqrt(j)
+        else:
+            mag = np.abs(t2)**j / (1 + j)
+        if j % 3 == 0:
+            angle = np.angle(t1) * np.sin(j) + np.cos(j * np.angle(t2))
+        else:
+            angle = np.sin(j * np.angle(t1)) - np.cos(j * np.angle(t2))
+        cf[j-1] = mag * np.exp(1j * angle) * (t1.real + t2.imag / j)
+    return cf.astype(np.complex128)
+ 
+ALLOWED["p655"]=p655
+
+def p656(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(9, dtype=np.complex128)
+    for j in range(1, 10):
+        mag_part1 = np.log(np.abs(t1) + 1) * np.sin(j * np.angle(t1))
+        mag_part2 = np.log(np.abs(t2) + 1) * np.cos(j * np.angle(t2))
+        magnitude = mag_part1 + mag_part2 + (j**2) / (np.abs(t1) + np.abs(t2) + 1)
+        
+        angle_part1 = np.angle(t1) * np.cos(j) 
+        angle_part2 = np.angle(t2) * np.sin(j)
+        angle_part3 = np.sin(j * t1.real) - np.cos(j * t2.imag)
+        angle = angle_part1 + angle_part2 + angle_part3
+        
+        cf[j-1] = magnitude * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+
+ALLOWED["p656"]=p656
+
+def p657(z,a,state):
+    t1, t2 = z[0], z[1]
+    degree = 8
+    cf = np.zeros(degree + 1, dtype=np.complex128)
+    for j in range(0, degree + 1):
+        r = j / degree
+        mag = np.log(np.abs(t1) + np.abs(t2) + r) * (1 + np.sin(j * np.pi / 4))
+        angle = np.angle(t1) * r**2 + np.angle(t2) * (1 - r)**2 + np.cos(j * np.pi / 3)
+        cf[j] = mag * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+
+ALLOWED["p657"]=p657
+
+def p658(z,a,state):
+    t1, t2 = z[0], z[1]
+    degree = 8
+    cf = np.zeros(degree + 1, dtype=np.complex128)
+    for j in range(0, degree + 1):
+        mag = np.log(np.abs(t1) + np.abs(t2) + j + 1) * (j + 1)**1.5
+        ang = np.sin(j * np.angle(t1)) - np.cos(np.angle(t2))
+        cf[j] = mag * np.exp(1j * ang)
+    return cf.astype(np.complex128)
+
+ALLOWED["p658"]=p658
+
+def p659(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(9, dtype=np.complex128)
+    for r in range(0, 9):
+        mag = t1.real**2 * r + np.log(np.abs(t2) + 1) + np.sin(r * t1.real)
+        angle = np.angle(t1) * r - np.cos(r * t2.imag)
+        cf[r] = mag * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+ 
+ALLOWED["p659"]=p659
+
+def p660(z,a,state):
+    t1, t2 = z[0], z[1]
+    degree = 8
+    cf = np.zeros(degree + 1, dtype=np.complex128)
+    for j in range(0, degree + 1):
+        mag_component = np.log(np.abs(t1) + np.abs(t2) + j + 1) * np.sin(j * np.pi / 5)
+        angle_component = np.angle(t1) * np.cos(j) - np.angle(t2) * np.sin(j / 2)
+        real_part = t1.real**(j % 3 + 1) + t2.real**(degree - j % 2)
+        imag_part = t2.imag * np.cos(j * np.pi / 4)
+        cf[j] = (mag_component + real_part) + 1j * (angle_component + imag_part)
+    return cf.astype(np.complex128)
+
+ALLOWED["p660"]=p660
+
+def p661(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(9, dtype=np.complex128)
+    for j in range(1, 10):
+        r_part = t1.real**j + t2.real**(9-j)
+        i_part = t1.imag * np.sin(j) - t2.imag * np.cos(j)
+        magnitude = np.log(r_part + 1) * np.abs(t1 + t2) + np.sin(r_part) * np.cos(i_part)
+        angle = np.angle(t1)*j**2 - np.angle(t2)/j + np.sin(j * np.angle(t2))
+        cf[j-1] = magnitude * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+
+ALLOWED["p661"]=p661
+
+def p662(z,a,state):
+    t1, t2 = z[0], z[1]
+    degree = 8
+    cf = np.zeros(degree + 1, dtype=np.complex128)
+    for k in range(0, degree + 1):
+        j = np.sin(k * t1.real + np.cos(k * t2.imag)) + np.log(np.abs(t1) + np.abs(t2) + 1)
+        r = np.cos(k * np.angle(t1)) * np.sin(k * np.angle(t2)) + t1.real * t2.imag
+        magnitude = np.sqrt(j**2 + r**2) * (k + 1)
+        angle = np.arctan2(r, j) + np.sin(k * t1.real * t2.imag)
+        cf[k] = magnitude * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+
+ALLOWED["p662"]=p662
+
+def p663(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(9, dtype=np.complex128)
+    for j in range(1, 10):
+        r = j
+        term1 = (t1.real**r + t2.imag**(r % 5 + 1)) * np.log(np.abs(t1) + 1)
+        term2 = (np.abs(t2) * np.cos(r * np.angle(t1))) + (np.sin(r) * t2.real)
+        angle = np.angle(t1) * np.sin(r) - np.angle(t2) * np.cos(r)
+        cf[j-1] = (term1 + term2) * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+
+ALLOWED["p663"]=p663
+
+def p664(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(9, dtype=np.complex128)
+    for j in range(0,9):
+        mag = np.log(np.abs(t1 + j * t2) + 1) * np.sin(j * np.pi / 4) + np.cos(j * np.angle(t1 * t2))
+        angle = np.angle(t1)**j - np.angle(t2)**(8 - j) + np.sin(j * np.pi / 3)
+        cf[j] = mag * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+
+ALLOWED["p664"]=p664
+
+def p665(z,a,state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(8, dtype=np.complex128)
+    for j in range(1, 9):
+        mag = np.log(np.abs(t1) + j) * np.sin(j * np.angle(t1))
+        angle = np.cos(j * np.angle(t2)) + np.sin(j * t2.real)
+        cf[j-1] = mag * (np.cos(angle) + 1j * np.sin(angle))
+    return cf.astype(np.complex128)
+
+ALLOWED["p665"]=p665
+    
 def p666(z,a,state):
     t1, t2 = z[0], z[1]
     n = 8
