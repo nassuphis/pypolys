@@ -11,6 +11,11 @@ from numba import njit, types
 import argparse
 import ast
 
+def xim(z,a,state):
+    v1 = 1j*z[0].real
+    v2 = 1j*z[1].real
+    return np.array([v1,v2],dtype=np.complex128)
+
 def op_zz(z,a,state):
     v = z[0]+z[1]*1j
     return np.array([v,v],dtype=np.complex128)
@@ -67,6 +72,7 @@ def op_bkr(z,a,state):
 
 
 ALLOWED = {
+    "xim":   xim,
     "zz":    op_zz,
     "zz1":   op_zz1,
     "zz2":   op_zz2,
