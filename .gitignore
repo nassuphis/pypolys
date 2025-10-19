@@ -54,6 +54,7 @@ coverage.xml
 cover/
 *.png
 *.tiff
+*.tif
 *.jpeg
 *.dzi
 *.npz
