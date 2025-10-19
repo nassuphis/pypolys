@@ -194,6 +194,21 @@ def view(roots_mat: np.ndarray, view_string=None,pad=0.05):
 # on/off rasterize
 # =======================
 
+def to_bilevel_uint8(a: np.ndarray) -> np.ndarray:
+    a = np.asarray(a)
+    if a.dtype != np.uint8:
+        a = np.where(a != 0, 255, 0).astype(np.uint8, copy=False)
+    else:
+        if a.min() != 0 or a.max() not in (1, 255):
+            a = np.where(a > 0, 255, 0).astype(np.uint8, copy=False)
+    return a
+
+def np_to_vips_gray_u8(a: np.ndarray) -> vips.Image:
+    # a is HxW uint8, 1 band, C-contiguous
+    H, W = a.shape
+    mem = np.ascontiguousarray(a).tobytes()
+    return vips.Image.new_from_memory(mem, W, H, 1, "uchar")
+
 def write_raster(img_arr,out="out.png"):
     px = img_arr.shape
     img = vips.Image.new_from_memory(img_arr.data, px[0], px[1], 1, "uchar")

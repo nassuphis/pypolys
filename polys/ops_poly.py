@@ -504,6 +504,120 @@ def g30(z,a,state):
 
 ALLOWED["g30"]=g30
 
+@njit(cache=True, fastmath=True)
+def _poly_eval_cubic(a3: complex, a2: complex, a1: complex, a0: complex, x: complex) -> complex:
+    # Horner: (((a3*x) + a2)*x + a1)*x + a0
+    return (((a3 * x) + a2) * x + a1) * x + a0
+
+@njit(cache=True, fastmath=True)
+def durand_kerner_cubic(a3: complex, a2: complex, a1: complex, a0: complex):
+    """
+    Return (roots[3], ok) for a3*x^3 + a2*x^2 + a1*x + a0 = 0.
+    a3 must be nonzero. JIT-safe, no Python lists/try/except.
+    """
+    roots = np.empty(3, dtype=np.complex128)
+
+    # Guard: degenerate leading coefficient → fail
+    if not np.isfinite(a3.real) or not np.isfinite(a3.imag):
+        return roots, False
+    if (a3.real == 0.0 and a3.imag == 0.0):
+        return roots, False
+
+    # Scale polynomial for numerical stability (optional but cheap)
+    # We normalize so that |a3| == 1 (divide all coeffs by a3)
+    inv_a3 = 1.0 / a3
+    b2 = a2 * inv_a3
+    b1 = a1 * inv_a3
+    b0 = a0 * inv_a3
+
+    # Initial guesses: 1, w, w^2 with a mild scale based on coefficients
+    two_pi_over_3 = 2.0943951023931953  # 2π/3
+    w = np.cos(two_pi_over_3) + 1j * np.sin(two_pi_over_3)
+    r0 = 1.0 + 0.0j
+    r1 = w
+    r2 = w * w
+
+    # Optional radius heuristic: |b0|^(1/3) as a first scale
+    # Avoid NaNs if b0 = 0
+    mag = np.abs(b0)
+    if np.isfinite(mag) and mag > 0.0:
+        s = mag ** (1.0 / 3.0)
+        r0 *= s
+        r1 *= s
+        r2 *= s
+
+    # Iterate
+    max_iter = 60
+    tol = 1e-12
+    ok = False
+    eps = 1e-18
+
+    for _ in range(max_iter):
+        # Evaluate normalized p(x) = x^3 + b2 x^2 + b1 x + b0
+        p0 = _poly_eval_cubic(1.0 + 0.0j, b2, b1, b0, r0)
+        p1 = _poly_eval_cubic(1.0 + 0.0j, b2, b1, b0, r1)
+        p2 = _poly_eval_cubic(1.0 + 0.0j, b2, b1, b0, r2)
+
+        # Denominators Π_{j≠k} (rk - rj)
+        d0 = (r0 - r1) * (r0 - r2)
+        d1 = (r1 - r0) * (r1 - r2)
+        d2 = (r2 - r0) * (r2 - r1)
+
+        # Jitter if any denom is ~0 to avoid blow-ups
+        if np.abs(d0) < eps or np.abs(d1) < eps or np.abs(d2) < eps:
+            r0 += eps
+            r1 -= eps
+            r2 += 2 * eps
+            continue
+
+        # Update
+        nr0 = r0 - p0 / d0
+        nr1 = r1 - p1 / d1
+        nr2 = r2 - p2 / d2
+
+        # Convergence check (max step)
+        step = max(np.abs(nr0 - r0), np.abs(nr1 - r1), np.abs(nr2 - r2))
+        r0, r1, r2 = nr0, nr1, nr2
+        if step < tol:
+            ok = True
+            break
+
+    roots[0] = r0
+    roots[1] = r1
+    roots[2] = r2
+    return roots, ok
+
+def g31(z,a,state):
+    t1, t2 = z[0], z[1]
+    n = 100
+    cf = np.zeros(n, dtype=np.complex128)
+    cf[0] = -100.0j  # cf[1] and cf[2] already 0
+
+    # ---- first cubic: [t1, t2, t1, 1] ----
+    roots1, ok1 = durand_kerner_cubic(t1, t2, t1, 1.0 + 0.0j)
+    mid = (n // 2) - 2  # slice length 3: mid:mid+3
+    if ok1:
+        cf[mid]     = 100.0 * roots1[0]
+        cf[mid + 1] = 100.0 * roots1[1]
+        cf[mid + 2] = 100.0 * roots1[2]
+    else:
+        # broadcast scalar to slice (Numba supports this)
+        cf[mid:mid + 3] = 100.0 + 0.0j
+
+    # ---- second cubic: [t2, t1, t2, 10j] ----
+    roots2, ok2 = durand_kerner_cubic(t2, t1, t2, 0.0 + 10.0j)
+    end = n - 3
+    if ok2:
+        cf[end]     = 100.0 * roots2[0]
+        cf[end + 1] = 100.0 * roots2[1]
+        cf[end + 2] = 100.0 * roots2[2]
+    else:
+        cf[end:n] = 100.0 + 0.0j
+
+    return cf
+
+ALLOWED["g31"]=g31
+
 def g32(z,a,state):
     t1, t2 = z[0], z[1]
     n = 12
@@ -917,39 +1031,113 @@ def g57(z,a,state):
 
 ALLOWED["g57"]=g57
 
-def g58(z,a,state):
+def g58(z, a, state):
     t1, t2 = z[0], z[1]
     n = 10
     cf = np.zeros(n, dtype=np.complex128)
-    cf[0] = np.log(1j * t1**2 + 1)
-    cf[1] = np.exp(1j * t1 * t2) + 1
+
+    EPS = 1e-12
+
+    def safe_logc(x: complex) -> complex:
+        # avoid log(0) or non-finite inputs
+        if not (np.isfinite(x.real) and np.isfinite(x.imag)):
+            return 0.0 + 0.0j
+        if abs(x) < EPS:
+            return 0.0 + 0.0j
+        return np.log(x)
+
+    def safe_divc(num: complex, den: complex) -> complex:
+        if not (np.isfinite(den.real) and np.isfinite(den.imag)):
+            return 0.0 + 0.0j
+        if abs(den) < EPS:
+            return 0.0 + 0.0j
+        return num / den
+
+    # 3**t1 * 2**t2 but stable for complex exponents
+    def pow_real_base_complex_exp(b: float, zc: complex) -> complex:
+        # since b>0, log(b) is real; exp(zc*log(b)) is well-defined
+        return np.exp(zc * np.log(b))
+
+    # build cf with guards
+    cf[0] = safe_logc(1j * t1**2 + 1.0)
+    cf[1] = np.exp(1j * t1 * t2) + 1.0
     cf[2] = np.sin(t1 * t2) + t2
     cf[3] = np.cos(t1**3 + t2**2) * 1j
     cf[4] = t1 * t2 * (t1 - t2)
     cf[5] = np.sqrt(np.abs(t1 * t2)) * (t1 + t2)
-    cf[6] = t1**3 * t2**3 * 1j
-    cf[7] = (t2 - t1)/(t1 + t2) * 1j
-    cf[8] = np.log(t1*t2) + np.sin(t1 + t2) * 1j
-    cf[9] = 3**t1 * 2**t2
+    cf[6] = (t1**3) * (t2**3) * 1j
+    cf[7] = 1j * safe_divc((t2 - t1), (t1 + t2))           # <-- guarded division
+    cf[8] = safe_logc(t1 * t2) + 1j * np.sin(t1 + t2)      # <-- guarded log
+    cf[9] = pow_real_base_complex_exp(3.0, t1) * pow_real_base_complex_exp(2.0, t2)
+
     return cf.astype(np.complex128)
 
 ALLOWED["g58"]=g58
 
-def g59(z,a,state):
+def g59(z, a, state):
     t1, t2 = z[0], z[1]
     cf = np.zeros(11, dtype=np.complex128)
-    cf[0] = 100 * (t1**4 - t2**4)
-    cf[1] = -100j * (t1 * t2 * (t1**2 + t2**2))
-    cf[2] = 100 * np.sqrt((t1**2 * t2**2).real)
-    cf[3] = 100 * (t1 - t2).imag
-    cf[4] = 100j * (t1**2 + t2**2)
-    cf[5] = 100 * np.exp(1j * np.abs(t1 - t2))
-    cf[6] = 100 * np.sin((t1 + t2).real)
-    cf[7] = -100j * np.cos((t1 - t2).imag)
-    cf[8] = 100 * (t1*t2 / np.abs(t1*t2))
-    cf[9] = 100 * np.sqrt(t1.real * t2.real) - 100j * np.sqrt(t1.imag * t2.imag)
-    cf[10] = 100 * np.exp(1j * (np.angle(t1) - np.angle(t2)))
-    return cf.astype(np.complex128)
+
+    EPS = 1e-15
+
+    # precompute a few reused things (Numba likes explicit scalars)
+    t1r, t1i = t1.real, t1.imag
+    t2r, t2i = t2.real, t2.imag
+
+    prod = t1 * t2
+    prod_abs = np.abs(prod)  # scalar float
+
+    # 0) 100 * (t1**4 - t2**4)
+    cf[0] = 100.0 * (t1**4 - t2**4)
+
+    # 1) -100j * (t1 * t2 * (t1**2 + t2**2))
+    cf[1] = -100.0j * (t1 * t2 * (t1**2 + t2**2))
+
+    # 2) 100 * sqrt( Re( (t1**2 * t2**2) ) ), but clamp to >= 0
+    v2 = (t1 * t1 * t2 * t2).real
+    if not np.isfinite(v2) or v2 < 0.0:
+        v2 = 0.0
+    cf[2] = 100.0 * np.sqrt(v2)
+
+    # 3) 100 * (t1 - t2).imag
+    cf[3] = 100.0 * (t1i - t2i)
+
+    # 4) 100j * (t1**2 + t2**2)
+    cf[4] = 100.0j * (t1**2 + t2**2)
+
+    # 5) 100 * exp(i * |t1 - t2|)  -> 100 * (cos(a) + i sin(a)), a real
+    a5 = np.abs(t1 - t2)
+    cf[5] = 100.0 * (np.cos(a5) + 1j * np.sin(a5))
+
+    # 6) 100 * sin( (t1 + t2).real )
+    cf[6] = 100.0 * np.sin(t1r + t2r)
+
+    # 7) -100j * cos( (t1 - t2).imag )
+    cf[7] = -100.0j * np.cos(t1i - t2i)
+
+    # 8) 100 * ( (t1*t2) / |t1*t2| )  with guard for |.| ~ 0 or non-finite
+    if np.isfinite(prod_abs) and prod_abs > EPS:
+        cf[8] = 100.0 * (prod / prod_abs)
+    else:
+        cf[8] = 0.0 + 0.0j
+
+    # 9) 100 * sqrt(t1.real * t2.real) - 100j * sqrt(t1.imag * t2.imag)
+    rpart = t1r * t2r
+    ipart = t1i * t2i
+    if not np.isfinite(rpart) or rpart < 0.0:
+        rpart = 0.0
+    if not np.isfinite(ipart) or ipart < 0.0:
+        ipart = 0.0
+    cf[9] = 100.0 * np.sqrt(rpart) - 100.0j * np.sqrt(ipart)
+
+    # 10) 100 * exp( i * (angle(t1) - angle(t2)) )
+    #      angle(z) = atan2(imag, real)
+    ang1 = np.arctan2(t1i, t1r)
+    ang2 = np.arctan2(t2i, t2r)
+    dphi = ang1 - ang2
+    cf[10] = 100.0 * (np.cos(dphi) + 1j * np.sin(dphi))
+
+    return cf
     
 ALLOWED["g59"]=g59
 
@@ -1089,28 +1277,92 @@ def g66(z,a,state):
     
 ALLOWED["g66"]=g66
 
-#FIME
-def g67(z,a,state):
+def g67(z, a, state):
     t1, t2 = z[0], z[1]
     cf = np.zeros(25, dtype=np.complex128)
+
+    EPS = 1e-15
+
+    t1r, t1i = t1.real, t1.imag
+    t2r, t2i = t2.real, t2.imag
+
+    # 0..3
     cf[0] = t1 + t2
     cf[1] = t1 * t2
-    cf[2] = (t1 + t2)**2
+    cf[2] = (t1 + t2) * (t1 + t2)
     cf[3] = np.abs(t1) * np.abs(t2)
+
+    # 4..8 : r / |r| with guard
     for k in range(4, 9):
-        r = (t1 + 1j*t2)**(k)
-        cf[k] = r / np.abs(r)
-    cf[9] = np.log(np.abs(t1)) / np.log(np.abs(t2))
-    cf[10] = np.exp(np.angle(t1)) * np.exp(np.angle(t2))
+        r = (t1 + 1j * t2) ** k
+        mag = np.abs(r)
+        if np.isfinite(mag) and mag > EPS:
+            cf[k] = r / mag
+        else:
+            cf[k] = 0.0 + 0.0j
+
+    # 9 : log(|t1|)/log(|t2|) with guards
+    a1 = np.abs(t1)
+    a2 = np.abs(t2)
+    if not np.isfinite(a1) or a1 <= EPS:
+        ln1 = 0.0
+    else:
+        ln1 = np.log(a1)
+    if not np.isfinite(a2) or a2 <= EPS:
+        ln2 = 0.0
+    else:
+        ln2 = np.log(a2)
+    if np.abs(ln2) > EPS and np.isfinite(ln1) and np.isfinite(ln2):
+        cf[9] = ln1 / ln2
+    else:
+        cf[9] = 0.0 + 0.0j
+
+    # 10 : exp(angle(t1) + angle(t2))  (real, positive)
+    ang1 = np.arctan2(t1i, t1r)
+    ang2 = np.arctan2(t2i, t2r)
+    cf[10] = np.exp(ang1 + ang2)
+
+    # 11..15 : (conj(t1)/conj(t2)) * (1j)^(k-2) with guard on denom
+    den = np.conj(t2)
+    denmag = np.abs(den)
+    if np.isfinite(denmag) and denmag > EPS:
+        base = np.conj(t1) / den
+    else:
+        base = 0.0 + 0.0j
     for k in range(11, 16):
-        cf[k] = (np.conj(t1) / np.conj(t2)) * 1j**(k-2)
-    cf[16] = t1.real * t2.imag
-    cf[17] = t1.imag * t2.real
+        p = k - 2
+        # 1j**p using p mod 4 to avoid pow edge cases
+        m = p & 3
+        if m == 0:
+            factor = 1.0 + 0.0j
+        elif m == 1:
+            factor = 0.0 + 1.0j
+        elif m == 2:
+            factor = -1.0 + 0.0j
+        else:
+            factor = 0.0 - 1.0j
+        cf[k] = base * factor
+
+    # 16..17
+    cf[16] = t1r * t2i
+    cf[17] = t1i * t2r
+
+    # 18..22 : sin(angle( (t1 + i t2)^k ))
     for k in range(18, 23):
-        z = (t1 + 1j*t2)**(k)
-        cf[k] = np.sin(np.angle(z))
-    cf[23] = np.cos(np.angle(t1) + np.angle(t2))
-    cf[24] = np.tanh(np.abs(t1*t2))
+        zz = (t1 + 1j * t2) ** k
+        angz = np.arctan2(zz.imag, zz.real)
+        cf[k] = np.sin(angz)
+
+    # 23 : cos(angle(t1) + angle(t2))
+    cf[23] = np.cos(ang1 + ang2)
+
+    # 24 : tanh(|t1*t2|)
+    prod_abs = np.abs(t1 * t2)
+    if np.isfinite(prod_abs):
+        cf[24] = np.tanh(prod_abs)
+    else:
+        cf[24] = 0.0 + 0.0j
+
     return cf
     
 ALLOWED["g67"]=g67
@@ -1129,17 +1381,71 @@ def g68(z,a,state):
     
 ALLOWED["g68"]=g68
 
-def g69(z,a,state):
+def g69(z, a, state):
     t1, t2 = z[0], z[1]
     cf = np.zeros(25, dtype=np.complex128)
+
+    EPS = 1e-15
+
+    # Precompute common scalars
+    s = t1 + t2
+    s_abs = np.abs(s)
+    s_den = s_abs + 1.0
+    if not np.isfinite(s_den):
+        s_den = 1.0
+
+    # unit phasor for angle(s): exp(i * angle(s)) = cos(theta) + i sin(theta)
+    theta = np.arctan2(s.imag, s.real)
+    phasor = np.cos(theta) + 1j * np.sin(theta)
+
+    # 0..24 baseline fill
     for i in range(25):
-        cf[i] = (t1.real**(i+1) + t2.imag**(25-i))/(1 + np.abs(t1 + t2)) * np.exp(1j * np.angle(t1 + t2))
-    cf[2] = 3 * np.conj(t1**2 + t2)
-    cf[6] = 7 * np.abs(t1 + t2)
-    cf[10] = 11 * (t1/t2 + np.conj(t2/t1))
-    cf[16] = 17 * (np.abs(t1)*abs(t2))/(np.abs(t1 + t2))**2
-    cf[22] = 23 * (np.conj(t1) + t2) / (1 + np.abs(t1 * np.conj(t2)))
-    cf[24] = 25 * (np.conj(t1) + np.conj(t2)) / np.abs(t1*t2)
+        # (t1.real)^(i+1) + (t2.imag)^(25-i) — integer exponents -> safe
+        rpart = t1.real
+        ipart = t2.imag
+        num = (rpart ** (i + 1)) + (ipart ** (25 - i))
+        # divide by (1 + |t1+t2|) and multiply by unit phasor
+        cf[i] = (num / s_den) * phasor
+
+    # cf[2] = 3 * conj(t1**2 + t2)
+    cf[2] = 3.0 * np.conj(t1 * t1 + t2)
+
+    # cf[6] = 7 * |t1 + t2|
+    cf[6] = 7.0 * s_abs
+
+    # cf[10] = 11 * (t1/t2 + conj(t2/t1)) with guards
+    term1 = 0.0 + 0.0j
+    term2 = 0.0 + 0.0j
+    a2 = np.abs(t2)
+    a1 = np.abs(t1)
+    if np.isfinite(a2) and a2 > EPS:
+        term1 = t1 / t2
+    if np.isfinite(a1) and a1 > EPS:
+        term2 = np.conj(t2 / t1)
+    cf[10] = 11.0 * (term1 + term2)
+
+    # cf[16] = 17 * (|t1| |t2|) / |t1 + t2|^2  with guard
+    denom16 = s_abs * s_abs
+    if np.isfinite(denom16) and denom16 > EPS:
+        cf[16] = 17.0 * ((np.abs(t1) * np.abs(t2)) / denom16)
+    else:
+        cf[16] = 0.0 + 0.0j
+
+    # cf[22] = 23 * (conj(t1) + t2) / (1 + |t1 * conj(t2)|)
+    prod12 = t1 * np.conj(t2)
+    den22 = 1.0 + np.abs(prod12)  # real, >= 1
+    if not np.isfinite(den22) or den22 <= 0.0:
+        den22 = 1.0
+    cf[22] = 23.0 * ((np.conj(t1) + t2) / den22)
+
+    # cf[24] = 25 * (conj(t1) + conj(t2)) / |t1 * t2|  with guard
+    prod = t1 * t2
+    prod_abs = np.abs(prod)
+    if np.isfinite(prod_abs) and prod_abs > EPS:
+        cf[24] = 25.0 * ((np.conj(t1) + np.conj(t2)) / prod_abs)
+    else:
+        cf[24] = 0.0 + 0.0j
+
     return cf
 
 ALLOWED["g69"]=g69
@@ -1325,18 +1631,112 @@ def g80(z,a,state):
     
 ALLOWED["g80"]=g80
 
-def g81(z,a,state):
+def g81(z, a, state):
     t1, t2 = z[0], z[1]
     cf = np.zeros(25, dtype=np.complex128)
+
+
+    def _safe_angle(z: complex) -> float:
+        # arg(z); returns 0 if z is (near) zero or non-finite
+        zr, zi = z.real, z.imag
+        if not (np.isfinite(zr) and np.isfinite(zi)):
+            return 0.0
+        if zr == 0.0 and zi == 0.0:
+            return 0.0
+        return np.arctan2(zi, zr)
+
+
+    def _unit_phasor(z: complex) -> complex:
+        # exp(i*angle(z)); 0 if z is (near) zero or non-finite
+        theta = _safe_angle(z)
+        return np.cos(theta) + 1j * np.sin(theta)
+
+
+    def _cpow_real(z: complex, a: float) -> complex:
+        # z**a for real a, via polar form; returns 0 if z≈0 or non-finite
+        zr, zi = z.real, z.imag
+        if not (np.isfinite(zr) and np.isfinite(zi)):
+            return 0.0 + 0.0j
+        r = np.hypot(zr, zi)  # |z|
+        if r == 0.0:
+            return 0.0 + 0.0j
+        theta = np.arctan2(zi, zr)
+        # r^a * exp(i * a * theta)
+        ra = np.exp(a * np.log(r))
+        ang = a * theta
+        return ra * (np.cos(ang) + 1j * np.sin(ang))
+
+    # Precompute for loops
     for i in range(25):
-        cf[i] = (t1 * (i+1) + t2**((i+1)/2)) / np.abs(t1 * (i+1) + t2**(i+1))
-    cf[2] = np.real(t1) + np.imag(t2)
-    cf[6] = np.abs(np.exp(1j * np.angle(t1 * t2)))
-    cf[10] = np.real(t1 * t2) + np.imag(t1 / t2)
-    cf[12] = np.angle(t1 + 4*t2) / np.abs(np.conj(t1 - 4*t2))
-    cf[16] = np.abs(np.exp(1j * np.angle(t1 - t2)))
-    cf[18] = np.real(t1 / t2) - np.imag(t1 * t2)
-    cf[22] = np.abs(np.exp(1j * np.angle(t1 + t2)))
+        k1 = float(i + 1)
+        # numerator: t1*(i+1) + t2^((i+1)/2)
+        term1 = t1 * k1
+        term2 = _cpow_real(t2, 0.5 * k1)  # handles half-integers safely
+        num = term1 + term2
+
+        # denominator: 1 + | t1*(i+1) + t2^(i+1) |
+        # note: integer power is fine under numba
+        pow_int = t2
+        # fast integer power: repeated multiply (avoid Python pow edge cases)
+        # but for small range, ** is OK in numba; still we can do it explicitly
+        pow_int = t2 ** (i + 1)
+        den = 1.0 + np.abs(term1 + pow_int)
+
+        # unit phasor exp(i*angle(t1+t2))
+        ph = _unit_phasor(t1 + t2)
+
+        # safe division (den >= 1 so no zero)
+        cf[i] = (num / den) * ph
+
+    # cf[2] = Re(t1) + Im(t2)
+    cf[2] = (t1.real + t2.imag) + 0.0j
+
+    # cf[6] = |exp(i*angle(t1*t2))| -> 1 if t1*t2 != 0 and finite, else 0
+    prod = t1 * t2
+    if (prod.real != 0.0 or prod.imag != 0.0) and np.isfinite(prod.real) and np.isfinite(prod.imag):
+        cf[6] = 1.0 + 0.0j
+    else:
+        cf[6] = 0.0 + 0.0j
+
+    # cf[10] = Re(t1*t2) + Im(t1/t2)
+    # guard t1/t2 if t2≈0
+    cf[10] = (t1 * t2).real + 0.0j
+    a2 = np.abs(t2)
+    if np.isfinite(a2) and a2 > 0.0:
+        q = t1 / t2
+        cf[10] += (q.imag + 0.0j)
+
+    # cf[12] = angle(t1 + 4*t2) / |conj(t1 - 4*t2)| = angle(s1)/|t1-4t2|
+    s1 = t1 + 4.0 * t2
+    s2 = t1 - 4.0 * t2
+    ang = _safe_angle(s1)
+    den12 = np.abs(s2)
+    if np.isfinite(den12) and den12 > 0.0:
+        cf[12] = (ang / den12) + 0.0j
+    else:
+        cf[12] = 0.0 + 0.0j
+
+    # cf[16] = |exp(i*angle(t1 - t2))| -> 1 if finite & nonzero, else 0
+    diff = t1 - t2
+    if (diff.real != 0.0 or diff.imag != 0.0) and np.isfinite(diff.real) and np.isfinite(diff.imag):
+        cf[16] = 1.0 + 0.0j
+    else:
+        cf[16] = 0.0 + 0.0j
+
+    # cf[18] = Re(t1/t2) - Im(t1*t2)
+    if np.isfinite(a2) and a2 > 0.0:
+        q = t1 / t2
+        cf[18] = (q.real - (t1 * t2).imag) + 0.0j
+    else:
+        cf[18] = (0.0 - (t1 * t2).imag) + 0.0j
+
+    # cf[22] = |exp(i*angle(t1 + t2))| -> 1 if finite & nonzero, else 0
+    s = t1 + t2
+    if (s.real != 0.0 or s.imag != 0.0) and np.isfinite(s.real) and np.isfinite(s.imag):
+        cf[22] = 1.0 + 0.0j
+    else:
+        cf[22] = 0.0 + 0.0j
+
     return cf
 
 ALLOWED["g81"]=g81
@@ -1464,40 +1864,134 @@ def g82(z, a, state):
 
 ALLOWED["g82"]=g82
 
-def g83(z,a,state):
+def g83(z, a, state):
     t1, t2 = z[0], z[1]
     cf = np.zeros(25, dtype=np.complex128)
-    cf[0] = t1.real * t2.real + t1.imag * t2.imag
-    cf[1] = np.abs(t1) * np.abs(t2)
-    cf[2] = np.angle(t1) + np.angle(t2)
-    cf[3] = np.conj(t1).real + np.conj(t2).imag
-    
+    EPS = 1e-15
+
+    # ----- helpers (inline-friendly for njit) -----
+    def angle(zc: complex) -> float:
+        # safe arg(z)
+        return np.arctan2(zc.imag, zc.real)
+
+    def unit_norm(zc: complex) -> complex:
+        m = np.abs(zc)
+        if np.isfinite(m) and m > EPS:
+            return zc / m
+        return 0.0 + 0.0j
+
+    # ----- seeds -----
+    # cf[0] = t1.real * t2.real + t1.imag * t2.imag   (real)
+    cf[0] = (t1.real * t2.real + t1.imag * t2.imag) + 0.0j
+
+    # cf[1] = |t1| * |t2|   (real, >=0)
+    cf[1] = (np.abs(t1) * np.abs(t2)) + 0.0j
+
+    # cf[2] = angle(t1) + angle(t2)   (real)
+    cf[2] = (angle(t1) + angle(t2)) + 0.0j
+
+    # cf[3] = conj(t1).real + conj(t2).imag
+    # conj(t1).real == t1.real ; conj(t2).imag == -t2.imag
+    cf[3] = (t1.real + (-t2.imag)) + 0.0j
+
+    # ----- recurrence k = 4..24 -----
     for k in range(4, 25):
-        cf[k] = (cf[k-1] * cf[k-4] + cf[k-3] * cf[k-2]) / np.abs(cf[k-1] * cf[k-4] + cf[k-3] * cf[k-2])
-    
-    cf[12] = cf[0] / cf[1] + cf[2] / cf[3]
-    cf[18] = np.log(np.abs(cf[0] * cf[1])+1) / np.log(np.abs(cf[2] * cf[3])+1)
-    cf[24] = cf[4] * cf[9] * cf[14] * cf[19] / np.abs(cf[4] * cf[9] * cf[14] * cf[19])
+        num = cf[k - 1] * cf[k - 4] + cf[k - 3] * cf[k - 2]
+        cf[k] = unit_norm(num)
+
+    # ----- post adjustments -----
+    # cf[12] = cf[0]/cf[1] + cf[2]/cf[3]   (guard small denominators)
+    c1 = 0.0 + 0.0j
+    c2 = 0.0 + 0.0j
+    m1 = np.abs(cf[1])
+    if np.isfinite(m1) and m1 > EPS:
+        c1 = cf[0] / cf[1]
+    m3 = np.abs(cf[3])
+    if np.isfinite(m3) and m3 > EPS:
+        c2 = cf[2] / cf[3]
+    cf[12] = c1 + c2
+
+    # cf[18] = log(|cf[0]*cf[1]| + 1) / log(|cf[2]*cf[3]| + 1)
+    num18 = np.abs(cf[0] * cf[1]) + 1.0
+    den18 = np.abs(cf[2] * cf[3]) + 1.0
+    # num18, den18 are real >= 1, so logs are >= 0
+    ln_num = np.log(num18)
+    ln_den = np.log(den18)
+    if np.isfinite(ln_den) and ln_den > EPS:
+        cf[18] = (ln_num / ln_den) + 0.0j
+    else:
+        cf[18] = 0.0 + 0.0j
+
+    # cf[24] = cf[4]*cf[9]*cf[14]*cf[19] normalized
+    prod = cf[4] * cf[9] * cf[14] * cf[19]
+    cf[24] = unit_norm(prod)
+
     return cf
     
 ALLOWED["g83"]=g83
 
-def g84(z,a,state):
+def g84(z, a, state):
     t1, t2 = z[0], z[1]
     cf = np.zeros(25, dtype=np.complex128)
-    primes = np.array([2, 3, 5, 7, 11, 13, 17])
-    cf[0:7] = primes * (t1 + t2)
-    cf[14] = np.sum(primes[0:5]) + (t1+1j*t2)**2
-    cf[24] = np.prod(primes[0:4]) / np.abs(t1 + 1j * t2)
-    
+
+    EPS = 1e-15
+
+    # constants (avoid building arrays repeatedly inside njit)
+    p0 = 2.0;  p1 = 3.0;  p2 = 5.0;  p3 = 7.0;  p4 = 11.0;  p5 = 13.0;  p6 = 17.0
+    sum_first5 = p0 + p1 + p2 + p3 + p4        # 2+3+5+7+11 = 28
+    prod_first4 = p0 * p1 * p2 * p3            # 2*3*5*7 = 210
+
+    s = t1 + t2
+
+    # cf[0:7] = primes * (t1 + t2)
+    cf[0] = p0 * s
+    cf[1] = p1 * s
+    cf[2] = p2 * s
+    cf[3] = p3 * s
+    cf[4] = p4 * s
+    cf[5] = p5 * s
+    cf[6] = p6 * s
+
+    # cf[14] = sum(primes[:5]) + (t1 + 1j*t2)^2
+    cf[14] = sum_first5 + (t1 + 1j * t2) * (t1 + 1j * t2)
+
+    # cf[24] = prod(primes[:4]) / |t1 + 1j*t2|   (guard denom)
+    d24 = np.abs(t1 + 1j * t2)
+    if np.isfinite(d24) and d24 > EPS:
+        cf[24] = prod_first4 / d24
+    else:
+        cf[24] = 0.0 + 0.0j
+
+    # precompute stable logs: log(|t1|), log(|t2|) with guards
+    a1 = np.abs(t1)
+    a2 = np.abs(t2)
+    if np.isfinite(a1) and a1 > EPS:
+        ln1 = np.log(a1)
+    else:
+        ln1 = 0.0
+    if np.isfinite(a2) and a2 > EPS:
+        ln2 = np.log(a2)
+    else:
+        ln2 = 0.0
+
+    # for k in 7..13:
+    # v = ln|t1| * sin(cf[k-1]) + ln|t2| * cos(cf[k-1])
+    # assign only if finite
     for k in range(7, 14):
-        try:
-            v = np.log(np.abs(t1)) * np.sin(cf[k-1]) + np.log(np.abs(t2)) * np.cos(cf[k-1])
-            if not np.isinf(v):
-                cf[k] = v
-        except:
-            pass
-    cf[15:24] = np.real(t1) + np.imag(t2)
+        x = cf[k - 1]
+        sv = np.sin(x)   # complex-safe in numba
+        cv = np.cos(x)
+        v = ln1 * sv + ln2 * cv
+        # finiteness check for complex
+        if np.isfinite(v.real) and np.isfinite(v.imag):
+            cf[k] = v
+        # else leave as 0
+
+    # cf[15:24] = Re(t1) + Im(t2)   (broadcast a complex scalar)
+    baseline = (t1.real + t2.imag) + 0.0j
+    for i in range(15, 24):
+        cf[i] = baseline
+
     return cf
 
 ALLOWED["g84"]=g84
@@ -1706,18 +2200,53 @@ def g94(z,a,state):
 
 ALLOWED["g94"]=g94
 
-def g95(z,a,state):
-    t1, t2 = z[0].real, z[0].imag 
+def g95(z, a, state):
+    # Use complex inputs directly
+    t1 = z[0]
+    t2 = z[1]
+
     cf = np.zeros(71, dtype=np.complex128)
-    cf[0] = t1.real * t2.imag
-    cf[1] = np.abs(t1) / np.angle(t2)
+    EPS = 1e-15
+
+    # cf[0] = t1.real * t2.imag  (real -> complex)
+    cf[0] = (t1.real * t2.imag) + 0.0j
+
+    # cf[1] = |t1| / angle(t2)  with guard
+    ang_t2 = 0.0
+    if (t2.real != 0.0 or t2.imag != 0.0) and np.isfinite(t2.real) and np.isfinite(t2.imag):
+        ang_t2 = np.arctan2(t2.imag, t2.real)
+    a1 = np.abs(t1)
+    if not np.isfinite(a1):  # defensive
+        a1 = 0.0
+    if np.isfinite(ang_t2) and np.abs(ang_t2) > EPS:
+        cf[1] = (a1 / ang_t2) + 0.0j
+    else:
+        cf[1] = 0.0 + 0.0j
+
+    # cf[2] = sin(t1) * cos(t2)  (Numba supports complex sin/cos)
     cf[2] = np.sin(t1) * np.cos(t2)
+
+    # Recurrence
     for i in range(3, 71):
-        cf[i] = cf[i-1] + cf[i-3] * np.log(np.abs(cf[i-2]+1))
-        if i % 2 == 0:
-            cf[i] = cf[i] + np.abs(cf[i-1] * t1)
+        # log(|cf[i-2] + 1|)
+        base = cf[i - 2] + (1.0 + 0.0j)
+        mag = np.abs(base)
+        if np.isfinite(mag) and mag > 0.0:
+            lnmag = np.log(mag)
         else:
-            cf[i] = cf[i] - np.abs(cf[i-1] * t2.conjugate())
+            lnmag = 0.0
+
+        cf[i] = cf[i - 1] + cf[i - 3] * lnmag
+
+        if (i & 1) == 0:
+            # even: + |cf[i-1] * t1|
+            term = np.abs(cf[i - 1] * t1)
+            cf[i] = cf[i] + term
+        else:
+            # odd:  - |cf[i-1] * conj(t2)|
+            term = np.abs(cf[i - 1] * np.conj(t2))
+            cf[i] = cf[i] - term
+
     return cf
 
 ALLOWED["g95"]=g95
@@ -1741,44 +2270,168 @@ def g96(z,a,state):
 
 ALLOWED["g96"]=g96
 
-def g97(z,a,state):
-    t1, t2 = z[0].real, z[0].imag 
+def g97(z, a, state):
+    # As in your original: take real & imag from z[0]
+    t1 = z[0].real  # float64
+    t2 = z[0].imag  # float64
+
     cf = np.zeros(71, dtype=np.complex128)
-    cf[0] = t1 * t2 * np.abs(t1) * np.abs(t2) + np.log(np.abs(t1)+1) + np.log(np.abs(t2)+1)
-    cf[1:3] = (t1 + t2) * np.array([1, -1])
+    EPS = 1e-15
+
+    # cf[0] = t1*t2*|t1|*|t2| + log(|t1|+1) + log(|t2|+1)
+    a1 = abs(t1)
+    a2 = abs(t2)
+    ln1 = np.log(a1 + 1.0)
+    ln2 = np.log(a2 + 1.0)
+    cf[0] = (t1 * t2 * a1 * a2 + ln1 + ln2) + 0.0j
+
+    # cf[1:3] = (t1 + t2) * [1, -1]
+    s = t1 + t2
+    cf[1] = ( s) + 0.0j
+    cf[2] = (-s) + 0.0j
+
+    # Common guarded denominator for the next two loops
+    # Your original used (i/t1/t2).real or .imag; since t1,t2 are real,
+    # we use denom = i/(t1*t2) with an EPS guard (same for both loops).
+    tt = t1 * t2
+    # Loop 3..9
     for i in range(3, 10):
-        cf[i] = np.sin(i*t1*t2) / ((i/t1/t2).real)
+        x = i * tt
+        # denom = i/(t1*t2)
+        if abs(tt) > EPS:
+            denom = i / tt
+        else:
+            denom = 1.0  # safe fallback
+        val = np.sin(x) / denom
+        cf[i] = val + 0.0j
+
+    # Loop 10..19
     for i in range(10, 20):
-        cf[i] = np.cos(i*t1*t2) / ((i/t1/t2).imag)
+        x = i * tt
+        if abs(tt) > EPS:
+            denom = i / tt
+        else:
+            denom = 1.0
+        val = np.cos(x) / denom
+        cf[i] = val + 0.0j
+
+    # 20..29: log( |t1**i + t2**i| + 1 )
+    # (t1,t2 are real so these powers are real)
     for i in range(20, 30):
-        cf[i] = np.log(np.abs(t1**i+t2**i) + 1)
-    cf[30:40] = (t1 + t2) ** np.arange(1, 11)
+        p = t1 ** i + t2 ** i
+        mag = abs(p)
+        cf[i] = np.log(mag + 1.0) + 0.0j
+
+    # 30..39: (t1 + t2) ** k, k = 1..10
+    base = t1 + t2
+    pk = base  # k=1
+    for k in range(10):
+        if k > 0:
+            pk *= base  # iterative power
+        cf[30 + k] = pk + 0.0j
+
+    # 40..49: |i/t1| * |i/t2|
     for i in range(40, 50):
-        cf[i] = np.abs(i/t1) * np.abs(i/t2)
+        if abs(t1) > EPS:
+            a = abs(i / t1)
+        else:
+            a = 0.0
+        if abs(t2) > EPS:
+            b = abs(i / t2)
+        else:
+            b = 0.0
+        cf[i] = (a * b) + 0.0j
+
+    # Accumulate v over cf[0..29] with alternating sign
     v = 1.0 + 0.0j
     for i in range(30):
-        s = -1.0 if (i & 1) == 0 else 1.0   # (-1, +1, -1, +1, …)
-        v *= cf[i] * s
-    cf[50:60] = v
+        sgn = -1.0 if (i & 1) == 0 else 1.0
+        v *= cf[i] * sgn
+
+    # 50..59: constant v
+    for i in range(50, 60):
+        cf[i] = v
+
+    # 60..69:
+    # |t1|**i - |t2|**i + log(|t1**i + t2**i| + 1) + angle(cf[i-10])
     for i in range(60, 70):
-        cf[i] = np.abs(t1)**i - np.abs(t2)**i + np.log(np.abs(t1**i+t2**i) + 1) + np.angle(cf[i-10])
-    cf[70] = np.sum(cf[:70]).conjugate()
-    return cf.astype(np.complex128)
+        # powers
+        p1 = a1 ** i
+        p2 = a2 ** i
+        # log term
+        p = (t1 ** i) + (t2 ** i)
+        mag = abs(p)
+        ln = np.log(mag + 1.0)
+        # angle of cf[i-10]
+        w = cf[i - 10]
+        theta = np.arctan2(w.imag, w.real)
+        cf[i] = (p1 - p2 + ln + theta) + 0.0j
+
+    # cf[70] = conj(sum(cf[:70]))
+    ssum = 0.0 + 0.0j
+    for i in range(70):
+        ssum += cf[i]
+    cf[70] = np.conj(ssum)
+
+    return cf
 
 ALLOWED["g97"]=g97
 
-def g98(z,a,state):
-    t1, t2 = z[0].real, z[0].imag 
+def g98(z, a, state):
+    # As in your original: take real & imag from z[0]
+    t1 = z[0].real  # float64
+    t2 = z[0].imag  # float64
+
     cf = np.zeros(71, dtype=np.complex128)
-    cf[0] = np.log(np.abs(t1) + 1) + np.log(np.abs(t2) + 1)
+    EPS = 1e-15
+
+    a1 = abs(t1)
+    a2 = abs(t2)
+    cf[0] = (np.log(a1 + 1.0) + np.log(a2 + 1.0)) + 0.0j
+
+    # angle(t1 * t2) with arctan2 on a purely real number
+    prod = t1 * t2
+    theta = np.arctan2(0.0, prod)  # 0 if prod>0, pi if prod<0, 0 if prod==0
+    cos_const = np.cos(a1 + a2)
+
+    # 1..70
     for i in range(1, 71):
-        cf[i] = np.sin(i * np.angle(t1 * t2)) * np.abs(cf[i-1]**(i-1)) * np.cos(np.abs(t1) + np.abs(t2))
+        # sin(i * angle(t1*t2)) * |cf[i-1]**(i-1)| * cos(|t1| + |t2|)
+        # (i-1) is an integer exponent; Numba handles complex**int, but cf[i-1] may be complex.
+        # We only need the magnitude.
+        pow_mag = np.abs(cf[i - 1] ** (i - 1))
+        cf[i] = (np.sin(i * theta) * pow_mag * cos_const) + 0.0j
+
+    # 34..54: cf[i] *= |t1 + t2| * cf[i-1]
+    s_abs = abs(t1 + t2)
     for i in range(34, 55):
-        cf[i] = cf[i] * np.abs(t1 + t2) * cf[i-1]
-    cf[4:26] = cf[4:26] * cf[0] * (np.abs(t1) * np.abs(t2))**np.arange(1, 23)
-    cf[55:71] = cf[55:71] * cf[0] / (np.abs(t1) * np.abs(t2))**np.arange(15, 0, -1)
-    indices = np.array([0, 14, 29, 44, 59, 70],dtype=np.intp)
-    cf[indices] = cf[indices] + np.conjugate(t1 * t2)
+        cf[i] = cf[i] * s_abs * cf[i - 1]
+
+    # 4..25: cf[i] *= cf[0] * (|t1|*|t2|)^(i-3)
+    base = a1 * a2
+    for i in range(4, 26):
+        k = i - 3  # 1..22
+        cf[i] = cf[i] * cf[0] * (base ** k)
+
+    # 55..70: cf[i] *= cf[0] / (|t1|*|t2|)^(15 - (i-55))
+    # exponents go 15,14,...,1 across indices 55..70
+    for i in range(55, 71):
+        k = 15 - (i - 55)
+        if base > EPS:
+            cf[i] = cf[i] * cf[0] / (base ** k)
+        else:
+            # if base ~ 0, original would blow up; set to 0 for safety
+            cf[i] = 0.0 + 0.0j
+
+    # Add conjugate(t1*t2) to selected positions (no fancy indexing)
+    addv = np.conj(prod + 0.0j)
+    cf[0]  = cf[0]  + addv
+    cf[14] = cf[14] + addv
+    cf[29] = cf[29] + addv
+    cf[44] = cf[44] + addv
+    cf[59] = cf[59] + addv
+    cf[70] = cf[70] + addv
+
     return cf
 
 ALLOWED["g98"]=g98
@@ -1802,7 +2455,7 @@ def g99(z,a,state):
 
 ALLOWED["g99"]=g99
 
-def p7f(z,a,state):
+def gp7f(z,a,state):
     t1, t2 = z[0].real, z[0].imag 
     pi2  =  2 * np.pi
     n    =  23 # was 23
@@ -1832,7 +2485,7 @@ def p7f(z,a,state):
     f[n-1] +=  211 * np.exp(1j * pi2 * (1/7) * t2 )
     return f
     
-ALLOWED["p7f"]=p7f
+ALLOWED["gp7f"]=gp7f
 
 def g221(z,a,state):
     t1, t2 = z[0], z[1]
@@ -6572,6 +7225,304 @@ def p233(z, a, state):
     
 ALLOWED["p233"]=p233
 
+def p234(z, a, state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(35, dtype=np.complex128)
+
+    EPS = 1e-12
+
+    def _angle(z: complex) -> float:
+        return np.arctan2(z.imag, z.real)
+
+    a1 = np.abs(t1)
+    a2 = np.abs(t2)
+    ang1 = _angle(t1)
+    ang2 = _angle(t2)
+
+    for j in range(1, 36):
+        k = j + 2
+        r = np.sqrt(float(j))
+        mag = (a1**r + a2**(k % 5 + 1)) * np.sin(j) + np.log(a1 + 1.0) * np.cos(r)
+        ang = ang1 * np.cos(0.5 * j) - ang2 * np.sin(r)
+        val = mag * (np.cos(ang) + 1j * np.sin(ang))
+        val += np.conj(t1) * (t2**k) - np.conj(t2) * (t1**(k % 3))
+        cf[j - 1] = val
+
+    cf[4]  = (t1.real) + 1j * (t2.imag)
+    cf[11] = np.log(a1 + 1.0) * np.log(a2 + 1.0) + np.sin(t1 * t2)
+    cf[19] = (a1 - a2) * np.cos(ang1 - ang2) + 2j * np.sin(ang1 + ang2)
+    cf[24] = np.conj(t1 + t2) * (t1.real - t2.imag) + 3j
+    # sum([a1,a2]) and prod([a1,a2])
+    cf[29] = (a1 + a2) + 1j * (a1 * a2)
+    cf[34] = _angle(t1 * t2) + 1j * np.abs(t1 + t2)
+    return cf
+
+ALLOWED["p234"]=p234
+
+def p235(z, a, state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(35, dtype=np.complex128)
+
+    EPS = 1e-12
+
+    def _angle(z: complex) -> float:
+        return np.arctan2(z.imag, z.real)
+
+    a1 = np.abs(t1)
+    a2 = np.abs(t2)
+    ang1 = _angle(t1)
+    ang2 = _angle(t2)
+
+    # Fixed coefficients (assign individually for njit)
+    cf[2]  = 3.0
+    cf[6]  = -5.0
+    cf[11] = 7.0
+    cf[18] = -11.0
+    cf[24] = 13.0
+    cf[29] = -17.0
+
+    # 1..10
+    for j in range(1, 11):
+        magnitude = np.log(a1**j + 1.0) + a2**(j % 3 + 1)
+        angle = ang1 * j - ang2 * (j % 2)
+        cf[j - 1] = magnitude * (np.cos(angle) + 1j * np.sin(angle))
+
+    # 11..20
+    for k in range(11, 21):
+        magnitude = np.sin(t1.real * k) + np.cos(t2.imag * k)
+        angle = np.log(np.abs(t1 + t2) + 1.0) * k
+        cf[k - 1] = magnitude * (np.cos(angle) + 1j * np.sin(angle))
+
+    # 21..34
+    for r in range(21, 35):
+        magnitude = np.log(np.abs(t1 * r) + 1.0) + (t2.real * t2.real)
+        angle = _angle(np.conj(t1) + np.conj(t2)) * r
+        cf[r - 1] = magnitude * (np.cos(angle) + 1j * np.sin(angle))
+
+    # last coefficient with guard on (t2 + 1)
+    den = t2 + 1.0
+    term = 0.0
+    if np.isfinite(den.real) and np.isfinite(den.imag) and np.abs(den) > EPS:
+        term = np.cos(t1 / den)
+    cf[34] = np.sin(t1 * t2) + term + 1j * np.log(np.abs(t1 + t2) + 1.0)
+    return cf
+
+ALLOWED["p235"]=p235
+
+def p236(z, a, state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(35, dtype=np.complex128)
+
+    EPS = 1e-12
+
+    def _angle(z: complex) -> float:
+        return np.arctan2(z.imag, z.real)
+
+    for j in range(1, 36):
+        angle = np.sin(t1.real * j) * np.cos(t2.imag * j) + _angle(t1 + t2) / float(j)
+        magnitude = np.log(np.abs(t1) * j + np.abs(t2) + 1.0) * np.sqrt(1.0 + np.sin(j))
+        cf[j - 1] = magnitude * (np.cos(angle) + 1j * np.sin(angle))
+
+    # while loop branches rewritten as for loop 1..35
+    for k in range(1, 36):
+        if (k % 5) == 0:
+            cf[k - 1] = cf[k - 1] * np.conj(t1) + (np.abs(t2) ** 2)
+        elif (k % 3) == 0:
+            cf[k - 1] += (t1**k) - (t2**k)
+        else:
+            cf[k - 1] += np.sin(t1 * k) * np.cos(t2 * k)
+
+    # r in 2..5, idx = r^2
+    for r in range(2, 6):
+        idx = r * r
+        if idx <= 35:
+            cf[idx - 1] += (t1.real * t2.imag) / float(r)
+
+    # add vector at positions [3,9,15,21,27,33] => indices 3,9,15,21,27,33 (0-based)
+    # divide by (r+1) where r from last loop ended at 5 -> r+1 = 6
+    denom = 6.0
+    for pos in (3, 9, 15, 21, 27, 33):
+        cf[pos] += 100j * (t1 * t1 - t2 * t2) / denom
+
+    return cf
+
+ALLOWED["p236"]=p236
+
+def p237(z, a, state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(35, dtype=np.complex128)
+
+    EPS = 1e-12
+
+    def _angle(z: complex) -> float:
+        return np.arctan2(z.imag, z.real)
+
+    ang1 = _angle(t1)
+    ang2 = _angle(t2)
+
+    for j in range(1, 36):
+        if (j % 4) == 1:
+            cf[j - 1] = (t1**j * np.sin(j * ang2)) + (np.conj(t2) ** 2)
+        elif (j % 4) == 2:
+            cf[j - 1] = (t2**j * np.cos(j * ang1)) + (np.conj(t1) ** 2)
+        elif (j % 4) == 3:
+            cf[j - 1] = (t1.real * t2.imag) * np.log(np.abs(t1) + 1.0) + (t2.real ** j)
+        else:
+            cf[j - 1] = (t1.imag * t2.real) * np.log(np.abs(t2) + 1.0) + (t2.imag ** j)
+
+        cf[j - 1] += (np.conj(t1) * np.conj(t2)) / float(j + 1)
+
+    # second loop: avoid np.angle(cf[k-1])
+    for k in range(1, 36):
+        theta = _angle(cf[k - 1])
+        if (k % 5) == 0:
+            cf[k - 1] = cf[k - 1] * (1.0 + 0.05 * k) + np.sin(k * theta)
+        else:
+            cf[k - 1] = cf[k - 1] / (1.0 + 0.02 * k) + np.cos(k * theta)
+        cf[k - 1] += np.log(np.abs(cf[k - 1]) + 1.0) * (cf[k - 1].real)
+
+    return cf
+
+ALLOWED["p237"]=p237
+
+def p238(z, a, state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(35, dtype=np.complex128)
+
+    EPS = 1e-12
+
+    def _angle(z: complex) -> float:
+        return np.arctan2(z.imag, z.real)
+
+    ang1 = _angle(t1)
+    ang2 = _angle(t2)
+
+    for j in range(1, 36):
+        angle = ang1 * (j * j) - ang2 * np.sqrt(float(j))
+        magnitude = (np.abs(t1) ** j) + (np.abs(t2) ** (35 - j)) + np.log(np.abs(t1) + np.abs(t2) + j)
+        cf[j - 1] = magnitude * (np.cos(angle) + 1j * np.sin(angle))
+
+    # uses cf[36-k] -> 1..35 maps to indices 35..1 -> valid
+    for k in range(1, 36):
+        r = np.sqrt(float(k))  # (not used in calc but keeping consistency if desired)
+        left = np.conj(cf[36 - k]) * (t1 ** (k % 5))
+        right = np.conj(cf[k - 1]) * (t2 ** (35 - (k % 3)))
+        cf[k - 1] += left - right
+
+    cf[4]  += 2.0 * (t1**3) - 3.0 * (t2**2) + 1j * np.sin(t1 * t2)
+    cf[9]   = np.conj(cf[9]) * t1 - (cf[9].imag) * t2 + np.log(np.abs(t1 + t2) + 1.0)
+
+    denom14 = np.abs(t2) + 1.0
+    adj14 = -cf[14] / denom14
+    cf[14] = cf[14] * (t1 * t1) + adj14 + 1j * np.cos(t1 - t2)
+
+    cf[19] = (cf[19].real) + 1j * (cf[19].imag) + (t1 * t2)
+    cf[24] = np.abs(t1) * np.abs(t2) + 1j * _angle(t1 + t2)
+    cf[29] = np.sin(t1 * t1) + 1j * np.cos(t2 * t2 * t2) - np.log(np.abs(t1 * t2) + 1.0)
+    cf[34] = np.conj(cf[34]) + (t1 - t2) + 1j * np.sin(t1 + t2)
+
+    return cf
+
+ALLOWED["p238"]=p238
+
+def p239(z, a, state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(35, dtype=np.complex128)
+
+    EPS = 1e-12
+
+    def _angle(z: complex) -> float:
+        return np.arctan2(z.imag, z.real)
+
+    ang1 = _angle(t1)
+    ang2 = _angle(t2)
+
+    for j in range(1, 36):
+        m = j % 5
+        if m == 1:
+            cf[j - 1] = (t1.real ** j) + (t2.imag ** 2)
+        elif m == 2:
+            cf[j - 1] = (np.abs(t1) * (np.abs(t2) ** j)) * (np.cos(ang1 * j) + 1j * np.sin(ang1 * j))
+        elif m == 3:
+            cf[j - 1] = np.conj(t1) * (np.sin(t2) ** j) + np.cos(t1 * t2)
+        elif m == 4:
+            cf[j - 1] = np.log(np.abs(t1) + 1.0) * (t2 ** j) + 1j * np.log(np.abs(t2) + 1.0)
+        else:
+            cf[j - 1] = (t1 + t2) ** j - (t1 - t2) ** j
+
+    cf[4]  += 2j * t1 * t2
+    cf[9]   = (t1.real ** 2) - (t2.imag ** 3) + 3j * np.abs(t1 * t2)
+    cf[14]  = np.sin(t1 + t2) * np.cos(t1 - t2) + 1j * np.log(np.abs(t1) + np.abs(t2) + 1.0)
+    cf[19]  = (t1 * t2) ** 2 - np.conj(t1) * np.conj(t2) + 2j * _angle(t1 + t2)
+    cf[24]  = (t1 * t2).real + (t1.imag ** 2) - (t2.imag ** 2) + 1j * (t1.real - t2.real)
+    cf[29]  = (np.abs(t1 + t2) ** 3) * (np.cos(_angle(t1 - t2)) + 1j * np.sin(_angle(t1 - t2)))
+    cf[34]  = np.sin(np.abs(t1) * t2) + np.cos(np.abs(t2) * t1) + 1j * (t1.real * t2.real)
+    return cf
+
+ALLOWED["p239"]=p239
+
+def p240(z, a, state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(35, dtype=np.complex128)
+
+    EPS = 1e-12
+    def _angle(z: complex) -> float:
+        return np.arctan2(z.imag, z.real)
+    
+    # specific coefficients (assign individually)
+    cf[0]  = 1.0 + 0.0j
+    cf[4]  = 4.0 + 0.0j
+    cf[12] = 4.0 + 0.0j
+    cf[19] = -9.0 + 0.0j
+    cf[20] = -1.9 + 0.0j
+    cf[24] = 0.2 + 0.0j
+
+    ang1 = _angle(t1)
+    ang2 = _angle(t2)
+
+    # j=2..34 except 5,13,20,21,25
+    for j in range(2, 35):
+        if j in (5, 13, 20, 21, 25):
+            continue
+        mag = np.log(np.abs(t1 + j) + 1.0) * np.sin(j * ang2) + np.cos(j * ang1)
+        angle = (ang1 ** j) + np.sin(j * ang2) - np.cos(j)
+        cf[j - 1] = mag * np.cos(angle) + 1j * (mag * np.sin(angle))
+
+    cf[34] = np.conj(t1) * np.conj(t2) + np.sin(np.abs(t1) * np.abs(t2)) + 1j * np.log(np.abs(t1) + np.abs(t2) + 1.0)
+    return cf
+
+ALLOWED["p240"]=p240
+
+def p241(z, a, state):
+    t1, t2 = z[0], z[1]
+    cf = np.zeros(35, dtype=np.complex128)
+
+    EPS = 1e-12
+
+    def _angle(z: complex) -> float:
+        return np.arctan2(z.imag, z.real)
+
+    a1 = np.abs(t1)
+    a2 = np.abs(t2)
+
+    for j in range(1, 36):
+        magnitude = np.log(a1 + a2 + j) * (a1 ** np.sin(j) + a2 ** np.cos(j))
+        angle = _angle(t1) * j - _angle(t2) * (35 - j) + np.sin(j) * np.cos(j)
+        cf[j - 1] = magnitude * (np.cos(angle) + 1j * np.sin(angle))
+
+    # add conj(t1)*t2**k/(k+1)
+    for k in range(1, 36):
+        cf[k - 1] += (np.conj(t1) * (t2 ** k)) / float(k + 1)
+
+    # add 50*(Re(t1) - Im(t2))*1j at indices 4,9,14,19,24,29
+    delta = 50.0 * (t1.real - t2.imag) * 1j
+    for idx in (4, 9, 14, 19, 24, 29):
+        cf[idx] += delta
+
+    return cf
+
+ALLOWED["p241"]=p241
+
 def p242(z,a,state):
     t1, t2 = z[0], z[1]
     cf = np.zeros(35, dtype=np.complex128)
@@ -8100,15 +9051,43 @@ def p316(z, a, state):
     t1, t2 = z[0], z[1]
     n = 35
     cf = np.zeros(n, dtype=np.complex128)
+
+    # precompute constant angles
+    ang1 = np.arctan2(t1.imag, t1.real)
+    ang2 = np.arctan2(t2.imag, t2.real)
+
+    fact = 1.0  # running factorial
+
     for j in range(1, n + 1):
         k = j + 3
-        r = np.real(t1) * np.sin(j * np.pi / 8) + np.real(t2) * np.cos(j * np.pi / 5)
-        im = np.imag(t1) * np.cos(j * np.pi / 7) - np.imag(t2) * np.sin(j * np.pi / 9)
-        mag = np.log(np.abs(r * im) + 1) * (1 + np.sin(k * np.pi / 4)) * np.prod(np.arange(1, j+1)) / n
-        ang = np.angle(t1) * np.cos(k * np.pi / 6) + np.angle(t2) * np.sin(k * np.pi / 10)
+
+        # real/imag linear combos (all real scalars)
+        r  = t1.real * np.sin(j * (np.pi / 8.0)) + t2.real * np.cos(j * (np.pi / 5.0))
+        im = t1.imag * np.cos(j * (np.pi / 7.0)) - t2.imag * np.sin(j * (np.pi / 9.0))
+
+        # update factorial
+        fact *= float(j)
+
+        # magnitude (real)
+        mag = np.log(abs(r * im) + 1.0) * (1.0 + np.sin(k * (np.pi / 4.0))) * (fact / float(n))
+
+        # angle (real) using precomputed args
+        ang = ang1 * np.cos(k * (np.pi / 6.0)) + ang2 * np.sin(k * (np.pi / 10.0))
+
+        # polar synth
         cf[j - 1] = mag * (np.cos(ang) + 1j * np.sin(ang))
-        cf = cf / np.sum(np.abs(cf))
-    return cf.astype(np.complex128)
+
+    # normalize once: cf /= sum(|cf|)
+    s = 0.0
+    for i in range(n):
+        s += np.abs(cf[i])
+
+    if np.isfinite(s) and s > 1e-12:
+        inv = 1.0 / s
+        for i in range(n):
+            cf[i] *= inv
+
+    return cf
     
 ALLOWED["p316"]=p316
 
@@ -8273,16 +9252,41 @@ def p327(z, a, state):
     t1, t2 = z[0], z[1]
     n = 35
     cf = np.zeros(n, dtype=np.complex128)
-    rec_seq = np.linspace(np.real(t1), np.real(t2), n)
-    imc_seq = np.linspace(np.imag(t1), np.imag(t2), n)
+
+    # precompute angles (Numba-safe)
+    ang1 = np.arctan2(t1.imag, t1.real)
+    ang2 = np.arctan2(t2.imag, t2.real)
+
+    r1 = t1.real
+    r2 = t2.real
+    i1 = t1.imag
+    i2 = t2.imag
+
+    # safe fractional magnitudes
+    part1_scale = np.sqrt(abs(r1))                 # (~ np.real(t1)**0.5 but safe)
+    part2_scale = abs(i2) ** 0.3                   # (~ np.imag(t2)**0.3 but safe, real)
+
+    denom = float(n - 1) if n > 1 else 1.0
+
     for j in range(n):
-        part1 = np.sin(j * np.pi / 4) * np.real(t1)**0.5
-        part2 = np.cos(j * np.pi / 3) * np.imag(t2)**0.3
-        part3 = np.log(np.abs(rec_seq[j] * imc_seq[j]) + 1)
+        # linear interpolation to replace linspace
+        t = j / denom
+        rec = r1 + (r2 - r1) * t
+        imc = i1 + (i2 - i1) * t
+
+        part1 = np.sin(j * (np.pi / 4.0)) * part1_scale
+        part2 = np.cos(j * (np.pi / 3.0)) * part2_scale
+        part3 = np.log(abs(rec * imc) + 1.0)       # real
+
         magnitude = part1 + part2 + part3
-        angle = np.angle(t1) * np.sin(j) + np.angle(t2) * np.cos(j)
-        cf[j] = magnitude * np.exp(1j * angle)
-    return cf.astype(np.complex128)
+
+        # angle from fixed args; j-only trigs are real
+        angle = ang1 * np.sin(float(j)) + ang2 * np.cos(float(j))
+
+        # exp(i*angle) safely
+        cf[j] = magnitude * (np.cos(angle) + 1j * np.sin(angle))
+
+    return cf
 
 ALLOWED["p327"]=p327
 
@@ -8831,19 +9835,40 @@ def p360(z,a,state):
     
 ALLOWED["p360"]=p360
 
-def p361(z,a,state):
+def p361(z, a, state):
     t1, t2 = z[0], z[1]
     n = 35
     cf = np.zeros(n, dtype=np.complex128)
-    re1 = np.real(t1)
-    im1 = np.imag(t1)
-    re2 = np.real(t2)
-    im2 = np.imag(t2)
+
+    a1 = np.abs(t1)
+    a2 = np.abs(t2)
+    re1, im1 = t1.real, t1.imag
+    re2, im2 = t2.real, t2.imag
+
+    half = n // 2
+    EPS = 1e-12
+
     for j in range(n):
-        mag = np.log(np.abs(t1) + j * re1) * (1 + np.sin(j * im2)) if j % 2 == 0 else np.log(np.abs(t2) + j * im1) * (1 + np.cos(j * re2))
-        angle = np.sin(j * np.pi * re1 / n) + np.cos(j * np.pi * im2 / n) if j <= n / 2 else np.sin(j * np.pi * re2 / n) - np.cos(j * np.pi * im1 / n)
+        # ----- magnitude term (guard log argument) -----
+        if (j & 1) == 0:  # even
+            x = a1 + j * re1
+            base = x if (np.isfinite(x) and x > EPS) else 1.0
+            mag = np.log(base) * (1.0 + np.sin(j * im2))
+        else:              # odd
+            x = a2 + j * im1
+            base = x if (np.isfinite(x) and x > EPS) else 1.0
+            mag = np.log(base) * (1.0 + np.cos(j * re2))
+
+        # ----- angle term -----
+        if j <= half:
+            angle = np.sin(j * (np.pi * re1 / n)) + np.cos(j * (np.pi * im2 / n))
+        else:
+            angle = np.sin(j * (np.pi * re2 / n)) - np.cos(j * (np.pi * im1 / n))
+
+        # polar synth
         cf[j] = mag * (np.cos(angle) + 1j * np.sin(angle))
-    return cf.astype(np.complex128).astype(np.complex128)
+
+    return cf
     
 ALLOWED["p361"]=p361
 
@@ -9390,22 +10415,75 @@ def gpt1(z, a, state):
 
 ALLOWED["gpt1"]=gpt1
 
-def p391(z,a,state):
+def p391(z, a, state):
     t1, t2 = z[0], z[1]
     n = 35
     cf = np.zeros(n, dtype=np.complex128)
-    n = 35
-    rec = np.linspace(np.real(t1), np.real(t2), n)
-    imc = np.linspace(np.imag(t1), np.imag(t2), n)
+
+    # Precompute real and imag interpolation endpoints
+    r1, r2 = t1.real, t2.real
+    i1, i2 = t1.imag, t2.imag
+    denom = float(n - 1) if n > 1 else 1.0
+
+    # Precompute angles safely (Numba-safe)
+    ang1 = np.arctan2(t1.imag, t1.real)
+    ang2 = np.arctan2(t2.imag, t2.real)
+
+    EPS = 1e-12
+
+    # ----- build rec / imc linearly on the fly -----
     for j in range(1, n + 1):
-        magnitude = np.log(np.abs(rec[j - 1] + imc[j - 1]) + 1) * (j**0.5) * (1.2 if j % 2 == 0 else 0.8)
-        angle = np.angle(t1) * np.sin(j / 3) + np.angle(t2) * np.cos(j / 4) + np.sin(j) * np.cos(j / 2)
-        cf[j - 1] = magnitude * (np.cos(angle) + np.sin(angle) * 1j)
+        # linear interpolation
+        t = (j - 1) / denom
+        rec = r1 + (r2 - r1) * t
+        imc = i1 + (i2 - i1) * t
+
+        # magnitude
+        val = abs(rec + imc) + 1.0
+        if not np.isfinite(val) or val <= 0.0:
+            val = 1.0
+        mag = np.log(val) * np.sqrt(float(j)) * (1.2 if (j % 2) == 0 else 0.8)
+
+        # angle
+        angle = ang1 * np.sin(j / 3.0) + ang2 * np.cos(j / 4.0) + np.sin(j) * np.cos(j / 2.0)
+
+        cf[j - 1] = mag * (np.cos(angle) + 1j * np.sin(angle))
+
+    # ----- second loop: cumulative product-like term -----
     for k in range(1, n + 1):
-        cf[k - 1] += (np.prod(rec[:k] + imc[:k])**(1/k)) * np.exp(1j * np.angle(cf[k - 1]))
+        # compute rec[:k]+imc[:k] product manually (simulate np.prod)
+        prod_val = 1.0
+        for m in range(1, k + 1):
+            t = (m - 1) / denom
+            rec_m = r1 + (r2 - r1) * t
+            imc_m = i1 + (i2 - i1) * t
+            prod_val *= (rec_m + imc_m)
+            # clamp overflow
+            if not np.isfinite(prod_val):
+                prod_val = 1.0
+                break
+
+        base = abs(prod_val)
+        if base <= EPS or not np.isfinite(base):
+            base = 1.0
+
+        root_val = base ** (1.0 / float(k))
+        # angle of cf[k-1]
+        theta = np.arctan2(cf[k - 1].imag, cf[k - 1].real)
+        cf[k - 1] += root_val * (np.cos(theta) + 1j * np.sin(theta))
+
+    # ----- third loop: conjugate scaling -----
     for r in range(1, n + 1):
-        cf[r - 1] *= np.conj(rec[r - 1] - imc[r - 1]) / (1 + np.abs(rec[r - 1] + imc[r - 1]))
-    return cf.astype(np.complex128)
+        t = (r - 1) / denom
+        rec_r = r1 + (r2 - r1) * t
+        imc_r = i1 + (i2 - i1) * t
+        num = np.conj(rec_r - imc_r)
+        den = 1.0 + abs(rec_r + imc_r)
+        if not np.isfinite(den) or den <= EPS:
+            den = 1.0
+        cf[r - 1] *= num / den
+
+    return cf
     
 ALLOWED["p391"]=p391
 
@@ -9872,27 +10950,100 @@ def p417(z,a,state):
 
 ALLOWED["p417"]=p417
 
-def p418(z,a,state):
+def p418(z, a, state):
     t1, t2 = z[0], z[1]
     n = 35
     cf = np.zeros(n, dtype=np.complex128)
-    rec_seq = np.linspace(np.real(t1), np.real(t2), n)
-    imc_seq = np.linspace(np.imag(t1), np.imag(t2), n)
-    for j in range(1, n +1):
-        sum_re = 0
-        sum_im = 0
-        for k in range(1, j +1):
-            sum_re += rec_seq[k-1]**k * np.cos(k * np.pi / (j + 1))
-            sum_im += imc_seq[k-1]**k * np.sin(k * np.pi / (j + 1))
-        magnitude = np.log(1 + sum_re**2 + sum_im**2) * np.sin(j * np.pi / 5) + \
-                    np.log(1 + sum_re * sum_im) * np.cos(j * np.pi / 7)
-        angle = np.angle(t1) * sum_re - np.angle(t2) * sum_im + np.sin(j * np.pi / 3) - np.cos(j * np.pi / 7)
-        cf[j-1] = magnitude * np.exp(1j * angle)
-    # Additional modifications
-    for k in range(1, n +1):
-        cf[k-1] += (np.real(t1) * np.real(t2)) / (k + 1) * np.sin(k * np.pi / 6) + \
-                    (np.imag(t1) + np.imag(t2)) * np.cos(k * np.pi / 8)
-    return cf.astype(np.complex128)
+
+    EPS = 1e-12
+    SUM_CAP = 1e300     # cap accumulators to stay finite
+    BASE_CAP = 8.0      # clamp bases before powering to avoid huge growth
+
+    # endpoints & safe angles
+    r1 = t1.real
+    r2 = t2.real
+    i1 = t1.imag
+    i2 = t2.imag
+
+    ang1 = np.arctan2(t1.imag, t1.real)
+    ang2 = np.arctan2(t2.imag, t2.real)
+    if not np.isfinite(ang1):
+        ang1 = 0.0
+    if not np.isfinite(ang2):
+        ang2 = 0.0
+
+    denom_lin = float(n - 1) if n > 1 else 1.0
+
+    for j in range(1, n + 1):
+        sum_re = 0.0
+        sum_im = 0.0
+
+        d = np.pi / (j + 1.0)
+
+        for k in range(1, j + 1):
+            t = float(k - 1) / denom_lin
+            rec_k = r1 + (r2 - r1) * t
+            imc_k = i1 + (i2 - i1) * t
+
+            # clamp bases
+            if rec_k >  BASE_CAP: rec_k =  BASE_CAP
+            if rec_k < -BASE_CAP: rec_k = -BASE_CAP
+            if imc_k >  BASE_CAP: imc_k =  BASE_CAP
+            if imc_k < -BASE_CAP: imc_k = -BASE_CAP
+
+            # integer power with simple loop (Numba-safe, overflow-resistant with caps)
+            pr = 1.0
+            pi = 1.0
+            for _ in range(k):
+                pr *= rec_k
+                pi *= imc_k
+                if not np.isfinite(pr) or pr >  SUM_CAP: pr =  SUM_CAP
+                if pr < -SUM_CAP: pr = -SUM_CAP
+                if not np.isfinite(pi) or pi >  SUM_CAP: pi =  SUM_CAP
+                if pi < -SUM_CAP: pi = -SUM_CAP
+
+            sum_re += pr * np.cos(k * d)
+            sum_im += pi * np.sin(k * d)
+
+            # keep accumulators finite
+            if not np.isfinite(sum_re) or sum_re >  SUM_CAP: sum_re =  SUM_CAP
+            if sum_re < -SUM_CAP: sum_re = -SUM_CAP
+            if not np.isfinite(sum_im) or sum_im >  SUM_CAP: sum_im =  SUM_CAP
+            if sum_im < -SUM_CAP: sum_im = -SUM_CAP
+
+        # magnitude via safe logs (arguments >= 1)
+        s1 = 1.0 + sum_re * sum_re + sum_im * sum_im
+        if not np.isfinite(s1) or s1 < 1.0:
+            s1 = 1.0
+        s2 = 1.0 + sum_re * sum_im
+        if not np.isfinite(s2) or s2 < 1.0:
+            s2 = 1.0
+
+        mag = np.log(s1) * np.sin(j * (np.pi / 5.0)) + np.log(s2) * np.cos(j * (np.pi / 7.0))
+        if not np.isfinite(mag):
+            mag = 0.0
+
+        # angle from real pieces; guard finiteness
+        angle = ang1 * sum_re - ang2 * sum_im + np.sin(j * (np.pi / 3.0)) - np.cos(j * (np.pi / 7.0))
+        if not np.isfinite(angle):
+            angle = 0.0
+
+        cf[j - 1] = mag * (np.cos(angle) + 1j * np.sin(angle))
+
+    # Additional modifications (no divisions by zero here)
+    re_re = t1.real * t2.real
+    im_sum = t1.imag + t2.imag
+    if not np.isfinite(re_re): re_re = 0.0
+    if not np.isfinite(im_sum): im_sum = 0.0
+
+    for k in range(1, n + 1):
+        denom = float(k + 1)  # > 0
+        addv = (re_re / denom) * np.sin(k * (np.pi / 6.0)) + im_sum * np.cos(k * (np.pi / 8.0))
+        if not np.isfinite(addv):
+            addv = 0.0
+        cf[k - 1] += addv
+
+    return cf
     
 ALLOWED["p418"]=p418
 
@@ -10085,20 +11236,78 @@ def p427(z,a,state):
 
 ALLOWED["p427"]=p427
 
-def p428(z,a,state):
+def p428(z, a, state):
     t1, t2 = z[0], z[1]
     n = 35
     cf = np.zeros(n, dtype=np.complex128)
-    rec = np.linspace(np.real(t1), np.real(t2), n)
-    imc = np.linspace(np.imag(t1), np.imag(t2), n)
-    for j in range(1, n +1):
-        mag_part = np.log(np.abs(rec[j-1] * imc[j-1]) + 1) * (1 + np.sin(j * np.pi /5))
-        angle_part = np.angle(t1) * np.cos(j) + np.angle(t2) * np.sin(j /3)
-        cf[j-1] = mag_part * (np.cos(angle_part) + 1j * np.sin(angle_part))
-        cf[j-1] += np.prod(rec[:j] + imc[:j])**(1/j)
-        if j %5 ==0:
-            cf[j-1] *= np.exp(1j * np.angle(cf[j-1]))
-    return cf.astype(np.complex128)
+
+    EPS = 1e-12
+    SUM_CAP = 1e300
+
+    r1 = t1.real
+    r2 = t2.real
+    i1 = t1.imag
+    i2 = t2.imag
+    ang1 = np.arctan2(t1.imag, t1.real)
+    ang2 = np.arctan2(t2.imag, t2.real)
+    if not np.isfinite(ang1):
+        ang1 = 0.0
+    if not np.isfinite(ang2):
+        ang2 = 0.0
+
+    denom = float(n - 1) if n > 1 else 1.0
+
+    for j in range(1, n + 1):
+        # Linear interpolation (replaces linspace)
+        t = float(j - 1) / denom
+        rec = r1 + (r2 - r1) * t
+        imc = i1 + (i2 - i1) * t
+
+        # magnitude part
+        x = abs(rec * imc) + 1.0
+        if not np.isfinite(x) or x <= 0.0:
+            x = 1.0
+        mag_part = np.log(x) * (1.0 + np.sin(j * (np.pi / 5.0)))
+
+        # angle part
+        angle_part = ang1 * np.cos(float(j)) + ang2 * np.sin(float(j) / 3.0)
+
+        # base value
+        cf[j - 1] = mag_part * (np.cos(angle_part) + 1j * np.sin(angle_part))
+
+        # manual cumulative product of rec[:j] + imc[:j]
+        prod_val = 1.0
+        for k in range(1, j + 1):
+            t2k = float(k - 1) / denom
+            rec_k = r1 + (r2 - r1) * t2k
+            imc_k = i1 + (i2 - i1) * t2k
+            prod_val *= (rec_k + imc_k)
+            if not np.isfinite(prod_val):
+                prod_val = 1.0
+                break
+            if prod_val > SUM_CAP:
+                prod_val = SUM_CAP
+            elif prod_val < -SUM_CAP:
+                prod_val = -SUM_CAP
+
+        # safe root
+        base = abs(prod_val)
+        if base < EPS or not np.isfinite(base):
+            base = 1.0
+        root_val = base ** (1.0 / float(j))
+        cf[j - 1] += root_val
+
+        # every 5th term: multiply by exp(i·angle(cf[j-1])) safely
+        if (j % 5) == 0:
+            ang_cf = np.arctan2(cf[j - 1].imag, cf[j - 1].real)
+            cf[j - 1] *= (np.cos(ang_cf) + 1j * np.sin(ang_cf))
+
+    # final finite check
+    for i in range(n):
+        if not (np.isfinite(cf[i].real) and np.isfinite(cf[i].imag)):
+            cf[i] = 0.0 + 0.0j
+
+    return cf
 
 ALLOWED["p428"]=p428
 
@@ -10529,17 +11738,71 @@ def p453(z,a,state):
 
 ALLOWED["p453"]=p453
 
-def p454(z,a,state):
+def p454(z, a, state):
     t1, t2 = z[0], z[1]
     n = 35
     cf = np.zeros(n, dtype=np.complex128)
-    rec_seq = np.linspace(t1.real, t2.real, n)
-    imc_seq = np.linspace(t1.imag, t2.imag, n)
-    for j in range(1, n+1):
-        mag = np.log(np.abs(rec_seq[j-1] * imc_seq[j-1]) + 1) * (1 + np.sin(j * np.pi / 4)) + np.prod(rec_seq[:j])**(1/j)
-        angle = np.angle(t1)*j + np.sin(j * np.angle(t2)) + np.cos(j * imc_seq[j-1])
-        cf[j-1] = mag * np.exp(1j * angle)
-    return cf.astype(np.complex128)
+
+    EPS = 1e-12
+    SUM_CAP = 1e300
+
+    r1, r2 = t1.real, t2.real
+    i1, i2 = t1.imag, t2.imag
+
+    ang1 = np.arctan2(t1.imag, t1.real)
+    ang2 = np.arctan2(t2.imag, t2.real)
+    if not np.isfinite(ang1): ang1 = 0.0
+    if not np.isfinite(ang2): ang2 = 0.0
+
+    denom = float(n - 1) if n > 1 else 1.0
+
+    for j in range(1, n + 1):
+        # rec_seq[j-1], imc_seq[j-1] via interpolation
+        tj = float(j - 1) / denom
+        rec_j = r1 + (r2 - r1) * tj
+        imc_j = i1 + (i2 - i1) * tj
+
+        # log term (arg >= 1)
+        x = abs(rec_j * imc_j) + 1.0
+        if not np.isfinite(x) or x <= 0.0:
+            x = 1.0
+        mag = np.log(x) * (1.0 + np.sin(j * (np.pi / 4.0)))
+
+        # cumulative product prod(rec_seq[:j]) with caps
+        prod_val = 1.0
+        for k in range(1, j + 1):
+            tk = float(k - 1) / denom
+            rec_k = r1 + (r2 - r1) * tk
+            prod_val *= rec_k
+            if not np.isfinite(prod_val):
+                prod_val = 1.0
+                break
+            if prod_val >  SUM_CAP: prod_val =  SUM_CAP
+            if prod_val < -SUM_CAP: prod_val = -SUM_CAP
+
+        base = abs(prod_val)
+        if not np.isfinite(base) or base < EPS:
+            base = 1.0
+        mag += base ** (1.0 / float(j))
+
+        # angle parts (Numba-safe)
+        angle = (
+            ang1 * float(j)
+            + np.sin(float(j) * ang2)
+            + np.cos(float(j) * imc_j)
+        )
+        if not np.isfinite(angle):
+            angle = 0.0
+
+        # polar synthesis (avoid complex exp)
+        cf[j - 1] = mag * (np.cos(angle) + 1j * np.sin(angle))
+
+    # final finite clamp (defensive)
+    for i in range(n):
+        if not (np.isfinite(cf[i].real) and np.isfinite(cf[i].imag)):
+            cf[i] = 0.0 + 0.0j
+
+    return cf
 
 ALLOWED["p454"]=p454
 
@@ -11006,19 +12269,40 @@ def p479(z,a,state):
     
 ALLOWED["p479"]=p479
 
-def p480(z,a,state):
+def p480(z, a, state):
     t1, t2 = z[0], z[1]
     n = 35
     cf = np.zeros(n, dtype=np.complex128)
-    for j in range(1, n+1):
+
+    EPS = 1e-12
+
+    # angles via atan2 (Numba-safe)
+    ang1 = np.arctan2(t1.imag, t1.real)
+    ang2 = np.arctan2(t2.imag, t2.real)
+
+    for j in range(1, n + 1):
+        # magnitude parts (all real)
         mag_part1 = np.log(np.abs(t1) + j) * np.sin(j * t1.real)
         mag_part2 = np.log(np.abs(t2) + j) * np.cos(j * t1.imag)
-        magnitude = mag_part1 + mag_part2 + j**0.5
-        angle_part1 = np.angle(t1)*np.cos(j / (t1.real +1))
-        angle_part2 = np.angle(t2)*np.sin(j / (t2.imag +1))
-        angle = angle_part1 - angle_part2 + np.sin(j * np.pi /6)
-        cf[j-1] = magnitude * (np.cos(angle) + 1j * np.sin(angle))
-    return cf.astype(np.complex128)
+        magnitude = mag_part1 + mag_part2 + np.sqrt(float(j))
+
+        # guarded divisions in the angle terms
+        d1 = t1.real + 1.0
+        d2 = t2.imag + 1.0
+
+        term1 = 0.0
+        term2 = 0.0
+        if np.isfinite(d1) and abs(d1) > EPS:
+            term1 = ang1 * np.cos(j / d1)
+        if np.isfinite(d2) and abs(d2) > EPS:
+            term2 = ang2 * np.sin(j / d2)
+
+        angle = term1 - term2 + np.sin(j * (np.pi / 6.0))
+
+        # polar synth -> complex
+        cf[j - 1] = magnitude * (np.cos(angle) + 1j * np.sin(angle))
+
+    return cf
 
 ALLOWED["p480"]=p480
 
@@ -11193,20 +12477,47 @@ def p488(z,a,state):
     
 ALLOWED["p488"]=p488
 
-def p489(z,a,state):
+def p489(z, a, state):
     t1, t2 = z[0], z[1]
     n = 35
     cf = np.zeros(n, dtype=np.complex128)
-    for j in range(1, n+1):
-        sum_mag =0
-        for k in range(1, j+1):
-            sum_mag += t1.real**k * np.sin(k * np.angle(t1))
-        for r in range(1, (n-j)+1):
-            sum_mag += t2.imag**r * np.cos(r * np.angle(t2))
-        mag = np.log(sum_mag +1)
-        angle = sum_mag / (j +1) + sum_mag / (n -j +1)
-        cf[j-1] = mag * (np.cos(angle) + 1j * np.sin(angle))
-    return cf.astype(np.complex128)
+
+    # Precompute angles safely
+    ang1 = np.arctan2(t1.imag, t1.real)
+    ang2 = np.arctan2(t2.imag, t2.real)
+
+    for j in range(1, n + 1):
+        # accumulate real magnitude contribution
+        sum_mag = 0.0
+
+        # k = 1..j term: (t1.real**k) * sin(k*angle(t1))
+        base1 = t1.real
+        for k in range(1, j + 1):
+            # integer power is safe
+            p = 1.0
+            for _ in range(k):
+                p *= base1
+            sum_mag += p * np.sin(k * ang1)
+
+        # r = 1..(n-j) term: (t2.imag**r) * cos(r*angle(t2))
+        base2 = t2.imag
+        up = n - j
+        for r in range(1, up + 1):
+            q = 1.0
+            for _ in range(r):
+                q *= base2
+            sum_mag += q * np.cos(r * ang2)
+
+        # magnitude: guard log domain
+        mag = np.log(1.0 + abs(sum_mag))
+
+        # angle: real scalars; denominators > 0
+        angle = (sum_mag / float(j + 1)) + (sum_mag / float(n - j + 1))
+
+        # polar synthesis (avoid complex exp)
+        cf[j - 1] = mag * (np.cos(angle) + 1j * np.sin(angle))
+
+    return cf
     
 ALLOWED["p489"]=p489
 
@@ -11841,21 +13152,65 @@ def p529(z,a,state):
     
 ALLOWED["p529"]=p529
 
-def p530(z,a,state):
+def p530(z, a, state):
     t1, t2 = z[0], z[1]
     n = 35
     cf = np.zeros(n, dtype=np.complex128)
-    rec = np.linspace(t1.real, t2.real, num=n)
-    imc = np.linspace(t1.imag, t2.imag, num=n)
+
+    # Precompute
+    r1, r2 = t1.real, t2.real
+    i1, i2 = t1.imag, t2.imag
+    ang1 = np.arctan2(t1.imag, t1.real)
+    ang2 = np.arctan2(t2.imag, t2.real)
+    if not np.isfinite(ang1): ang1 = 0.0
+    if not np.isfinite(ang2): ang2 = 0.0
+
+    denom_lin = float(n - 1) if n > 1 else 1.0
+    EPS = 1e-12
+
     for j in range(n):
-        r = rec[j]
-        m = imc[j]
-        term1 = np.sin(r * np.pi / (j + 2)) * np.cos(m * np.pi / (j + 3))
-        term2 = np.log(np.abs(r + m) + 1) * (t1.real ** (j + 1))
-        term3 = np.prod(np.array([r, m, j + 1])) ** (1 / (j + 1))
+        # Linear interpolation to replace linspace
+        t = float(j) / denom_lin
+        r = r1 + (r2 - r1) * t
+        m = i1 + (i2 - i1) * t
+
+        # term1
+        term1 = np.sin(r * (np.pi / float(j + 2))) * np.cos(m * (np.pi / float(j + 3)))
+
+        # term2: log(|r+m|+1) * (t1.real)^(j+1)
+        base_log = abs(r + m) + 1.0
+        if not np.isfinite(base_log) or base_log <= 0.0:
+            base_log = 1.0
+        log_part = np.log(base_log)
+
+        # integer power (Numba-safe)
+        pw = 1.0
+        rb = t1.real
+        for _ in range(j + 1):
+            pw *= rb
+
+        term2 = log_part * pw
+
+        # term3: (|r * m * (j+1)|)^(1/(j+1))
+        prod_abs = abs(r * m * float(j + 1))
+        if not np.isfinite(prod_abs) or prod_abs < EPS:
+            prod_abs = 1.0
+        term3 = prod_abs ** (1.0 / float(j + 1))
+
         mag = term1 + term2 + term3
-        angle = np.angle(t1) * np.sin(m * np.pi / (j + 4)) + np.angle(t2) * np.cos(r * np.pi / (j + 5)) + np.log(j + 2)
+
+        # angle
+        angle = (
+            ang1 * np.sin(m * (np.pi / float(j + 4)))
+            + ang2 * np.cos(r * (np.pi / float(j + 5)))
+            + np.log(float(j + 2))
+        )
+        if not np.isfinite(angle):
+            angle = 0.0
+
+        # polar synthesis
         cf[j] = mag * (np.cos(angle) + 1j * np.sin(angle))
+
     return cf
 
 ALLOWED["p530"]=p530
@@ -12139,19 +13494,50 @@ def p546(z,a,state):
 
 ALLOWED["p546"]=p546
 
-def p547(z,a,state):
-    t1, t2 = z[0], z[1]
+def p547(z, a, state):
+    t1 = z[0]
+    t2 = z[1]
+
     n = 35
     cf = np.zeros(n, dtype=np.complex128)
+
+    # Precompute basics
+    re1, im1 = t1.real, t1.imag
+    re2, im2 = t2.real, t2.imag
+    abs_t1 = np.hypot(re1, im1)
+    abs_t2 = np.hypot(re2, im2)
+
+    ang_t1 = np.arctan2(im1, re1)
+    ang_t2 = np.arctan2(im2, re2)
+
+    # First pass
     for j in range(1, n + 1):
-        mag = np.log(np.abs(t1) + j) * np.sin(j * t1.real) + np.log(np.abs(t2) + j) * np.cos(j * t1.imag)
-        angle = np.angle(t1) * j**2 - np.angle(t2) * np.sqrt(j)
-        cf[j - 1] = mag * (np.cos(angle) + np.sin(angle) * 1j)
+        lj1 = np.log(abs_t1 + j)          # j >= 1, so argument > 0
+        lj2 = np.log(abs_t2 + j)
+
+        mag = lj1 * np.sin(j * re1) + lj2 * np.cos(j * im1)
+        angle = ang_t1 * (j * j) - ang_t2 * np.sqrt(float(j))
+
+        cf[j - 1] = mag * (np.cos(angle) + 1j * np.sin(angle))
+
+    # Second pass
     for k in range(1, n + 1):
-        cf[k - 1] *= ((k + t1.real) / (1 + k * t2.real)) + (np.cos(k * np.angle(t1))+ np.sin(k * np.angle(t2)))
+        denom = 1.0 + k * re2
+        if denom == 0.0:
+            frac = 0.0  # avoid division by zero; neutralize that term
+        else:
+            frac = (k + re1) / denom
+
+        osc = np.cos(k * ang_t1) + np.sin(k * ang_t2)
+        cf[k - 1] *= (frac + osc)
+
+    # Third pass
     for r in range(1, n + 1):
-        cf[r - 1] += np.conj(cf[n - r]) * np.abs(t1)**(1/r)
-    return cf.astype(np.complex128)
+        # power(|t1|, 1/r) — safe since |t1| >= 0
+        pr = abs_t1 ** (1.0 / r)
+        cf[r - 1] += cf[n - r].conjugate() * pr
+
+    return cf
 
 ALLOWED["p547"]=p547
 
@@ -12200,24 +13586,55 @@ def p550(z,a,state):
     
 ALLOWED["p550"]=p550
 
-def p551(z,a,state):
+def p551(z, a, state):
     t1, t2 = z[0], z[1]
     n = 40
     cf = np.zeros(n, dtype=np.complex128)
+
+    # Precompute magnitudes and angles safely
+    a1 = np.abs(t1)
+    a2 = np.abs(t2)
+    ang1 = np.arctan2(t1.imag, t1.real)
+    ang2 = np.arctan2(t2.imag, t2.real)
+
+    # fixed scalars
+    re1, im1 = t1.real, t1.imag
+    re2, im2 = t2.real, t2.imag
+
+    # sin/cos periods
+    pi_over_n = np.pi / float(n)
+    two_pi_over_n = 2.0 * np.pi / float(n)
+
     for j in range(1, n + 1):
-        rec_t1 = t1.real
-        imc_t1 = t1.imag
-        rec_t2 = t2.real
-        imc_t2 = t2.imag
-        mag_part1 = np.log(np.abs(t1) + 1) * np.sin(j * np.pi / n)
-        mag_part2 = np.log(np.abs(t2) + 1) * np.cos(j * np.pi / (n / 2))
-        mag_variation = mag_part1 + mag_part2 + (rec_t1 * imc_t2)**(1 / j)
-        angle_part1 = np.angle(t1) * np.sin(j / 2)
-        angle_part2 = np.angle(t2) * np.cos(j / 3)
-        angle_variation = angle_part1 + angle_part2 + np.sin(j) * np.cos(j)
-        complex_component = np.cos(angle_variation) + 1j * np.sin(angle_variation)
-        cf[j - 1] = mag_variation * complex_component + np.conj(t1) * np.sin(j) + np.conj(t2) * np.cos(j)
-    return cf.astype(np.complex128)
+        jf = float(j)
+
+        # ---- magnitude parts (guarded logs and roots) ----
+        # log(|t|+1) is always defined
+        mag_part1 = np.log(a1 + 1.0) * np.sin(jf * pi_over_n)
+        mag_part2 = np.log(a2 + 1.0) * np.cos(jf * two_pi_over_n)
+
+        # (re1 * im2) could be negative; take absolute before 1/j power
+        base_rm = abs(re1 * im2)
+        root_val = base_rm ** (1.0 / jf) if base_rm > 0.0 else 0.0
+
+        mag_variation = mag_part1 + mag_part2 + root_val
+
+        # ---- angle parts (Numba-safe) ----
+        angle_part1 = ang1 * np.sin(jf / 2.0)
+        angle_part2 = ang2 * np.cos(jf / 3.0)
+        angle_variation = angle_part1 + angle_part2 + np.sin(jf) * np.cos(jf)
+
+        # unit phasor without complex exp
+        comp = np.cos(angle_variation) + 1j * np.sin(angle_variation)
+
+        # ---- assemble coefficient ----
+        cf[j - 1] = (
+            mag_variation * comp
+            + np.conj(t1) * np.sin(jf)
+            + np.conj(t2) * np.cos(jf)
+        )
+
+    return cf
         
 ALLOWED["p551"]=p551
 
@@ -12463,15 +13880,45 @@ def p566(z,a,state):
     
 ALLOWED["p566"]=p566
 
-def p567(z,a,state):
-    t1, t2 = z[0], z[1]
+def p567(z, a, state):
+    t1 = z[0]
+    t2 = z[1]
     n = 25
     cf = np.zeros(n, dtype=np.complex128)
-    for j in range(1, 26):
-        mag = np.log(np.abs(t1) + np.abs(t2) + j) * (1 + np.sin(j * t1.real) + np.cos(j * t2.imag) + t1.real**0.5 * t2.imag**0.3)
-        angle = np.angle(t1) * j + np.angle(t2) * np.sin(j / 3) + np.cos(j / 5)
-        cf[j - 1] = mag * np.exp(1j * angle)
-    return cf.astype(np.complex128)
+
+    re1 = t1.real
+    im1 = t1.imag
+    re2 = t2.real
+    im2 = t2.imag
+
+    for j in range(1, n + 1):
+        # safe abs and log
+        abs_t1 = np.hypot(re1, im1)
+        abs_t2 = np.hypot(re2, im2)
+        mag_arg = abs_t1 + abs_t2 + j
+        if mag_arg <= 0.0 or np.isnan(mag_arg) or np.isinf(mag_arg):
+            cf[j - 1] = 0.0j
+            continue
+
+        # safe magnitude
+        mag = np.log(mag_arg)
+        mag *= 1.0 + np.sin(j * re1) + np.cos(j * im2)
+        # safe fractional powers
+        re1_safe = np.abs(re1)
+        im2_safe = np.abs(im2)
+        mag *= np.sqrt(re1_safe) * (im2_safe ** 0.3)
+
+        # safe angle approximation (avoid np.angle)
+        angle1 = np.arctan2(im1, re1)
+        angle2 = np.arctan2(im2, re2)
+        angle = angle1 * j + angle2 * np.sin(j / 3.0) + np.cos(j / 5.0)
+
+        if np.isnan(mag) or np.isnan(angle) or np.isinf(mag) or np.isinf(angle):
+            cf[j - 1] = 0.0j
+        else:
+            cf[j - 1] = mag * np.exp(1j * angle)
+
+    return cf
     
 ALLOWED["p567"]=p567
 
@@ -13220,18 +14667,59 @@ def p616(z,a,state):
     
 ALLOWED["p616"]=p616
 
-def p617(z,a,state):
-    t1, t2 = z[0], z[1]
+def p617(z, a, state):
+    t1 = z[0]
+    t2 = z[1]
     cf = np.zeros(9, dtype=np.complex128)
+
+    re1 = t1.real
+    im1 = t1.imag
+    re2 = t2.real
+    im2 = t2.imag
+
+    # Numba-safe angle
+    ang_t1 = np.arctan2(im1, re1)
+    ang_t2 = np.arctan2(im2, re2)
+
     for j in range(1, 10):
-        real_sum = 0
-        imag_sum = 0
-        for k in range(1, j +1):
-            for r in range(1, k +1):
-                real_sum += (t1.real**k) * np.cos(r * np.angle(t2))
-                imag_sum += (t2.imag**r) * np.sin(k * np.angle(t1))
-        cf[j -1] = complex(np.log(real_sum + 1), np.log(imag_sum + 1))
-    return cf.astype(np.complex128)
+        real_sum = 0.0
+        imag_sum = 0.0
+
+        for k in range(1, j + 1):
+            # re1**k via integer multiply (avoids float pow corner cases)
+            pk = 1.0
+            for _ in range(k):
+                pk *= re1
+
+            # sin(k * angle(t1)) computed once per k
+            sin_k_ang_t1 = np.sin(k * ang_t1)
+
+            for r in range(1, k + 1):
+                real_sum += pk * np.cos(r * ang_t2)
+
+                # (im2)**r via integer multiply (handles negative bases cleanly)
+                pr = 1.0
+                for _ in range(r):
+                    pr *= im2
+                imag_sum += pr * sin_k_ang_t1
+
+        # Logs: log1p(x) valid only for x > -1
+        x = real_sum
+        y = imag_sum
+        if (
+            np.isnan(x) or np.isinf(x) or x <= -0.999999999999
+            or np.isnan(y) or np.isinf(y) or y <= -0.999999999999
+        ):
+            cf[j - 1] = 0.0j
+        else:
+            rx = np.log1p(x)
+            ry = np.log1p(y)
+            if np.isnan(rx) or np.isinf(rx) or np.isnan(ry) or np.isinf(ry):
+                cf[j - 1] = 0.0j
+            else:
+                cf[j - 1] = complex(rx, ry)
+
+    return cf
     
 ALLOWED["p617"]=p617
 
@@ -14896,26 +16384,36 @@ def p739(z,a,state):
 
 ALLOWED["p739"]=p739
 
-def p740(z,a,state):
-    t1, t2 = z[0], z[1]
+def p740(z, a, state):
+    t1 = z[0]
+    t2 = z[1]
+
+    r1 = t1.real
+    r2 = t2.real
+    i1 = t1.imag
+    i2 = t2.imag
+
+    # Safe square-roots (avoid NaNs for negative inputs)
+    sr1 = np.sqrt(np.abs(r1))
+    sr2 = np.sqrt(np.abs(r2))
+    si1 = np.sqrt(np.abs(i1))
+    si2 = np.sqrt(np.abs(i2))
+
     cf = np.zeros(11, dtype=np.complex128)
-    r_1 = t1.real
-    r_2 = t2.real
-    i_1 = t1.imag
-    i_2 = t2.imag
-    
-    cf[0] = i_1**3 - i_2**3 + r_1**2 - r_2**2
-    cf[1] = r_1 * i_1 * r_2 * i_2 * (r_1 -1j*i_1) 
-    cf[2] = i_1**2 + r_2**2 - i_2**2 + (r_2 - i_1)
-    cf[3] = r_1 * (r_1**2 * i_1**2 - r_2**2 * i_2**2)
-    cf[4] = r_1**3 + r_1**2 + i_2**3 + i_1**2 - 10
-    cf[5] = i_1 * i_2 * (i_1**2 * r_2**2 - i_2**2 * r_1**2)
-    cf[6] = r_1**0.5 - i_2**0.5 + r_2**0.5 - i_1**0.5
-    cf[7] = r_1 * i_1**2 - r_2 * i_2 * (r_1 -1j*i_1)
-    cf[8] = i_1**3 - i_2**3 + r_2**2 - r_1**2
-    cf[9] = r_1 * i_1 * r_2 * i_2 * (i_2 - r_1) 
-    cf[10] = i_1**4 + i_2**4 + r_1**4 + r_2**4
-    return cf.astype(np.complex128)
+
+    cf[0]  = i1**3 - i2**3 + r1**2 - r2**2
+    cf[1]  = (r1 * i1 * r2 * i2) * (r1 - 1j * i1)
+    cf[2]  = i1**2 + r2**2 - i2**2 + (r2 - i1)
+    cf[3]  = r1 * (r1**2 * i1**2 - r2**2 * i2**2)
+    cf[4]  = r1**3 + r1**2 + i2**3 + i1**2 - 10.0
+    cf[5]  = i1 * i2 * (i1**2 * r2**2 - i2**2 * r1**2)
+    cf[6]  = sr1 - si2 + sr2 - si1                  # was r1**0.5 - i2**0.5 + r2**0.5 - i1**0.5
+    cf[7]  = r1 * i1**2 - r2 * i2 * (r1 - 1j * i1)
+    cf[8]  = i1**3 - i2**3 + r2**2 - r1**2
+    cf[9]  = (r1 * i1 * r2 * i2) * (i2 - r1)
+    cf[10] = i1**4 + i2**4 + r1**4 + r2**4
+
+    return cf
 
 ALLOWED["p740"]=p740
     
@@ -15195,20 +16693,70 @@ def p757(z,a,state):
  
 ALLOWED["p757"]=p757
 
-def p758(z,a,state):
-    t1, t2 = z[0], z[1]
+def p758(z, a, state):
+    t1 = z[0]
+    t2 = z[1]
     cf = np.zeros(10, dtype=np.complex128)
-    cf[0] = (t1 ** 2 + t2 ** 2) * np.exp(1j * np.angle(t1 + t2))
-    cf[1] = 100j * (t1 ** 3 - t2 ** 2) * np.cos(np.angle(t1 - t2))
-    cf[2] = np.real(t1 - t2) ** 2 + np.imag(t1 + t2) ** 2 - 100
-    cf[3] = 42 * (np.log(1 + np.abs(t1)) + np.log(1 + np.abs(t2))) * np.exp(1j * np.pi / 4)
-    cf[4] = np.sqrt(np.abs(t1) + np.abs(t2)) * np.exp(1j * (np.angle(t1 * t2) - np.pi / 3))
-    cf[5] = np.sinh(0.1 * np.real(t1 + t2)) + np.cosh(0.1 * np.imag(t1 - t2))
-    cf[6] = 1 / (1 + np.exp(-np.abs(t1))) + 1j / (1 + np.exp(-np.abs(t2)))
-    cf[7] = np.arctan(1 / np.abs(t1 + t2)) * 1j
-    cf[8] = 1j * t1 ** 3 - t2 * 2 - 200
-    cf[9] = np.exp(1j * t1 * t2) / (1 + t1 + t2)
-    return cf.astype(np.complex128)
+
+    # precompute re/im
+    re1, im1 = t1.real, t1.imag
+    re2, im2 = t2.real, t2.imag
+
+    # safe magnitudes and angles
+    abs_t1 = np.hypot(re1, im1)
+    abs_t2 = np.hypot(re2, im2)
+    abs_t1t2 = np.hypot(re1 + re2, im1 + im2)
+    abs_t1mt2 = np.hypot(re1 - re2, im1 - im2)
+    ang_t1t2 = np.arctan2(im1 + im2, re1 + re2)
+    ang_t1mt2 = np.arctan2(im1 - im2, re1 - re2)
+    ang_t1t2_prod = np.arctan2(im1 * re2 + im2 * re1, re1 * re2 - im1 * im2)
+
+    # cf[0]
+    cf[0] = (t1**2 + t2**2) * np.exp(1j * ang_t1t2)
+
+    # cf[1]
+    cf[1] = 100j * (t1**3 - t2**2) * np.cos(ang_t1mt2)
+
+    # cf[2]
+    real_part = (re1 - re2) ** 2
+    imag_part = (im1 + im2) ** 2
+    cf[2] = real_part + imag_part - 100.0
+
+    # cf[3]  safe logs
+    val1 = np.log1p(abs_t1)
+    val2 = np.log1p(abs_t2)
+    cf[3] = 42.0 * (val1 + val2) * np.exp(1j * np.pi / 4)
+
+    # cf[4]
+    mag = np.sqrt(abs_t1 + abs_t2)
+    cf[4] = mag * np.exp(1j * (ang_t1t2_prod - np.pi / 3.0))
+
+    # cf[5]
+    cf[5] = np.sinh(0.1 * (re1 + re2)) + np.cosh(0.1 * (im1 - im2))
+
+    # cf[6]  logistic form, safe exponent
+    e1 = np.exp(-abs_t1) if abs_t1 < 700.0 else 0.0
+    e2 = np.exp(-abs_t2) if abs_t2 < 700.0 else 0.0
+    cf[6] = 1.0 / (1.0 + e1) + 1j / (1.0 + e2)
+
+    # cf[7]  safe arctan
+    denom = abs_t1t2
+    if denom == 0.0 or np.isnan(denom) or np.isinf(denom):
+        cf[7] = 0.0j
+    else:
+        cf[7] = 1j * np.arctan(1.0 / denom)
+
+    # cf[8]
+    cf[8] = 1j * t1**3 - (t2 * 2.0) - 200.0
+
+    # cf[9]  safe division
+    denom2 = 1.0 + t1 + t2
+    if np.abs(denom2) < 1e-12:
+        cf[9] = 0.0j
+    else:
+        cf[9] = np.exp(1j * t1 * t2) / denom2
+
+    return cf
 
 ALLOWED["p758"]=p758
 
@@ -15860,16 +17408,58 @@ def p786(z,a,state):
 
 ALLOWED["p786"]=p786
 
-def p787(z,a,state):
-    t1, t2 = z[0], z[1]
+def p787(z, a, state):
+    t1 = z[0]
+    t2 = z[1]
+    w  = t1 - t2  # complex exponent used in the loop
+
     cf = np.zeros(25, dtype=np.complex128)
-    cf[0] = np.real(t1 + t2) + 1j * np.imag(t1 * t2)
+
+    # cf[0] = Re(t1 + t2) + i * Im(t1 * t2)
+    cf[0] = (t1 + t2).real + 1j * (t1 * t2).imag
+
     for i in range(1, 24):
-        cf[i] = np.abs(cf[i - 1] ** (t1 - t2)) + 1j * np.angle(cf[i - 1])
-        if np.isinf(cf[i]) or np.isnan(cf[i]):
-            cf[i] = 1j
-    cf[24] = cf[0] ** 3 + cf[23] ** 2 + cf[22] - cf[21] + np.conj(cf[20])
-    return cf.astype(np.complex128)
+        prev = cf[i - 1]
+        re = prev.real
+        im = prev.imag
+
+        # angle(prev)
+        theta = np.arctan2(im, re)
+
+        # r = |prev|
+        r = np.hypot(re, im)
+
+        # Compute |prev**w| safely:
+        # If r==0 → magnitude is 0
+        if r == 0.0:
+            mag_pow = 0.0
+        else:
+            # ln(prev) = ln r + i*theta
+            ln_r = np.log(r)
+            # x = Re(w * (ln r + i*theta)) = Re(w)*ln r - Im(w)*theta
+            x = w.real * ln_r - w.imag * theta
+
+            # Clamp x to avoid overflow in exp(x)
+            if x > 700.0:
+                mag_pow = np.inf
+            elif x < -700.0:
+                mag_pow = 0.0
+            else:
+                mag_pow = np.exp(x)
+
+        val_real = mag_pow
+        val_imag = theta
+
+        # Guard finiteness
+        if (not np.isfinite(val_real)) or (not np.isfinite(val_imag)):
+            cf[i] = 0.0 + 1.0j
+        else:
+            cf[i] = val_real + 1j * val_imag
+
+    # Tail expression; avoid np.conj to be extra safe in nopython
+    cf[24] = cf[0]**3 + cf[23]**2 + cf[22] - cf[21] + cf[20].conjugate()
+
+    return cf
 
 ALLOWED["p787"]=p787
 
@@ -16117,23 +17707,73 @@ def p798(z,a,state):
 
 ALLOWED["p798"]=p798
 
-def p799(z,a,state):
-    t1, t2 = z[0], z[1]
+def p799(z, a, state):
+    t1 = z[0]
+    t2 = z[1]
     cf = np.zeros(25, dtype=np.complex128)
+
+    # Precompute basics
+    re1, im1 = t1.real, t1.imag
+    re2, im2 = t2.real, t2.imag
+    prod = t1 * t2
+    re_p, im_p = prod.real, prod.imag
+
+    abs_t1 = np.hypot(re1, im1)
+    abs_t2 = np.hypot(re2, im2)
+    ang_p  = np.arctan2(im_p, re_p)
+
+    # Powers of |t1|, |t2| built iteratively (stable, njit-friendly)
+    p1 = abs_t1
+    p2 = abs_t2
     for i in range(25):
-        cf[i] = (2 * np.real(t1 * t2) + 3 * np.imag(t1 * t2)) * (np.abs(t1) ** (i + 1)) + (2 * np.angle(t1 * t2) - 3 * np.abs(t2)) * (np.abs(t2) ** (i + 1))
-        if not np.isfinite(cf[i]):
-            cf[i] = 0
-    cf[0] += np.conj(t1 * t2)
-    if not np.isfinite(cf[0]):
-        cf[0] = 0
-    cf[12] *= np.log(np.abs(t1 + t2))
-    if not np.isfinite(cf[12]):
-        cf[12] = 0
-    cf[24] -= cf[24] * t1 * t2 / (t1 + t2)
-    if not np.isfinite(cf[24]):
-        cf[24] = 0
-    return cf.astype(np.complex128)
+        term1 = (2.0 * re_p + 3.0 * im_p) * p1
+        term2 = (2.0 * ang_p - 3.0 * abs_t2) * p2
+        val_real = term1 + term2
+
+        # store as complex
+        cf[i] = val_real + 0.0j
+
+        # finite guard on real/imag separately
+        if not (np.isfinite(cf[i].real) and np.isfinite(cf[i].imag)):
+            cf[i] = 0.0 + 0.0j
+
+        # prepare next powers
+        p1 *= abs_t1
+        p2 *= abs_t2
+
+    # cf[0] += conj(t1*t2)
+    cf0 = cf[0] + prod.conjugate()
+    if np.isfinite(cf0.real) and np.isfinite(cf0.imag):
+        cf[0] = cf0
+    else:
+        cf[0] = 0.0 + 0.0j
+
+    # cf[12] *= log(|t1 + t2|)
+    sum_re, sum_im = re1 + re2, im1 + im2
+    abs_sum = np.hypot(sum_re, sum_im)
+    if abs_sum > 0.0:
+        scale = np.log(abs_sum)
+        tmp = cf[12] * scale
+        if np.isfinite(tmp.real) and np.isfinite(tmp.imag):
+            cf[12] = tmp
+        else:
+            cf[12] = 0.0 + 0.0j
+    else:
+        cf[12] = 0.0 + 0.0j
+
+    # cf[24] -= cf[24] * t1*t2 / (t1 + t2)
+    denom = t1 + t2
+    if np.hypot(denom.real, denom.imag) > 1e-12:
+        correction = cf[24] * prod / denom
+        tmp = cf[24] - correction
+        if np.isfinite(tmp.real) and np.isfinite(tmp.imag):
+            cf[24] = tmp
+        else:
+            cf[24] = 0.0 + 0.0j
+    else:
+        cf[24] = 0.0 + 0.0j
+
+    return cf
 
 ALLOWED["p799"]=p799
 

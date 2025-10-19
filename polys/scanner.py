@@ -231,6 +231,31 @@ def scan( chain: str, runs: int, verbose: bool = False) -> np.ndarray:
 
     return out
 
+def chain_is_allowed(chain: str) -> bool:
+    """
+    Return True if all operations in `chain` exist in the `allowed` dict.
+
+    Examples
+    --------
+    >>> ALLOWED = {"serp": ..., "uc": ..., "p376": ..., "aberth": ...}
+    >>> chain_is_allowed("serp:runs:zero:one,uc,p376,aberth", ALLOWED)
+    True
+    >>> chain_is_allowed("serp,foo,p999", ALLOWED)
+    False
+    """
+    if not chain or not isinstance(chain, str):
+        return False
+
+    # split on commas → separate stages
+    parts = [seg.strip() for seg in chain.split(",") if seg.strip()]
+
+    for seg in parts:
+        # operation name = part before first colon
+        op = seg.split(":", 1)[0].strip()
+        if op not in ALLOWED:
+            return False
+    return True
+
 
 if __name__ == "__main__":
 
