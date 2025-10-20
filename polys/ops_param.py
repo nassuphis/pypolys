@@ -32,11 +32,10 @@ def serp(z,a,state):
     n = a[0]
     n = n.real
     n = int(n) 
+    if n <= 0 : return z
     ll = a[1]
     ur = a[2]
     i = i % n
-    if n <= 0 or i < 0 or i >= n:
-        return z
     cols = int(math.ceil(math.sqrt(float(n))))
     rows = int(math.ceil(n / cols))
     r = i // cols              # row
@@ -51,6 +50,71 @@ def serp(z,a,state):
     y = lly + fy * (ury - lly)
     t1 = complex(x,0)
     t2 = complex(y,0)
+    u = np.array([t1,t2],dtype=np.complex128)
+    return u
+
+def serp01(z,a,state):
+    i = z[0]
+    i = np.real(i)
+    i = int(i)
+    n = a[0]
+    n = n.real
+    n = int(n) 
+    if n <= 0 : return z
+    ll = 0+0j
+    ur = 1+1j
+    i = i % n
+    cols = int(math.ceil(math.sqrt(float(n))))
+    rows = int(math.ceil(n / cols))
+    r = i // cols              # row
+    c = i - r * cols           # col within row (pre serpentine flip)
+    if (r & 1) == 1:
+        c = cols - 1 - c
+    fx = (c + 0.5) / cols
+    fy = (r + 0.5) / rows
+    llx, lly = ll.real, ll.imag
+    urx, ury = ur.real, ur.imag
+    x = llx + fx * (urx - llx)
+    y = lly + fy * (ury - lly)
+    t1 = complex(x,0)
+    t2 = complex(y,0)
+    u = np.array([t1,t2],dtype=np.complex128)
+    return u
+
+def serp01d(z,a,state):
+    i = z[0]
+    i = np.real(i)
+    i = int(i)
+    n = a[0]
+    n = n.real
+    n = int(n) 
+    if n <= 0 : return z
+    ll = 0+0j
+    ur = 1+1j
+    i = i % n
+    cols = int(math.ceil(math.sqrt(float(n))))
+    rows = int(math.ceil(n / cols))
+    r = i // cols              # row
+    c = i - r * cols           # col within row (pre serpentine flip)
+    if (r & 1) == 1:
+        c = cols - 1 - c
+    fx = (c + 0.5) / cols
+    fy = (r + 0.5) / rows
+    llx, lly = ll.real, ll.imag
+    urx, ury = ur.real, ur.imag
+    x = llx + fx * (urx - llx)
+    y = lly + fy * (ury - lly)
+    t1 = complex(x,0)
+    t2 = complex(y,0)
+    serp_len = a[0].real
+    dither_width = a[1].real
+    dither_fact = dither_width/math.sqrt(serp_len)
+    tt1 = dither_fact * (np.random.random()-0.5)
+    tt1 = complex( tt1,0 ) 
+    t1 = tt1 + t1
+    tt2 = dither_fact * (np.random.random()-0.5)
+    tt2 = complex( tt2,0 ) 
+    t2 = tt2 + t2
     u = np.array([t1,t2],dtype=np.complex128)
     return u
 
@@ -79,6 +143,8 @@ ALLOWED = {
     "runif":     op_runif,
     "dither":    dither,
     "serp":      serp,
+    "serp01":    serp01,
+    "serp01d":   serp01d,
 }
 
 

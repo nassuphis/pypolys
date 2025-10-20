@@ -70,6 +70,147 @@ def op_bkr(z,a,state):
         out[i] = bkr1(out[i]) 
   return  out
 
+#cardioid
+def op_crd(z,a,state):
+    n = int(a[0].real)
+    if n<0: return z
+    if n>z.size-1: return z
+    size = a[1].real
+    v = z.copy()
+    t = v[n].real
+    theta = 2 * np.pi * t
+    r = size * (1 + np.cos(theta)) * np.exp(1j * theta)
+    v[n] = r 
+    return v
+
+#heart
+def op_hrt(z,a,state):
+    n = int(a[0].real)
+    if n<0: return z
+    if n>z.size-1: return z
+    size = a[1].real
+    rot = np.exp(1j * 2 * np.pi * a[2].real )
+    v = z.copy()
+    u = v[n].real
+    phi = np.pi/2
+    t = 2*np.pi*u+phi
+    x = 16 * np.sin(t)**3
+    y = 13 * np.cos(t) - 5 * np.cos(2*t) - 2 * np.cos(3*t) - np.cos(4*t)
+    hrt = x/40 + 1j*y/40 + 0.1j
+    v[n] = rot*size*hrt
+    return v
+
+#spindle
+def op_spdl(z,a,state):
+    n = int(a[0].real)
+    if n<0: return z
+    if n>z.size-1: return z
+    va = a[1].real or 0.5
+    vb = a[2].real or 0.2
+    vp = a[3].real or 1.5
+    v = z.copy()
+    t = v[n].real
+    theta = 2 * np.pi * t
+    x = va * np.sign(np.cos(theta)) * np.abs(np.cos(theta))**(2/vp)
+    y = vb * np.sign(np.sin(theta)) * np.abs(np.sin(theta))**(2/vp)
+    v[n] = x + 1j * y
+    return v
+
+def limacon(z,a,state):
+    n = int(a[0].real)
+    if n<0: return z
+    if n>z.size-1: return z
+    v = z.copy()
+    tp = v[n].real
+    ap = a[1].real or 0.3
+    bp = a[2].real or 0.5
+    theta = 2 * np.pi * tp
+    r = ap + bp * np.cos(theta)
+    v[n] = r * np.exp(1j * theta)
+    return v
+
+def rose_curve(z,a,state):
+    n = int(a[0].real)
+    if n<0: return z
+    if n>z.size-1: return z
+    v = z.copy()
+    tp = v[n].real
+    ap = a[1].real or 0.5
+    kp = a[2].real or 2
+    theta = 2 * np.pi * tp
+    r = ap * np.cos(kp * theta)
+    v[n] = r * np.exp(1j * theta)
+    return v
+
+def lissajous(z,a,state):
+    n = int(a[0].real)
+    if n<0: return z
+    if n>z.size-1: return z
+    v = z.copy()
+    tp = v[n].real
+    Ap = a[1].real or 0.5  
+    Bp = a[2].real or 0.5
+    ap = a[3].real or 3
+    bp = a[4].real or 2
+    cp = a[5].real or 0.5
+    delta = np.pi * cp
+    theta = 2 * np.pi * tp
+    x = Ap * np.sin(ap * theta + delta)
+    y = Bp * np.sin(bp * theta)
+    v[n] = x + 1j * y
+    return v
+
+def astroid(z,a,state):
+    n = int(a[0].real)
+    if n<0: return z
+    if n>z.size-1: return z
+    v = z.copy()
+    tp = v[n].real
+    ap = a[1].real or 0.5
+    theta = 2 * np.pi * tp
+    x = ap * np.cos(theta)**3
+    y = ap * np.sin(theta)**3
+    v[n] = x + 1j * y
+    return v
+
+def archimedean_spiral(z,a,state):
+    n = int(a[0].real)
+    if n<0: return z
+    if n>z.size-1: return z
+    v = z.copy()
+    tp = v[n].real
+    ap = a[1].real or 0.1
+    bp = a[2].real or 0.1
+    theta = 2 * np.pi * tp
+    r = ap + bp * theta
+    v[n] = r * np.exp(1j * theta)
+    return v
+
+def logarithmic_spiral(z,a,state):
+    n = int(a[0].real)
+    if n<0: return z
+    if n>z.size-1: return z
+    v = z.copy()
+    tp = v[n].real
+    ap = a[1].real or 0.1
+    bp = a[2].real or 0.1
+    theta = 2 * np.pi * tp
+    r = ap * np.exp(bp * theta)
+    v[n] = r * np.exp(1j * theta)
+    return v
+
+def deltoid(z,a,state):
+    n = int(a[0].real)
+    if n<0: return z
+    if n>z.size-1: return z
+    v = z.copy()
+    tp = v[n].real
+    Rp = a[1].real or 1.0
+    theta = 2 * np.pi * tp
+    x = Rp * (2 * np.cos(theta) + np.cos(2 * theta)) / 3
+    y = Rp * (2 * np.sin(theta) - np.sin(2 * theta)) / 3
+    v[n] =  x + 1j * y
+    return v
 
 ALLOWED = {
     "xim":   xim,
@@ -79,6 +220,15 @@ ALLOWED = {
     "zz3":   op_zz3,
     "pz":    op_pz,
     "bkr":   op_bkr,
+    "crd":   op_crd,
+    "hrt":   op_hrt,
+    "spdl":  op_spdl,
+    "lmc":   limacon,
+    "rsc":   rose_curve,
+    "lss":   lissajous,
+    "ast":   astroid,
+    "lsp":   logarithmic_spiral,
+    "dlt":   deltoid,
 }
 
 

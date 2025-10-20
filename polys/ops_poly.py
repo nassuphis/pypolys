@@ -2676,18 +2676,69 @@ def p4(z,a,state):
 
 ALLOWED["p4"]=p4
 
-def p5(z,a,state):
+def p5(z, a, state):
     t1, t2 = z[0], z[1]
+
     cf = np.zeros(36, dtype=np.complex128)
-    p = np.array([2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53])
-    for k in range(1, 17):
-        cf[k-1] = np.sin(p[k-1] * t1) + np.cos(p[k-1] * t2)
-    for k in range(17, 33):
-        cf[k-1] = np.log(np.abs(p[k-17] * t1 + t2)) / (t1 + t2)
-    cf[32] = np.prod(p[0:4]) / (t1 * t2)
-    cf[33] = np.sum(p[4:8]) - t1**2 + t2**2
-    cf[34] = p[8] * p[9] * (t1 + t2)
-    cf[35] = p[10] * p[11] / (t1 - t2)
+    primes = np.array([2, 3, 5, 7, 11, 13, 17, 19,
+                       23, 29, 31, 37, 41, 43, 47, 53], dtype=np.int64)
+
+    # helpers (inline-friendly for numba)
+    def isfinite_c(x):
+        return np.isfinite(x.real) and np.isfinite(x.imag)
+
+    def safe_div(num, den):
+        if not isfinite_c(den) or np.abs(den) < 1e-300:
+            return 0.0 + 0.0j
+        v = num / den
+        if not isfinite_c(v):
+            return 0.0 + 0.0j
+        return v
+
+    # 1) k = 1..16  (indices 0..15)
+    for k in range(16):
+        p = primes[k]
+        v = np.sin(p * t1) + np.cos(p * t2)
+        if isfinite_c(v):
+            cf[k] = v
+        else:
+            cf[k] = 0.0 + 0.0j
+
+    # 2) k = 17..32 (indices 16..31)
+    for k in range(16, 32):
+        p = primes[k - 16]
+        val = p * t1 + t2
+        mag = np.abs(val)
+        if not np.isfinite(mag) or mag <= 0.0:
+            cf[k] = 0.0 + 0.0j
+        else:
+            cf[k] = safe_div(np.log(mag), t1 + t2)
+
+    # 3) cf[32] = prod(primes[0:4]) / (t1 * t2)
+    prod0 = 1
+    for i in range(4):
+        prod0 *= int(primes[i])
+    cf[32] = safe_div(prod0 * 1.0, t1 * t2)
+
+    # 4) cf[33] = sum(primes[4:8]) - t1**2 + t2**2
+    s = 0
+    for i in range(4, 8):
+        s += int(primes[i])
+    cf[33] = (s * 1.0) - (t1 * t1) + (t2 * t2)
+
+    # 5) cf[34] = primes[8]*primes[9] * (t1 + t2)
+    cf[34] = float(primes[8] * primes[9]) * (t1 + t2)
+    if not isfinite_c(cf[34]):
+        cf[34] = 0.0 + 0.0j
+
+    # 6) cf[35] = primes[10]*primes[11] / (t1 - t2)
+    cf[35] = safe_div(float(primes[10] * primes[11]), (t1 - t2))
+
+    # final sanitize
+    for i in range(36):
+        if not isfinite_c(cf[i]):
+            cf[i] = 0.0 + 0.0j
+
     return cf
 
 ALLOWED["p5"]=p5
@@ -7761,18 +7812,20 @@ ALLOWED["p250"]=p250
 
 def p251(z,a,state):
     t1, t2 = z[0], z[1]
-    cf = np.zeros(35, dtype=np.complex128)
-    for j in range(1, 36):
+    n = int(a[0].real) or 35
+    if n<16: n=16
+    cf = np.zeros(n, dtype=np.complex128)
+    for j in range(1, n+1):
         r = np.real(t1) + np.real(t2) + j
         angle = np.angle(t1) * j - np.angle(t2)
         cf[j - 1] = (np.abs(t1)**j + np.abs(t2)**(35 - j)) * np.exp(1j * angle) * np.sin(j * np.real(t1) - np.imag(t2))
     cf[4] = np.conj(t1) * t2**2 - np.log(np.abs(t1) + 1) + 2j * np.real(t2)
     cf[9] = np.sin(t1) + np.cos(t2) * np.conj(t1)
     cf[14] = (t1 * t2)**3 - np.real(t1)**2 + np.imag(t2)**3
-    cf[19] = np.exp(1j * np.angle(t1)) * np.log(np.abs(t2) + 1) + np.abs(t1 + t2)
-    cf[24] = np.sin(t1 + t2) * np.cos(t1 - t2) + 1j * (np.real(t1) * np.imag(t2))
-    cf[29] = (np.real(t1) * np.imag(t2) * np.abs(t1 + t2)) + (np.real(t2) + np.imag(t1))
-    cf[34] = np.conj(t1)**2 + np.conj(t2)**3 - t1 * t2
+    cf[n-16] = np.exp(1j * np.angle(t1)) * np.log(np.abs(t2) + 1) + np.abs(t1 + t2)
+    cf[n-11] = np.sin(t1 + t2) * np.cos(t1 - t2) + 1j * (np.real(t1) * np.imag(t2))
+    cf[n-6] = (np.real(t1) * np.imag(t2) * np.abs(t1 + t2)) + (np.real(t2) + np.imag(t1))
+    cf[n-1] = np.conj(t1)**2 + np.conj(t2)**3 - t1 * t2
     return cf.astype(np.complex128)
     
 ALLOWED["p251"]=p251
