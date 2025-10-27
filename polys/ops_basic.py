@@ -13,11 +13,59 @@ def op_const(z,a,state):
     return a
 
 
-def invuc(z,a,state):
+def invuc1(z,a,state):
    sa = np.max(np.abs(z))
    z0 = z / sa
    z1 = np.exp(1j*2*np.pi*z0)
    return z/z1 
+
+def invuc(z, a, state):
+    n = z.size
+    out = np.empty_like(z)
+
+    # max |z| without creating a float array
+    sa = 0.0
+    for i in range(n):
+        v = z[i]
+        mag = (v.real * v.real + v.imag * v.imag) ** 0.5
+        if mag > sa:
+            sa = mag
+
+    # guard: if all zeros or non-finite, just return z
+    if not np.isfinite(sa) or sa <= 0.0:
+        for i in range(n):
+            out[i] = z[i]
+        return out
+
+    two_pi = 2.0 * np.pi
+
+    for i in range(n):
+        v = z[i] / sa
+        x = v.real
+        y = v.imag
+
+        # exp(i*2π*(x + i y)) = exp(-2π y) * (cos(2π x) + i sin(2π x))
+        ex = np.exp(-two_pi * y)
+        c = np.cos(two_pi * x)
+        s = np.sin(two_pi * x)
+        z1r = ex * c
+        z1i = ex * s
+
+        # divide z by z1 (guard against zero/denormals)
+        den = z1r * z1r + z1i * z1i
+        if den == 0.0 or not np.isfinite(den):
+            out[i] = 0.0 + 0.0j
+        else:
+            zr = z[i].real
+            zi = z[i].imag
+            # (zr + i zi) / (z1r + i z1i)
+            out[i] = ((zr * z1r + zi * z1i) / den) + 1j * ((zi * z1r - zr * z1i) / den)
+
+        # final safety
+        if not np.isfinite(out[i].real) or not np.isfinite(out[i].imag):
+            out[i] = 0.0 + 0.0j
+
+    return out
 
 def normalize(cf,a,state):
    sa = np.max(np.abs(cf))

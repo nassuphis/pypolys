@@ -10,6 +10,7 @@ import time
 import rasterizer                # rasterize results
 import scanner                   # 
 import compiler                  # 
+import expandspec
 import ast
 import pyvips as vips
 
@@ -38,7 +39,7 @@ def main():
 
     runs = int(ast.literal_eval(args.runs))
     px   = int(ast.literal_eval(args.px))
-    chains = compiler.expand_range(args.chain)
+    chains = expandspec.expand_cartesian_lists(args.chain,names=scanner.ALLOWED)
     n = len(chains)
     rows, cols = grid_for(n, args.cols)
 

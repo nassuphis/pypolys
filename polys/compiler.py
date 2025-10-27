@@ -88,7 +88,7 @@ def extract_used_funcs(chain: str, allowed: dict) -> dict:
     return allowed_used
 
 
-def parse_chain_with_args(chain_str: str, name2op: dict, MAXA=4):
+def parse_chain_with_args(chain_str: str, name2op: dict, MAXA=12):
     """
     'uc:0.1:0.3,coeff5:10,nop'
     -> (opcodes int16[n_ops], args complex128[n_ops, MAXA])

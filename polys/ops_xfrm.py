@@ -11,6 +11,24 @@ from numba import njit, types
 import argparse
 import ast
 
+def op_circle(z,a,state):
+    n = int(a[0].real)
+    if n<0: return z
+    if n>z.size-1: return z
+    v = z.copy()
+    t = v[n]
+    c = np.exp(1j*2*np.pi*t)
+    v[n] = c
+    return v
+
+def op_dot(z,a,state):
+    n = int(a[0].real)
+    if n<0: return z
+    if n>z.size-1: return z
+    v = z.copy()
+    v[n] = a[1]
+    return v
+
 def xim(z,a,state):
     v1 = 1j*z[0].real
     v2 = 1j*z[1].real
@@ -51,23 +69,24 @@ def op_pz(z,a,state):
 ############################################
 # Baker's map (mod1 mapping)
 ############################################
-@njit
-def bkr1(t):
+def op_bkr(z,a,state):
+  
+  def bkr1(t):
     x , y = np.real(t), np.imag(t)
     x_fold, y_fold = x % 1 , y % 1  
     x_new = (2 * x_fold) % 1
     shift = np.floor(2 * x_fold)
     y_new = (y_fold + shift) / 2
     return x_new + 1j * y_new
-
-def op_bkr(z,a,state):
+  
   n = int(a[0].real)
-  if n==0:
-      return z
+
+  if n==0: return z
   out = z
   for i in range(z.size):
     for _ in range(n):
         out[i] = bkr1(out[i]) 
+
   return  out
 
 #cardioid
@@ -75,7 +94,7 @@ def op_crd(z,a,state):
     n = int(a[0].real)
     if n<0: return z
     if n>z.size-1: return z
-    size = a[1].real
+    size = a[1].real or 1
     v = z.copy()
     t = v[n].real
     theta = 2 * np.pi * t
@@ -88,7 +107,7 @@ def op_hrt(z,a,state):
     n = int(a[0].real)
     if n<0: return z
     if n>z.size-1: return z
-    size = a[1].real
+    size = a[1].real or 1
     rot = np.exp(1j * 2 * np.pi * a[2].real )
     v = z.copy()
     u = v[n].real
@@ -212,7 +231,496 @@ def deltoid(z,a,state):
     v[n] =  x + 1j * y
     return v
 
+# =========================
+# Regular N-gon (perimeter)
+# a[1]=sides (int), a[2]=radius, a[3]=rotation (turns)
+# =========================
+def op_poly_regular(z,a,state):
+    n = int(a[0].real)
+    if n<0 or n>z.size-1: return z
+    v = z.copy()
+    sides = int(a[1].real or 5)
+    R     = a[2].real or 0.5
+    turns = a[3].real or 0.0
+    if sides < 3: 
+        v[n] = 0+0j; return v
+    rot = np.cos(2*np.pi*turns) + 1j*np.sin(2*np.pi*turns)
+
+    t = v[n].real % 1.0
+    segf = t * sides
+    seg  = int(np.floor(segf))
+    u    = segf - seg
+
+    th0 = 2*np.pi * seg      / sides
+    th1 = 2*np.pi * (seg+1)  / sides
+    p0 = R * (np.cos(th0) + 1j*np.sin(th0))
+    p1 = R * (np.cos(th1) + 1j*np.sin(th1))
+    v[n] = rot * ((1-u)*p0 + u*p1)
+    return v
+
+# =========================
+# Simple star (perimeter)
+# a[1]=points p, a[2]=radius R, a[3]=inner_ratio r (0..1)
+# (no rotation to stay within 3 params after index)
+# =========================
+def op_star_simple(z,a,state):
+    n = int(a[0].real)
+    if n<0 or n>z.size-1: return z
+    v = z.copy()
+    p  = int(a[1].real or 5)
+    R  = a[2].real or 0.6
+    r  = a[3].real or 0.5
+    if p < 3: 
+        v[n]=0+0j; return v
+
+    t = v[n].real % 1.0
+    edges = 2*p
+    segf = t * edges
+    seg  = int(np.floor(segf))
+    u    = segf - seg
+
+    def vert(k):
+        th = np.pi * k / p
+        rad = R if (k % 2)==0 else (r*R)
+        return rad * (np.cos(th) + 1j*np.sin(th))
+
+    p0 = vert(seg)
+    p1 = vert((seg+1) % edges)
+    v[n] = (1-u)*p0 + u*p1
+    return v
+
+# =========================
+# Rectangle (perimeter)
+# a[1]=W, a[2]=H, a[3]=rotation
+# =========================
+def op_rect(z,a,state):
+    n = int(a[0].real)
+    if n<0 or n>z.size-1: return z
+    v = z.copy()
+    W = a[1].real or 1.0
+    H = a[2].real or 1.0
+    turns = a[3].real or 0.0
+    th = 2*np.pi*turns
+    rot = np.cos(th) + 1j*np.sin(th)
+
+    t = v[n].real % 1.0
+    P = 2*(W+H)
+    s = t * P
+    if s < W:
+        x = -W/2 + s;             y = -H/2
+    elif s < W + H:
+        x =  W/2;                 y = -H/2 + (s - W)
+    elif s < 2*W + H:
+        x =  W/2 - (s - (W+H));   y =  H/2
+    else:
+        x = -W/2;                 y =  H/2 - (s - (2*W+H))
+    v[n] = rot * (x + 1j*y)
+    return v
+
+# =========================
+# Rounded rectangle via superellipse
+# a[1]=W, a[2]=H, a[3]=m (roundness; 2=ellipse, big→boxy)
+# =========================
+def op_roundrect(z,a,state):
+    n = int(a[0].real)
+    if n<0 or n>z.size-1: return z
+    v = z.copy()
+    W = a[1].real or 1.0
+    H = a[2].real or 0.6
+    m = a[3].real or 4.0
+    th = 2*np.pi*(v[n].real % 1.0)
+    c = np.cos(th); s = np.sin(th)
+    cx = np.sign(c) * (np.abs(c)**(2.0/m))
+    sy = np.sign(s) * (np.abs(s)**(2.0/m))
+    x = (W/2) * cx
+    y = (H/2) * sy
+    v[n] = x + 1j*y
+    return v
+
+
+def op_ellipse(z,a,state):
+    n = int(a[0].real)
+    if n<0 or n>z.size-1: return z
+    v = z.copy()
+    rx = a[1].real or 0.6
+    ry = a[2].real or 0.4
+    turns = a[3].real or 0.0
+    rot = np.cos(2*np.pi*turns) + 1j*np.sin(2*np.pi*turns)
+
+    th = 2*np.pi*(v[n].real % 1.0)
+    v[n] = rot * (rx*np.cos(th) + 1j*ry*np.sin(th))
+    return v
+
+def op_superellipse(z, a, state):
+    """
+    a[0]  index in z
+    a[1]  A (x half-axis)
+    a[2]  B (y half-axis)
+    a[3]  m (roundness; 2=ellipse, ↑ boxy, ↓ starry)
+    a[4]  rotation (turns)
+    a[5]  theta_mul (petal / repetition multiplier)
+    a[6]  theta_offset (turns)
+    a[7]  ax (x stretch)
+    a[8]  ay (y stretch)
+    a[9]  skew (x += skew * y)
+    a[10] cx (translate x)
+    a[11] cy (translate y)
+    """
+    n = int(a[0].real)
+    if n < 0 or n > z.size - 1:
+        return z
+    v = z.copy()
+
+    # core geometry
+    A   = a[1].real  or 0.6
+    B   = a[2].real  or 0.4
+    m   = a[3].real  or 2.5
+    rot = a[4].real  or 0.0     # turns
+    km  = a[5].real  or 1.0     # theta multiplier
+    th0 = a[6].real  or 0.0     # theta offset (turns)
+
+    # style / deformation
+    ax  = a[7].real  or 1.0
+    ay  = a[8].real  or 1.0
+    skew= a[9].real  or 0.0
+    cx  = a[10].real or 0.0
+    cy  = a[11].real or 0.0
+
+    # main param angle
+    t  = v[n].real % 1.0
+    th = 2 * np.pi * (th0 + km * t)
+
+    c = np.cos(th)
+    s = np.sin(th)
+    # Lamé curve: x = A * sign(c)*|c|^(2/m), y = B * sign(s)*|s|^(2/m)
+    px = np.sign(c) * (np.abs(c) ** (2.0 / (m if m != 0 else 1e-9)))
+    py = np.sign(s) * (np.abs(s) ** (2.0 / (m if m != 0 else 1e-9)))
+    x  = A * px
+    y  = B * py
+
+    # apply anisotropy + skew
+    x = ax * x + skew * y
+    y = ay * y
+
+    # rotation + translation
+    R = 2 * np.pi * rot
+    xr = x * np.cos(R) - y * np.sin(R) + cx
+    yr = x * np.sin(R) + y * np.cos(R) + cy
+
+    v[n] = xr + 1j * yr
+    return v
+
+
+def op_superformula(z, a, state):
+    n = int(a[0].real)
+    if n < 0 or n > z.size-1: 
+        return z
+    v = z.copy()
+    m   = a[1].real  or 6.0
+    n1  = a[2].real  or 0.3
+    n2  = a[3].real  or 0.3
+    n3  = a[4].real  or 0.3
+    ar  = a[5].real  or 1.0
+    br  = a[6].real  or 1.0
+    S   = a[7].real  or 1.0
+    rot = a[8].real  or 0.0       # turns
+    th0 = a[9].real  or 0.0       # theta offset (turns)
+    km  = a[10].real or 1.0       # theta multiplier
+    ay  = a[11].real or 1.0       # y stretch (anisotropy)
+    t  = v[n].real % 1.0
+    th = 2*np.pi*(th0 + km*t)     # angle
+    u  = (m * th) / 4.0
+    c = np.cos(u) / ar
+    s = np.sin(u) / br
+    term = (np.abs(c)**n2) + (np.abs(s)**n3)
+    r = S * (term**(-1.0/n1)) if term != 0 else 0.0
+    # base point
+    x = r * np.cos(th)
+    y = r * np.sin(th) * ay       # simple anisotropy on y
+    # rotation (turns)
+    R = 2*np.pi*rot
+    v[n] = (x*np.cos(R) - y*np.sin(R)) + 1j*(x*np.sin(R) + y*np.cos(R))
+    return v
+
+def op_epicycloid(z, a, state):
+    """
+    a[0]  index in z
+    a[1]  R     (fixed/base circle radius)
+    a[2]  r     (rolling circle radius)
+    a[3]  S     (overall scale)
+    a[4]  rot   (rotation, turns)
+    a[5]  km    (theta multiplier / repetition)
+    a[6]  th0   (theta offset, turns)
+    a[7]  ax    (x stretch)
+    a[8]  ay    (y stretch)
+    a[9]  skew  (x += skew*y)
+    a[10] cx    (translate x)
+    a[11] cy    (translate y)
+    """
+    n = int(a[0].real)
+    if n < 0 or n > z.size - 1:
+        return z
+    v = z.copy()
+
+    R   = a[1].real  or 0.3
+    r   = a[2].real  or 0.1
+    S   = a[3].real  or 1.0
+    rot = a[4].real  or 0.0
+    km  = a[5].real  or 1.0
+    th0 = a[6].real  or 0.0
+    ax  = a[7].real  or 1.0
+    ay  = a[8].real  or 1.0
+    skew= a[9].real  or 0.0
+    cx  = a[10].real or 0.0
+    cy  = a[11].real or 0.0
+
+    t  = v[n].real % 1.0
+    th = 2 * np.pi * (th0 + km * t)
+
+    k = (R + r) / r if r != 0 else 0.0
+    x = (R + r) * np.cos(th) - r * np.cos(k * th)
+    y = (R + r) * np.sin(th) - r * np.sin(k * th)
+
+    # anisotropy + skew
+    x = ax * x + skew * y
+    y = ay * y
+
+    # rotation, scale, translation
+    Rr = 2 * np.pi * rot
+    xr = (x * np.cos(Rr) - y * np.sin(Rr)) * S + cx
+    yr = (x * np.sin(Rr) + y * np.cos(Rr)) * S + cy
+
+    v[n] = xr + 1j * yr
+    return v
+
+def op_hypocycloid(z, a, state):
+    """
+    a[0]  index in z
+    a[1]  R     (fixed/base circle radius)
+    a[2]  r     (rolling circle radius)
+    a[3]  S     (overall scale)
+    a[4]  rot   (rotation, turns)
+    a[5]  km    (theta multiplier / repetition)
+    a[6]  th0   (theta offset, turns)
+    a[7]  ax    (x stretch)
+    a[8]  ay    (y stretch)
+    a[9]  skew  (x += skew*y)
+    a[10] cx    (translate x)
+    a[11] cy    (translate y)
+    """
+    n = int(a[0].real)
+    if n < 0 or n > z.size-1:
+        return z
+    v = z.copy()
+
+    R   = a[1].real  or 0.3
+    r   = a[2].real  or 0.1
+    S   = a[3].real  or 1.0
+    rot = a[4].real  or 0.0
+    km  = a[5].real  or 1.0
+    th0 = a[6].real  or 0.0
+    ax  = a[7].real  or 1.0
+    ay  = a[8].real  or 1.0
+    skew= a[9].real  or 0.0
+    cx  = a[10].real or 0.0
+    cy  = a[11].real or 0.0
+
+    t  = v[n].real % 1.0
+    th = 2*np.pi*(th0 + km*t)
+
+    k = (R - r)/r if r != 0 else 0.0
+    x = (R - r)*np.cos(th) + r*np.cos(k*th)
+    y = (R - r)*np.sin(th) - r*np.sin(k*th)
+
+    # anisotropy + skew
+    x = ax * x + skew * y
+    y = ay * y
+
+    # rotate, scale, translate
+    Rr = 2*np.pi*rot
+    xr = (x*np.cos(Rr) - y*np.sin(Rr)) * S + cx
+    yr = (x*np.sin(Rr) + y*np.cos(Rr)) * S + cy
+
+    v[n] = xr + 1j*yr
+    return v
+
+def op_trochoid(z, a, state):
+    """
+    a[0]  index in z
+    a[1]  R     (rolling circle radius)
+    a[2]  d     (pen offset; =R→cycloid, <R→curtate, >R→prolate)
+    a[3]  S     (overall scale)
+    a[4]  rot   (rotation, turns)
+    a[5]  km    (theta multiplier / repetition)
+    a[6]  th0   (theta offset, turns)
+    a[7]  ax    (x stretch)
+    a[8]  ay    (y stretch)
+    a[9]  skew  (x += skew*y)
+    a[10] cx    (translate x)
+    a[11] cy    (translate y)
+    """
+    n = int(a[0].real)
+    if n < 0 or n > z.size-1:
+        return z
+    v = z.copy()
+
+    R   = a[1].real  or 0.2
+    d   = a[2].real  or 0.2
+    S   = a[3].real  or 1.0
+    rot = a[4].real  or 0.0
+    km  = a[5].real  or 1.0
+    th0 = a[6].real  or 0.0
+    ax  = a[7].real  or 1.0
+    ay  = a[8].real  or 1.0
+    skew= a[9].real  or 0.0
+    cx  = a[10].real or 0.0
+    cy  = a[11].real or 0.0
+
+    # parameter θ
+    t  = v[n].real % 1.0
+    th = 2*np.pi*(th0 + km*t)
+
+    # trochoid equations
+    x = R * (th - np.sin(th)) + d * np.cos(th)
+    y = R * (1.0 - np.cos(th)) + d * np.sin(th)
+
+    # anisotropy + skew
+    x = ax * x + skew * y
+    y = ay * y
+
+    # rotation, scale, translation
+    Rr = 2*np.pi*rot
+    xr = (x*np.cos(Rr) - y*np.sin(Rr)) * S + cx
+    yr = (x*np.sin(Rr) + y*np.cos(Rr)) * S + cy
+
+    v[n] = xr + 1j*yr
+    return v
+
+def op_lemniscate(z, a, state):
+    """
+    a[0]  index in z
+    a[1]  A    (lemniscate scale; r^2 = 2 A^2 cos(2θ))
+    a[2]  S    (overall scale)
+    a[3]  rot  (rotation, turns)
+    a[4]  km   (theta multiplier / repetition)
+    a[5]  th0  (theta offset, turns)
+    a[6]  ax   (x stretch)
+    a[7]  ay   (y stretch)
+    a[8]  skew (x += skew*y)
+    a[9]  cx   (translate x)
+    a[10] cy   (translate y)
+    a[11] (reserved)
+    """
+    n = int(a[0].real)
+    if n < 0 or n > z.size-1: 
+        return z
+    v = z.copy()
+
+    A   = a[1].real  or 0.5
+    S   = a[2].real  or 1.0
+    rot = a[3].real  or 0.0
+    km  = a[4].real  or 1.0
+    th0 = a[5].real  or 0.0
+    ax  = a[6].real  or 1.0
+    ay  = a[7].real  or 1.0
+    skew= a[8].real  or 0.0
+    cx  = a[9].real  or 0.0
+    cy  = a[10].real or 0.0
+    # a[11] reserved
+
+    t  = v[n].real % 1.0
+    th = 2*np.pi*(th0 + km*t)
+
+    val = 2*(A**2)*np.cos(2*th)
+    r = np.sqrt(val) if val > 0.0 else 0.0
+
+    x = r * np.cos(th)
+    y = r * np.sin(th)
+
+    # anisotropy + skew
+    x = ax * x + skew * y
+    y = ay * y
+
+    # rotate, scale, translate
+    R  = 2*np.pi*rot
+    xr = (x*np.cos(R) - y*np.sin(R)) * S + cx
+    yr = (x*np.sin(R) + y*np.cos(R)) * S + cy
+
+    v[n] = xr + 1j*yr
+    return v
+
+def op_cassini(z, a, state):
+    """
+    a[0]  index in z
+    a[1]  C   (half-distance between foci; foci at ±C on x-axis)
+    a[2]  B   (Cassini parameter; B=C*sqrt(2) gives Bernoulli lemniscate)
+    a[3]  S   (overall scale)
+    a[4]  rot (rotation, turns)
+    a[5]  km  (theta multiplier / repetition)
+    a[6]  th0 (theta offset, turns)
+    a[7]  ax  (x stretch)
+    a[8]  ay  (y stretch)
+    a[9]  skew (x += skew*y)
+    a[10] cx  (translate x)
+    a[11] cy  (translate y)
+    """
+    n = int(a[0].real)
+    if n < 0 or n > z.size-1:
+        return z
+    v = z.copy()
+
+    # important first
+    C   = a[1].real  or 0.30
+    B   = a[2].real  or 0.35
+    S   = a[3].real  or 1.0
+    rot = a[4].real  or 0.0
+    km  = a[5].real  or 1.0
+    th0 = a[6].real  or 0.0
+
+    # style/deform
+    ax  = a[7].real  or 1.0
+    ay  = a[8].real  or 1.0
+    skew= a[9].real  or 0.0
+    cx  = a[10].real or 0.0
+    cy  = a[11].real or 0.0
+
+    t  = v[n].real % 1.0
+    th = 2*np.pi*(th0 + km*t)
+
+    # solve quadratic in u = r^2:
+    # u^2 - 2 C^2 cos(2θ) u + (C^4 - B^4) = 0
+    C2 = C*C
+    cos2 = np.cos(2*th)
+    bb = -2.0 * C2 * cos2
+    cc = C2*C2 - B**4
+    disc = bb*bb - 4.0*cc
+
+    if disc < 0.0:
+        r = 0.0
+    else:
+        sd = np.sqrt(disc)
+        u1 = (-bb + sd) * 0.5
+        u2 = (-bb - sd) * 0.5
+        u  = max(u1, u2, 0.0)
+        r  = np.sqrt(u)
+
+    x = r * np.cos(th)
+    y = r * np.sin(th)
+
+    # anisotropy + skew
+    x = ax * x + skew * y
+    y = ay * y
+
+    # rotate and scale, then translate
+    R  = 2*np.pi*rot
+    xr = (x*np.cos(R) - y*np.sin(R)) * S + cx
+    yr = (x*np.sin(R) + y*np.cos(R)) * S + cy
+
+    v[n] = xr + 1j*yr
+    return v
+
 ALLOWED = {
+    "dot":   op_dot,
     "xim":   xim,
     "zz":    op_zz,
     "zz1":   op_zz1,
@@ -227,8 +735,22 @@ ALLOWED = {
     "rsc":   rose_curve,
     "lss":   lissajous,
     "ast":   astroid,
+    "asp":   archimedean_spiral,
     "lsp":   logarithmic_spiral,
     "dlt":   deltoid,
+    "rply":  op_poly_regular,
+    "star":  op_star_simple,
+    "cssn":  op_cassini,
+    "lmn":   op_lemniscate,
+    "trch":  op_trochoid,
+    "hcld":  op_hypocycloid,
+    "ecld":  op_epicycloid,
+    "supf":  op_superformula,
+    "supe":  op_superellipse,
+    "eclps": op_ellipse,
+    "rect":  op_rect,
+    "rrect": op_roundrect,
+    "circ":  op_circle,
 }
 
 
