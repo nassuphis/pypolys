@@ -3,46 +3,99 @@
 expandspec.py
 --------------
 
-A tiny, human-readable DSL and expander for workflow or filename specifications.
+A tiny, human-readable DSL that expands specs into lists of strings.
 
-Syntax summary
-==============
+Grammar (strict)
+================
+Only these constructs are supported:
 
-Segments are concatenated left-to-right; list blocks multiply (cartesian product).
+- **Cartesian list**: `[a,b,c]`
+  Produces a union of items. Items may contain a single numeric range `{...}` or a dict selector `@{...}`.
+  Nested `[...]` is not supported (a literal `[` inside an item is treated as a normal character).
 
-    [a,b,c]            → union list ("a", "b", "c")
-    {1:3}              → numeric range 1,2,3
-    {01:03}            → zero-padded range 01,02,03
-    {-003:003:1}       → signed, padded integer range (−003 … 003)
-    {1e-4:1e-3:0.0002} → float range with explicit step
-    {1e-4:1e-3:30}     → 30 evenly spaced samples (inclusive)
-    @{/^A.*/i}         → select names from provided dictionary/list by regex
-    prefix[a,b]{1:2}   → cartesian: prefixa1, prefixa2, prefixb1, prefixb2
+- **Numeric range**: `{a:b[:c]}`
+  Expands to numbers on a line from `a` to `b` (inclusive).
+  Rules:
+  • If two fields and both are integers → integer step of +1 or −1.
+  • If three fields:
+      - If the third field contains a '.' or 'e'/'E' → step size (float or int). Direction auto-corrected if needed.
+      - Else, if `a` and `b` are integers:
+          ▸ If the third field (N) divides the integer range exactly (or N==1), treat it as an integer step size.
+          ▸ Otherwise, treat it as a COUNT (N evenly spaced samples, inclusive).
+      - Otherwise → COUNT (N evenly spaced samples, inclusive).
+  Formatting:
+  • If both endpoints are integers and step is integer (or COUNT lands on integers), results are integers.
+  • Zero-padding is preserved if either endpoint has leading zeros (e.g., `{01:03}` → `01,02,03`).
+  • Floats are emitted with up to 15 significant digits.
 
-Rules
-=====
-* `[ ... ]`  — comma-separated union of items; items can include one `{...}` range or `@{...}` selector.
-* `{a:b[:c]}` — numeric expansion:
-      - two fields → integer step of +1/−1 between a and b (if both ints)
-      - three fields:
-          • if the third field contains '.' or 'e' → step size (float or int)
-          • else, if a and b are ints → integer step of that size
-          • otherwise → N evenly spaced samples (count)
-* `@{<regex>}` / `@{/regex/flags}` — expands to matching names from a supplied set.
-  Flags: `i` (ignore case), `m` (multiline). Defaults: no flags.
-* Adjacency between segments forms a cartesian product.
-* Literal text between blocks is preserved verbatim.
-* Empty text segments act as neutral elements ("").
-* Zero-padding is preserved when either endpoint has leading zeros.
-* Only one {...} per token and one nesting level of [...] are supported.
-* Invalid tokens fall back to literal text (no hard failure).
+- **Dict selector**: `@{<regex>}` or `@{/regex/flags}`
+  Expands to names matched from a provided set (`--names`).
+  Flags (if using `/regex/flags`):
+  • `i` = ignore case
+  • `m` = multiline
+  If no `--names` are supplied, the selector is kept literal (no expansion).
 
-CLI usage
+- **Reference**: `#{n}`
+  Inserts the value chosen for the **n-th list-like unit** (1-based, left-to-right) in the current cartesian combination.
+  List-like units are:
+  1) Numeric producers created from `{...}` embedded in text
+  2) Top-level cartesian lists `[ ... ]`
+  3) Whole-token dict selectors `@{...}`
+
+Semantics
 =========
-    python expandspec.py --in "pre[foo,bar]{1:2}"
-    python expandspec.py --in "[{-003:003:1}]"
-    python expandspec.py --in "[@{/^A/}]" --names names.json   # select by regex
-Options: --unique, --sort, --limit, --count, --sep, --json, --names, --exit-empty
+- **All lists are cartesian.** There is **no implicit zip**
+- references are **by number only** (`#{1}`, `#{2}`, …).
+- **Zipping happens only via references**: `#{n}` reproduces the selection from the n-th list-like dimension within the current cartesian product.
+
+Composition & parsing
+=====================
+- The spec is parsed left-to-right into segments:
+  literals, producers (`{...}` inside text), cartesian lists (`[...]`), whole-token selectors (`@{...}`), and references (`#{n}`).
+- Each producer/list/selector is assigned a 1-based ordinal (its **list-like id**) for `#{n}` to reference.
+- The full cartesian product of all list-like units is enumerated; references are resolved **after** a combination is chosen.
+
+Examples
+========
+1) Cartesian list:
+   `[a,b,c]` → `a`, `b`, `c`
+
+2) Integer ranges with padding and sign:
+   `{01:03}` → `01`, `02`, `03`
+   `{-003:003:3}` → `-003`, `000`, `003`
+
+3) Float step vs count:
+   `{0:1:0.5}`   → `0`, `0.5`, `1`
+   `{0:1:5}`     → `0`, `0.25`, `0.5`, `0.75`, `1`
+
+4) Regex selector (with names):
+   `@{/^A/}` with names `[AAPL, MSFT, NVDA, AMZN]` → `AAPL, AMZN`
+
+5) Cartesian product & references:
+   Spec: `a{1:3}[p,o,r]-->#{2}`
+   List-like units:
+     (1) `{1:3}`   → picks 1,2,3
+     (2) `[p,o,r]` → picks p,o,r
+   Output (cartesian + ref to (2)):
+     `a1p-->p, a1o-->o, a1r-->r, a2p-->p, a2o-->o, a2r-->r, a3p-->p, a3o-->o, a3r-->r`
+
+6) References anywhere:
+   `#{2}:: a{1:3}[p,o,r]`
+   → `p:: a1p, o:: a1o, r:: a1r, p:: a2p, o:: a2o, r:: a2r, p:: a3p, o:: a3o, r:: a3r`
+
+CLI
+===
+  python expandspec.py --in "pre[foo,bar]{1:2}"
+  python expandspec.py --in "[{-003:003:1}]"
+  python expandspec.py --in "[@{/^A/}]" --names names.json
+Options:
+  --unique, --sort, --limit, --count, --sep, --json, --names, --exit-empty,
+  --selftest, --selftest-verbose
+
+Error behavior
+==============
+- Invalid `{...}` body or malformed tokens are kept as literal text (no hard failure).
+- Unknown references (e.g., `#{99}`) are left as literal.
 """
 
 import re
@@ -50,24 +103,17 @@ import math
 import json
 import sys
 from itertools import product
-from typing import List, Tuple, Union, Iterable
+from typing import List, Tuple, Union, Iterable, Optional, Dict
 
 # =========================
-# Core tokenization regexes
+# Tokenization regexes
 # =========================
 
-_block_re = re.compile(r"\[([^][]*)\]")
 _brace_re = re.compile(r"^(?P<prefix>.*)\{(?P<body>[^{}]+)\}(?P<suffix>.*)$")
-
-# integer detector
 _int_re = re.compile(r"^[+-]?\d+$")
-
-# dict/namespace selector: @{...}  (match entire token)
-_dictsel_re = re.compile(r"^@\{(.+)\}$")
-
-# JS-like /regex/flags form inside @{...}
-_js_regex_re = re.compile(r"^/(.*?)/([im]*)$")
-
+_dictsel_re = re.compile(r"^@\{(.+)\}$")              # whole-token @{...}
+_js_regex_re = re.compile(r"^/(.*?)/([im]*)$")        # /re/flags
+_ref_re = re.compile(r"#\{(\d+)\}")      # #{n} where n is digits only
 
 # =========================
 # Helpers
@@ -88,10 +134,6 @@ def _needs_pad(a: str, b: str) -> int:
     return max(len(a2), len(b2)) if pad_on else 0
 
 def _compile_regex(expr: str) -> re.Pattern:
-    """
-    Accepts either plain regex 'A.*' or JS-like '/A.*/i' (only i,m flags).
-    Returns a compiled re.Pattern.
-    """
     m = _js_regex_re.match(expr.strip())
     if m:
         pat, flags_s = m.group(1), m.group(2)
@@ -99,55 +141,27 @@ def _compile_regex(expr: str) -> re.Pattern:
         if 'i' in flags_s: flags |= re.IGNORECASE
         if 'm' in flags_s: flags |= re.MULTILINE
         return re.compile(pat, flags)
-    # plain regex string
     return re.compile(expr)
 
 def _coerce_names(names: Union[None, Iterable[str], dict]) -> List[str]:
-    """
-    Accept list/iterable of names or dict (use keys). Preserve insertion order.
-    """
     if names is None:
         return []
     if isinstance(names, dict):
         return list(names.keys())
-    # generic iterable
     return list(names)
 
 # =========================
-# Core expanders
+# Numeric range expander
 # =========================
-
-def _expand_dict_selector(token: str, names: List[str], *, trim_for_items: bool = False) -> List[str] | None:
-    """
-    If token is an @{...} selector, expand to matching names (or [] if none).
-    Return None if token is not a selector (caller will try other expanders).
-    """
-    tok_input = token.strip() if trim_for_items else token
-    m = _dictsel_re.match(tok_input)
-    if not m:
-        return None
-    if not names:
-        # No names supplied: treat as literal
-        return [tok_input]
-    expr = m.group(1).strip()
-    try:
-        rx = _compile_regex(expr)
-    except re.error:
-        # Invalid regex: treat literal
-        return [tok_input]
-    # Preserve incoming order of names; include exact string matches too
-    out = [n for n in names if rx.search(n)]
-    # If nothing matched, produce empty list (kills that branch)
-    return out
 
 def _expand_single_brace(token: str, *, trim_for_items: bool = False) -> List[str]:
     """
     Numeric range expander for a single {...} inside token; if none, return [token] unchanged.
 
     Supports:
-      - {a:b:step}  step is float/int (direction auto-corrected)
-      - {a:b:N}     N is integer count (inclusive linspace) when a/b not both int-like
-                    If a & b are int-like and third is int-like → STEP (not count)
+      - {a:b:step}   step is float/int step size (direction auto-corrected)
+      - {a:b:N}      N is integer COUNT (inclusive linspace), unless N is a valid integer STEP that
+                     divides the integer range cleanly (then treat as STEP).
     """
     tok_input = token.strip() if trim_for_items else token
     m = _brace_re.match(tok_input)
@@ -169,6 +183,7 @@ def _expand_single_brace(token: str, *, trim_for_items: bool = False) -> List[st
 
     int_pad_width = _needs_pad(a_s, b_s) if (a_is_int and b_is_int) else 0
 
+    # Determine mode
     if len(parts) == 2:
         if a_is_int and b_is_int:
             step_mode = ("step", 1 if b_val >= a_val else -1)
@@ -181,33 +196,38 @@ def _expand_single_brace(token: str, *, trim_for_items: bool = False) -> List[st
 
         try:
             if looks_floaty and not third_is_intlike:
+                # explicit float STEP
                 step_val = float(third)
                 if step_val == 0.0 or not math.isfinite(step_val):
                     return [tok_input]
                 if (b_val - a_val) * step_val < 0:
                     step_val = -step_val
                 step_mode = ("step", step_val)
-            elif third_is_intlike and a_is_int and b_is_int:
-                step_val = int(third)
-                if step_val == 0:
-                    return [tok_input]
-                if (b_val - a_val) * step_val < 0:
-                    step_val = -step_val
-                step_mode = ("step", step_val)
-            else:
+            elif third_is_intlike:
                 N = int(third)
-                if N <= 0:
+                if N == 0:
                     return [tok_input]
-                step_mode = ("count", N)
+                if a_is_int and b_is_int:
+                    # treat as STEP only if it divides the integer range cleanly; else COUNT
+                    rng = int(b_val) - int(a_val)
+                    if N == 1 or (rng != 0 and rng % N == 0):
+                        step_val = N if (b_val >= a_val) else -N
+                        step_mode = ("step", step_val)
+                    else:
+                        step_mode = ("count", N)
+                else:
+                    step_mode = ("count", N)
+            else:
+                return [tok_input]
         except Exception:
             return [tok_input]
 
+    # Formatting decision
     def _should_use_int_format() -> bool:
         if not (a_is_int and b_is_int):
             return False
         if step_mode[0] == "step":
-            step_val = step_mode[1]
-            return float(step_val).is_integer()
+            return float(step_mode[1]).is_integer()
         else:
             N = step_mode[1]
             return (b_val - a_val) == int(b_val - a_val) and N == abs(int(b_val - a_val)) + 1
@@ -222,6 +242,7 @@ def _expand_single_brace(token: str, *, trim_for_items: bool = False) -> List[st
             return ("-" if xi < 0 else "") + f"{abs(xi):0{int_pad_width}d}"
         return f"{float(x):.15g}"
 
+    # Generate
     out: List[str] = []
     if step_mode[0] == "count":
         N = step_mode[1]
@@ -251,45 +272,36 @@ def _expand_single_brace(token: str, *, trim_for_items: bool = False) -> List[st
             return [tok_input]
     return out
 
+# =========================
+# Dict selector (@{...})
+# =========================
 
-def _expand_list_block(block_text: str, names: List[str]) -> List[str]:
-    """
-    Expand [a,b,c{1:3},@{regex}] into a flat list (union).
-    """
-    items = [t.strip() for t in block_text.split(",") if t.strip()]
-    out: List[str] = []
-    for it in items:
-        # 1) dict selector?
-        sel = _expand_dict_selector(it, names, trim_for_items=True)
-        if sel is not None:
-            out.extend(sel)
-            continue
-        # 2) numeric brace expansion or literal
-        out.extend(_expand_single_brace(it, trim_for_items=True))
+def _expand_dict_selector(token: str, names: List[str], *, trim_for_items: bool = False) -> List[str] | None:
+    tok_input = token.strip() if trim_for_items else token
+    m = _dictsel_re.match(tok_input)
+    if not m:
+        return None
+    if not names:
+        return [tok_input]
+    expr = m.group(1).strip()
+    try:
+        rx = _compile_regex(expr)
+    except re.error:
+        return [tok_input]
+    out = [n for n in names if rx.search(n)]
     return out
 
-
-def _expand_plain_segment(content: str, names: List[str]) -> List[str]:
-    """
-    Expand plain text segment:
-      - try dict selector if the whole segment is @{...}
-      - else try one numeric brace {...}
-      - otherwise return as-is
-    """
-    # whole-segment dict selector
-    sel = _expand_dict_selector(content, names, trim_for_items=False)
-    if sel is not None:
-        return sel
-    return _expand_single_brace(content, trim_for_items=False)
-
+# =========================
+# Tokenizer (safe)
+#   Produces parts: ("text", chunk), ("list", inner), ("zip", inner)
+# =========================
 
 def _tokenize_parts(spec: str):
     """
-    Yield ("text", chunk) and ("list", inner) parts.
-    Only recognize [ ... ] as a list when NOT inside:
-      - an @ { ... } selector
-      - a { ... } numeric range
-    This prevents mis-parsing regex character classes like [A-Z] inside @{/…/}.
+    Produce parts: ("text", chunk), ("list", inner)
+    - Keeps @{...} and {...} as single text chunks (parsed later).
+    - Recognizes [ ... ] as 'list'.
+    - EXPLICIT [[...]] IS NOT SUPPORTED: raises ValueError.
     """
     parts = []
     i, n = 0, len(spec)
@@ -303,74 +315,65 @@ def _tokenize_parts(spec: str):
     while i < n:
         ch = spec[i]
 
-        # detect start of @ { ... } (selector)
+        # @{ ... } selector → single text chunk
         if ch == '@' and i + 1 < n and spec[i + 1] == '{':
-            # copy literally into text buffer until the matching closing '}'
-            # (support nested braces just in case)
             flush_text()
             j = i + 2
             depth = 1
             while j < n and depth > 0:
-                if spec[j] == '{':
-                    depth += 1
-                elif spec[j] == '}':
-                    depth -= 1
-                j += 1
-            # j is one past the closing '}'
-            parts.append(("text", spec[i:j]))  # keep selector as plain text part
-            i = j
-            continue
-
-        # detect start of numeric { ... } range (not a selector)
-        if ch == '{':
-            # copy literally until matching '}'
-            flush_text()
-            j = i + 1
-            depth = 1
-            while j < n and depth > 0:
-                if spec[j] == '{':
-                    depth += 1
-                elif spec[j] == '}':
-                    depth -= 1
+                if spec[j] == '{': depth += 1
+                elif spec[j] == '}': depth -= 1
                 j += 1
             parts.append(("text", spec[i:j]))
             i = j
             continue
 
-        # detect list [ ... ] only when not inside the above
+        # { ... } numeric range → single text chunk (NO post-name support)
+        if ch == '{':
+            flush_text()
+            j = i + 1
+            depth = 1
+            while j < n and depth > 0:
+                if spec[j] == '{': depth += 1
+                elif spec[j] == '}': depth -= 1
+                j += 1
+            parts.append(("text", spec[i:j]))
+            i = j
+            continue
+
+        # [[ ... ]] -> ERROR (explicit zip not supported)
+        if ch == '[' and i + 1 < n and spec[i + 1] == '[':
+            raise ValueError("Explicit zip [[...]] is not supported. Use [...]+#{n} instead.")
+
+        # [ ... ] cartesian list
         if ch == '[':
             flush_text()
             j = i + 1
             depth = 1
             while j < n and depth > 0:
                 cj = spec[j]
+                # skip @{...} inside list
                 if cj == '@' and j + 1 < n and spec[j + 1] == '{':
-                    # skip over selector block inside list
                     k = j + 2
                     d = 1
                     while k < n and d > 0:
-                        if spec[k] == '{':
-                            d += 1
-                        elif spec[k] == '}':
-                            d -= 1
+                        if spec[k] == '{': d += 1
+                        elif spec[k] == '}': d -= 1
                         k += 1
                     j = k
                     continue
+                # skip { ... } inside list
                 if cj == '{':
-                    # skip over numeric range inside list
                     k = j + 1
                     d = 1
                     while k < n and d > 0:
-                        if spec[k] == '{':
-                            d += 1
-                        elif spec[k] == '}':
-                            d -= 1
+                        if spec[k] == '{': d += 1
+                        elif spec[k] == '}': d -= 1
                         k += 1
                     j = k
                     continue
                 if cj == '[':
-                    # nested lists are not supported: treat inner as literal
-                    # consume until next ']' but do not change depth
+                    # nested normal '[' inside list is just a char; keep going
                     j += 1
                     continue
                 if cj == ']':
@@ -383,61 +386,383 @@ def _tokenize_parts(spec: str):
             i = j
             continue
 
-        # default: accumulate as plain text
+        # default literal
         buf.append(ch)
         i += 1
 
     flush_text()
     return parts
 
-
 def _split_into_parts(spec: str):
-    """Compatibility shim: returns list of (kind, content) parts."""
     return _tokenize_parts(spec)
 
-# -----------------------------
+
+# =========================
+# Segments
+# =========================
+
+class _Seg: ...
+class _Lit(_Seg):
+    def __init__(self, text: str): self.text = text
+class _ListChoices(_Seg):
+    def __init__(self, choices: List[str], pid: Optional[str] = None):
+        self.choices = choices        # cartesian list choices
+        self.pid = pid                # list-like ordinal id as string (for #{id})
+
+class _ZipList(_Seg):
+    def __init__(self, choices: List[str], zip_pid: Optional[str], pid: Optional[str] = None):
+        self.choices = choices      # items of the list
+        self.zip_pid = zip_pid      # producer pid that this list zips to
+        self.pid = pid              # list-like ordinal id (string), used by #{...} refs
+
+class _Producer(_Seg):
+    def __init__(self, pid: str, values: List[str]): self.pid, self.values = pid, values
+class _Ref(_Seg):
+    def __init__(self, pid: str): self.pid = pid
+
+# =========================
+# Split text into [Lit/Ref] segments
+# =========================
+
+def _split_text_with_refs(text: str) -> List[_Seg]:
+    segs: List[_Seg] = []
+    idx = 0
+    for mref in _ref_re.finditer(text):
+        if mref.start() > idx:
+            segs.append(_Lit(text[idx:mref.start()]))
+        segs.append(_Ref(mref.group(1)))
+        idx = mref.end()
+    if idx < len(text):
+        segs.append(_Lit(text[idx:]))
+    if not segs:
+        segs.append(_Lit(""))
+    return segs
+
+# =========================
+# Expand list blocks (cartesian or zip) into strings
+# =========================
+
+def _expand_list_block(block_text: str, names: List[str]) -> List[str]:
+    """
+    Expand [a,b,c{1:3},@{regex}] into a flat list (union).
+    References inside list items are treated literally by design.
+    """
+    items = [t.strip() for t in block_text.split(",") if t.strip()]
+    out: List[str] = []
+    for it in items:
+        sel = _expand_dict_selector(it, names, trim_for_items=True)
+        if sel is not None:
+            out.extend(sel)
+            continue
+        out.extend(_expand_single_brace(it, trim_for_items=True))
+    return out
+
+# =========================
+# Parse plain text into segments (Lit/Ref/Producer or ListChoices from dictsel)
+# =========================
+
+def _parse_plain_to_segments(text: str, names: List[str], ordinal_start: int) -> Tuple[List[_Seg], int]:
+    """
+    Parse a plain text chunk into segments:
+      - Whole-token @{...} -> _ListChoices (cartesian)
+      - Embedded {...}     -> _Producer (list-like unit), no naming, ordinal only
+      - Otherwise          -> split into _Lit / _Ref
+    """
+    # whole-segment dict selector?
+    sel = _expand_dict_selector(text, names, trim_for_items=False)
+    if sel is not None:
+        return ([_ListChoices(sel)], ordinal_start)
+
+    # embedded { ... } numeric producer (no @name support)
+    m = _brace_re.match(text)
+    if m:
+        pre_text, suf_text = m.group("prefix"), m.group("suffix")
+        body = m.group("body").strip()
+
+        # expand only the body to get core values
+        core_vals = _expand_single_brace("{" + body + "}")
+        # if not a valid {...} expansion, fall back to literal+refs parsing
+        if not core_vals or (len(core_vals) == 1 and core_vals[0] == "{" + body + "}"):
+            return (_split_text_with_refs(text), ordinal_start)
+
+        # producer id is the current ordinal; advance for the next one
+        pid = str(ordinal_start)
+        next_ord = ordinal_start + 1
+
+        segs: List[_Seg] = []
+        segs.extend(_split_text_with_refs(pre_text))
+        segs.append(_Producer(pid, core_vals))   # producer emits only the core values
+        segs.extend(_split_text_with_refs(suf_text))
+        return (segs, next_ord)
+
+    # no braces → split by refs (or literal)
+    return (_split_text_with_refs(text), ordinal_start)
+
+# =========================
+# Build segments from parts, assigning zip lists
+# =========================
+
+def _segments_from_parts(parts: List[Tuple[str, str]], names: List[str]) -> List[_Seg]:
+    """
+    Build the flat segment list with these rules:
+      • All lists are cartesian (no implicit adjacency zip, no explicit zip).
+      • Whole-token @{...} selectors become cartesian lists.
+      • Numeric {...} inside text becomes a producer unit.
+      • Each list-like unit (producer or list) gets an ordinal (1-based) so #{n} can reference it.
+    """
+    segs: List[_Seg] = []
+    ordinal_for_producers = 1   # local producer counter (not used for refs)
+    listlike_ordinal = 1        # the ONLY ordinal exposed to #{n}
+
+    def _append_producer(p: _Producer):
+        nonlocal listlike_ordinal
+        # Store the exposed ordinal for this producer
+        p.oid = str(listlike_ordinal)  # type: ignore[attr-defined]
+        listlike_ordinal += 1
+        segs.append(p)
+
+    for kind, content in parts:
+        if kind == "list":
+            choices = _expand_list_block(content, names)
+            if not choices:
+                return []
+            lc = _ListChoices(choices, pid=str(listlike_ordinal))
+            listlike_ordinal += 1
+            segs.append(lc)
+
+        else:
+            sgs, ordinal_for_producers = _parse_plain_to_segments(content, names, ordinal_for_producers)
+            for s in sgs:
+                if isinstance(s, _Producer):
+                    _append_producer(s)
+                else:
+                    segs.append(s)
+
+    return segs
+
+# =========================
 # Public API
-# -----------------------------
+# =========================
 
 def expand_cartesian_lists(spec: str, *, names: Union[None, Iterable[str], dict] = None) -> List[str]:
     """
-    Expand union-inside-lists and cartesian across lists.
-
-    Parameters
-    ----------
-    spec : str
-        The specification string.
-    names : iterable[str] or dict, optional
-        A collection of names to be used by @{...} selectors. If dict, keys are used.
-
-    Returns
-    -------
-    list[str]
-        Expanded strings in cartesian order.
+    Expand with:
+      • Numeric ranges {a:b[:c]} create producer list-like units.
+      • [ ... ] are cartesian lists.
+      • @{...} as whole-token expands to a cartesian list.
+      • #{n} references the n-th list-like unit (1-based), which can be either a producer
+        or a list; it yields the currently selected value from that unit.
+      • No explicit zip syntax; no naming; no promotion.
     """
     name_list = _coerce_names(names)
-
-    # tokenize into alternating plain/list parts
-    parts = _split_into_parts(spec)  # <-- use the safe tokenizer
-
-    # expand each segment into choices
-    seg_choices: List[List[str]] = []
-    for kind, content in parts:
-        if kind == "list":
-            choices = _expand_list_block(content, name_list)
-            if not choices:
-                return []  # empty list block => no options
-        else:
-            choices = _expand_plain_segment(content, name_list)
-            if not choices:
-                choices = [""]  # neutral element for empty plain text
-        seg_choices.append(choices)
-
-    if not seg_choices:
+    parts = _split_into_parts(spec)
+    segs = _segments_from_parts(parts, name_list)
+    if not segs:
         return []
 
-    return ["".join(combo) for combo in product(*seg_choices)]
+    # Build dimensions in left-to-right order; track list-like ordinals
+    dims: List[List[Union[int, str, None]]] = []
+    # Map exposed ordinal string -> (kind, seg_ref, dim_index)
+    ll_map: Dict[str, Tuple[str, object, int]] = {}
 
+    current_ll_ord = 1
+    for s in segs:
+        if isinstance(s, _Producer):
+            vals = s.values
+            dim_index = len(dims)
+            dims.append(list(range(len(vals))) or [0])  # index selection
+            # record this list-like ordinal for refs
+            ll_map[str(current_ll_ord)] = ("producer", s, dim_index)
+            current_ll_ord += 1
+
+        elif isinstance(s, _ListChoices):
+            dim_index = len(dims)
+            dims.append(s.choices if s.choices else [""])
+            ll_map[str(current_ll_ord)] = ("list", s, dim_index)
+            current_ll_ord += 1
+
+        else:  # _Lit, _Ref
+            dims.append([None])
+
+    results: List[str] = []
+    for combo in product(*dims):
+        # Render immediate pieces (leave #{n} placeholders for a final pass)
+        out_parts: List[str] = []
+        for s, choice in zip(segs, combo):
+            if isinstance(s, _Lit):
+                out_parts.append(s.text)
+            elif isinstance(s, _ListChoices):
+                out_parts.append(str(choice))
+            elif isinstance(s, _Producer):
+                out_parts.append(s.values[int(choice)])
+            elif isinstance(s, _Ref):
+                out_parts.append(f"#{{{s.pid}}}")
+            else:
+                out_parts.append("")
+
+        # Final pass: resolve #{n} using ll_map and this combo
+        def _ref_replace(m: re.Match) -> str:
+            pid = m.group(1)  # numeric ordinal string
+            if pid not in ll_map:
+                return m.group(0)
+            kind, seg_ref, dim_index = ll_map[pid]
+            sel = combo[dim_index]
+            if kind == "producer":
+                sprod: _Producer = seg_ref  # type: ignore[assignment]
+                try:
+                    return sprod.values[int(sel)]
+                except Exception:
+                    return m.group(0)
+            else:  # "list"
+                # selection is already the chosen string
+                try:
+                    return str(sel)
+                except Exception:
+                    return m.group(0)
+
+        rendered = _ref_re.sub(_ref_replace, "".join(out_parts))
+        results.append(rendered)
+
+    return results
+
+def _selftest(verbose: bool = False) -> int:
+    """
+    Tests for the 'all cartesian; refs by number only; no [[...]]' rules.
+    """
+    def eq(got, exp, msg=""):
+        nonlocal fails, passed
+        if got == exp:
+            passed += 1
+            if verbose:
+                print(f"✅ {msg or 'ok'}")
+        else:
+            fails += 1
+            print("❌", msg or "mismatch")
+            print("   expected:", exp)
+            print("   got     :", got)
+
+    def run(spec, expected, names=None, msg=""):
+        got = expand_cartesian_lists(spec, names=names)
+        eq(got, expected, msg or spec)
+
+    def run_count(spec, expected_count, names=None, msg=""):
+        got = expand_cartesian_lists(spec, names=names)
+        ok = (len(got) == expected_count)
+        nonlocal fails, passed
+        if ok:
+            passed += 1
+            if verbose:
+                print(f"✅ {msg or spec} (count={expected_count})")
+        else:
+            fails += 1
+            print("❌", msg or spec)
+            print("   expected count:", expected_count)
+            print("   got count     :", len(got))
+            if verbose and got:
+                print("   sample        :", got[:min(8, len(got))])
+
+    def run_raises(spec, msg=""):
+        nonlocal fails, passed
+        try:
+            expand_cartesian_lists(spec)
+        except ValueError:
+            passed += 1
+            if verbose:
+                print(f"✅ {msg or spec} (raised ValueError as expected)")
+        except Exception as e:
+            fails += 1
+            print("❌", msg or spec)
+            print("   expected ValueError, got:", type(e).__name__, str(e))
+        else:
+            fails += 1
+            print("❌", msg or spec)
+            print("   expected ValueError, but no exception was raised")
+
+    fails = 0
+    passed = 0
+
+    # ---------- Basics ----------
+    run("[a,b,c]", ["a","b","c"], msg="cartesian list")
+    run("pre{1:3}suf", ["pre1suf","pre2suf","pre3suf"], msg="int range")
+    run("{-003:003:1}", ["-003","-002","-001","000","001","002","003"], msg="signed padded ints")
+    run("[{-003:003:1}]",
+        ["-003","-002","-001","000","001","002","003"], msg="padded ints in list")
+
+    # ---------- Floats & count ----------
+    run("[{1:2:1e-1}]",
+        ["1","1.1","1.2","1.3","1.4","1.5","1.6","1.7","1.8","1.9","2"],
+        msg="float step as list")
+
+    run("x{0:1:5}y",
+        ["x0y","x0.25y","x0.5y","x0.75y","x1y"],
+        msg="count mode (inclusive 5 samples)")
+
+    # ---------- Cartesian products ----------
+    run("[x,y]{01:02}", ["x01","x02","y01","y02"], msg="cartesian multiply")
+    run_count("a{1:3}[p,o,r]", 9, msg="producer × list (3*3)")
+    run_count("a{1:3}[p,o,r][P,O,R]", 27, msg="three cartesian dims (3*3*3)")
+
+    # ---------- Dict selector ----------
+    sample_names = ["AAPL","MSFT","NVDA","AMZN","META","ORCL","IBM","alpha","Beta"]
+    run("[@{/^A/}]", ["AAPL","AMZN"], names=sample_names, msg="regex selector ^A (case-sensitive)")
+    run("@{/^a/i}", ["AAPL","AMZN","alpha"], names=sample_names, msg="regex selector ^a with /i flag")
+    run("@{/A/}", ["AAPL","NVDA","AMZN","META"], names=sample_names, msg="regex selector anywhere A")
+
+    # ---------- Refs by ordinal ONLY ----------
+    run("a{1:3}b#{1}", ["a1b1","a2b2","a3b3"], msg="#{1} refers to first list-like unit (producer)")
+    run("[x,y]#{1}", ["xx","yy"], msg="#{1} refers to first list-like unit (list)")
+
+    # Refs can be anywhere in the text; they resolve after selection
+    run("#{2}:: a{1:3}[p,o,r]",
+        ["p:: a1p","o:: a1o","r:: a1r",
+         "p:: a2p","o:: a2o","r:: a2r",
+         "p:: a3p","o:: a3o","r:: a3r"],
+        msg="ref before the list resolves")
+
+    run("a{1:2}[p,o]/#{2}",
+        ["a1p/p","a1o/o","a2p/p","a2o/o"],
+        msg="#{2} mirrors the 2nd list-like unit across cartesian")
+
+    # ---------- NEW: Unknown reference left literal ----------
+    run("a{1:2}X#{9}", ["a1X#{9}","a2X#{9}"], msg="unknown ref remains literal")
+
+    # ---------- NEW: Multiple refs to same dim ----------
+    run("A{1:2}[x,y]-#{1}-#{2}-#{2}",
+        ["A1x-1-x-x","A1y-1-y-y","A2x-2-x-x","A2y-2-y-y"],
+        msg="reusing refs from producer and list")
+
+    # ---------- NEW: Count vs step disambiguation on integers ----------
+    # range 0..10 with third=5 divides exactly => STEP of 5
+    run("{0:10:5}", ["0","5","10"], msg="int third that divides range -> step")
+    # range 0..10 with third=4 doesn't divide => COUNT of 4, inclusive
+    run("{0:10:4}", ["0","3.33333333333333","6.66666666666667","10"], msg="int third that does not divide -> count")
+
+    # ---------- NEW: Negative float step and direction ----------
+    run("{1:0:-0.25}", ["1","0.75","0.5","0.25","0"], msg="negative float step descending")
+
+    # ---------- NEW: Empty list yields empty expansion ----------
+    run_count("[]", 0, msg="empty list -> empty result")
+
+    # ---------- NEW: Dict selector inside a list item ----------
+    run("[pre,@{/^A/},post]{1:2}--#{2}",
+        ["pre1--1","pre2--2",
+         "AAPL1--1","AAPL2--2",
+         "AMZN1--1","AMZN2--2",
+         "post1--1","post2--2"],
+        names=["AAPL","MSFT","AMZN"],
+        msg="selector as list item expands inline")
+
+    # ---------- NEW: Mixed producers + lists + refs to later dim ----------
+    run("X{1:2}Y{01:02}[a,b]::#{3}-#{1}-#{2}-#{3}",
+        ["X1Y01a::a-1-01-a","X1Y01b::b-1-01-b",
+         "X1Y02a::a-1-02-a","X1Y02b::b-1-02-b",
+         "X2Y01a::a-2-01-a","X2Y01b::b-2-01-b",
+         "X2Y02a::a-2-02-a","X2Y02b::b-2-02-b"],
+        msg="refs to third list-like dim")
+
+    if verbose:
+        print(f"\nPassed: {passed}, Failed: {fails}")
+    return fails
 
 # =========================
 # CLI
@@ -451,14 +776,8 @@ def _read_input_arg_or_stdin(arg: Union[str, None]) -> str:
     return ""
 
 def _load_names_from_file(path: str) -> List[str]:
-    """
-    Load names for @{...} selectors from a file:
-      - .json: if object -> keys; if array -> strings
-      - otherwise: newline-separated text file (non-empty lines)
-    """
     with open(path, "r", encoding="utf-8") as f:
         data = f.read()
-    # try JSON
     try:
         obj = json.loads(data)
         if isinstance(obj, dict):
@@ -467,7 +786,6 @@ def _load_names_from_file(path: str) -> List[str]:
             return [str(x) for x in obj]
     except Exception:
         pass
-    # plain text lines
     return [line.strip() for line in data.splitlines() if line.strip()]
 
 def _cli():
@@ -475,7 +793,7 @@ def _cli():
 
     p = argparse.ArgumentParser(
         prog="expandspec",
-        description="Expand specs like '[a,b{1:3}]pre{01:03}suf' with optional @{/regex/} selectors.",
+        description="Expand specs: lists [..], ranges {..}, selectors @{..}, refs #{n} (n is the list-like ordinal).",
     )
     p.add_argument("--in", dest="spec", help="Spec string to expand. If omitted, read from stdin.")
     p.add_argument("--names", help="Path to names file (json or newline list) for @{...} selectors.")
@@ -486,7 +804,16 @@ def _cli():
     p.add_argument("--limit", type=int, default=0, help="Limit number of printed items (0 = no limit).")
     p.add_argument("--count", action="store_true", help="Only print the count of results.")
     p.add_argument("--exit-empty", action="store_true", help="Exit with code 2 if expansion is empty.")
+    # --- add these:
+    p.add_argument("--selftest", action="store_true", help="Run built-in unit tests and exit.")
+    p.add_argument("--selftest-verbose", action="store_true", help="Verbose self-test output.")
+
     args = p.parse_args()
+
+    # --- run tests and exit
+    if args.selftest or args.selftest_verbose:
+        failures = _selftest(verbose=args.selftest_verbose)
+        sys.exit(0 if failures == 0 else 2)
 
     spec = _read_input_arg_or_stdin(args.spec)
     names = _load_names_from_file(args.names) if args.names else None
@@ -512,7 +839,7 @@ def _cli():
 
     if args.count:
         print(len(out))
-        print()  # final newline for clean prompt
+        print()
         return
 
     if args.json:
@@ -521,11 +848,10 @@ def _cli():
         return
 
     print(args.sep.join(out))
-    print()  # ensure trailing newline for clean prompt
+    print()
 
     if args.exit_empty and not out:
         sys.exit(2)
 
 if __name__ == "__main__":
     _cli()
-

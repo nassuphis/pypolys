@@ -4,6 +4,8 @@ from numba import njit
 from numba.typed import Dict
 from numba import types
 import re
+import ast
+import math
 from itertools import product
 
 # ---------- registry & JIT ----------
@@ -68,12 +70,59 @@ CONST_MAP = {
 def set_const(name,value):
     CONST_MAP[name]=complex(value,0)
 
+
+_frac_exp_re = re.compile(
+    r"""
+    ^\s*
+    ([+-]?\d*\.?\d+)       # base part (mantissa)
+    (?:e([+-]?\d*\.?\d+))? # optional fractional exponent
+    \s*$
+    """, re.VERBOSE | re.IGNORECASE
+)
+
 def _parse_scalar(tok: str) -> complex:
+    """
+    Parse a scalar string into a complex constant.
+
+    Supported formats:
+      • Named constants in CONST_MAP (e.g. 'pi', 'e', 'tau')
+      • Regular Python numeric or complex literals ('3.14', '1+2j', etc.)
+      • Scientific notation with fractional exponents ('1e-2.4', '2e1.5')
+      • Uses 'i' interchangeably with 'j' for the imaginary unit.
+
+    Returns:
+        complex: Parsed complex number.
+    Raises:
+        ValueError: If the token cannot be parsed.
+    """
     t = tok.strip().lower()
+    
+    # --- named constants ---
     if t in CONST_MAP:
         return complex(CONST_MAP[t], 0.0)
+    
+    # --- allow i as imaginary unit ---
     t = t.replace('i', 'j')
-    return complex(t)
+    
+    # --- try normal Python literal ---
+    try:
+        v = ast.literal_eval(t)
+        return complex(v)
+    except Exception:
+        pass
+    
+    # --- try fractional-exponent syntax ---
+    m = _frac_exp_re.match(t)
+    if m:
+        base = float(m.group(1))
+        exp_str = m.group(2)
+        if exp_str is None:
+            return complex(base)
+        exp = float(exp_str)
+        val = base * math.exp(exp * math.log(10))
+        return complex(val)
+    
+    raise ValueError(f"Invalid scalar literal: {tok!r}")
 
 def extract_used_names(chain: str) -> set[str]:
     """Return a set of opcode names used in a chain like 'uc:0.1,coeff5:2,nop'."""

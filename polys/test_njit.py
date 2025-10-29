@@ -5,6 +5,7 @@ import time
 import rasterizer                # rasterize results
 import scanner                   # 
 import ast
+import math
 
 def main():
 
@@ -21,6 +22,7 @@ def main():
         help="Calculation"
     )
     ap.add_argument("--verbose", action="store_true")
+    ap.add_argument("--invert", action="store_true")
     args = ap.parse_args()
 
     runs = int(ast.literal_eval(args.runs))
@@ -42,9 +44,11 @@ def main():
             raster,
             out=args.png,
             header=args.chain,
+            top_margin_px = px // 40 ,
             font_family="Courier New",
             font_weight="Bold",
-            position="bottom"
+            position="bottom",
+            invert=args.invert
         )
         print(f"save time: {time.perf_counter() - t0:.3f}s")
     elif args.calc=="roots":
@@ -60,8 +64,10 @@ def main():
             raster,
             out=args.png,
             header=args.chain,
+            top_margin_px = px // 40 ,
             font_family="Courier New",
-            font_weight="Bold"
+            font_weight="Bold",
+            invert=args.invert
         )
         print(f"save time: {time.perf_counter() - t0:.3f}s")
 

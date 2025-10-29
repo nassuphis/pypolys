@@ -10,6 +10,7 @@ from numba.typed import Dict
 from numba import njit, types
 import argparse
 import ast
+import math
 
 def op_circle(z,a,state):
     n = int(a[0].real)
@@ -20,6 +21,33 @@ def op_circle(z,a,state):
     c = np.exp(1j*2*np.pi*t)
     v[n] = c
     return v
+
+def op_rhotheta(z,a,state):
+    n = int(a[0].real)
+    if n<0: return z
+    if n>z.size-1: return z
+    zz = z.copy()
+    rho = z[0]
+    theta = z[1]
+    disk = rho* np.exp(1j*2*np.pi*theta)
+    zz[n] = disk
+    return zz
+
+def op_thetarho(z,a,state):
+    n = int(a[0].real)
+    if n<0: return z
+    if n>z.size-1: return z
+    zz = z.copy()
+    rho = z[1]
+    theta = z[0]
+    disk = rho* np.exp(1j*2*np.pi*theta)
+    zz[n] = disk
+    return zz
+
+def op_rttr(z,a,state):
+    v1 = z[0]*np.exp(1j*2*np.pi*z[1])
+    v2 = z[1]*np.exp(1j*2*np.pi*z[0])
+    return np.array([v1,v2],dtype=np.complex128)
 
 def op_dot(z,a,state):
     n = int(a[0].real)
@@ -719,38 +747,225 @@ def op_cassini(z, a, state):
     v[n] = xr + 1j*yr
     return v
 
+# set i-th state to current z
+def op_save(z, a, state):
+    i = np.int8(a[0].real)
+    state[i] = z.copy()
+    return z
+
+# set n-th z value to jth value of ith state
+def op_get(z, a, state):
+    n = int(a[0].real)
+    if n < 0 or n > z.size-1: return z
+    zz = z.copy()
+    si = np.int8(a[1].real)
+    w = state[si]
+    j = int(a[2].real)
+    if j < 0 or j > w.size-1: return z
+    x = w[j]
+    zz[n] = x
+    return zz
+
+def op_snip(z, a, state):
+    n = int(a[0].real)
+    m = int(a[1].real)
+    if n>m: return z
+    if n<0: return z
+    if m>z.size: return z
+    zz = z[n:m]
+    return zz
+
+# add complex dither to inputs
+# dither:runs:0.5
+def op_dither(z,a,state):
+    n = int(a[0].real)
+    if n < 0 or n > z.size-1: return z
+    serp_len = a[1].real
+    dither_width = a[2].real or 0.25
+    dither_fact = dither_width/math.sqrt(serp_len)
+    dre  = dither_fact * (np.random.random()-0.5)
+    drim = dither_fact * (np.random.random()-0.5)
+    d = dre + 1j * drim
+    zz = z.copy()
+    zz[n] = d+z[n]
+    return zz
+
+# add complex dither to inputs
+# dither:runs:0.5
+def op_circle_dither(z,a,state):
+    n = int(a[0].real)
+    if n < 0 or n > z.size-1: return z
+    serp_len = a[1].real
+    dither_width = a[2].real or 0.25
+    dither_fact = dither_width/math.sqrt(serp_len)
+    drad  = dither_fact * np.random.random()
+    dngl = np.random.random()
+    d = drad * np.exp(1j*2*np.pi*dngl)
+    zz = z.copy()
+    zz[n] = d+z[n]
+    return zz
+
+# uses a[3] as optional sigma multiplier (default 1.0)
+def op_normal_dither(z, a, state):
+    def _randn2():
+        return np.random.normal(), np.random.normal()
+    def _fact(serp_len, width):
+        return (width or 0.25) / math.sqrt(max(1.0, serp_len))
+    n = int(a[0].real)
+    if n < 0 or n > z.size-1: return z
+    serp_len = a[1].real
+    sigma_mul = a[3].real or 1.0
+    sigma = sigma_mul * _fact(serp_len, a[2].real)
+    dx, dy = _randn2()
+    zz = z.copy()
+    zz[n] = z[n] + sigma * (dx + 1j*dy)
+    return zz
+
+# uses a[3]=inner_frac in [0,1) (default 0.5)
+def op_annulus_dither(z, a, state):
+    def _fact(serp_len, width):
+        return (width or 0.25) / math.sqrt(max(1.0, serp_len))
+    n = int(a[0].real)
+    if n < 0 or n > z.size-1: return z
+    serp_len = a[1].real
+    w = _fact(serp_len, a[2].real)
+    inner = a[3].real or 0.5
+    inner = min(max(inner, 0.0), 0.9999)
+    r = math.sqrt(inner*inner + (1.0 - inner*inner) * np.random.random())  # area-uniform
+    th = 2.0*math.pi*np.random.random()
+    d = (w * r) * (math.cos(th) + 1j*math.sin(th))
+    zz = z.copy()
+    zz[n] = z[n] + d
+    return zz
+
+# uses a[3]=center_angle, a[4]=half_aperture (radians)
+def op_sector_dither(z, a, state):
+    def _fact(serp_len, width):
+        return (width or 0.25) / math.sqrt(max(1.0, serp_len))
+    n = int(a[0].real)
+    if n < 0 or n > z.size-1: return z
+    serp_len = a[1].real
+    w = _fact(serp_len, a[2].real)
+    cang = a[4].real
+    halfap =  math.pi * max(0.0, min( a[3].real or 0.1, 1.0 ) )
+    r = math.sqrt(np.random.random())
+    th = cang + (np.random.random()*2.0 - 1.0) * halfap
+    d = (w * r) * (math.cos(th) + 1j*math.sin(th))
+    zz = z.copy()
+    zz[n] = z[n] + d
+    return zz
+
+# uses a[3]=angle_radians, a[4]=half_length_fraction (default 1 → full width)
+def op_line_dither(z, a, state):
+    def _fact(serp_len, width):
+        return (width or 0.25) / math.sqrt(max(1.0, serp_len))
+    n = int(a[0].real)
+    if n < 0 or n > z.size-1: return z
+    serp_len = a[1].real
+    w = _fact(serp_len, a[2].real)
+    frac = a[3].real or 1.0
+    ang = a[4].real or 0.0
+    t = (np.random.random() - 0.5) * 2.0 * 0.5 * frac  # in [-frac/2, frac/2]
+    dx = w * (2.0 * t) * math.cos(ang)
+    dy = w * (2.0 * t) * math.sin(ang)
+    zz = z.copy()
+    zz[n] = z[n] + (dx + 1j*dy)
+    return zz
+
+def op_cross_dither(z, a, state):
+    """
+    Cross brush (two perpendicular line segments through the center).
+    Params (same layout):
+      a[0] = index (int)
+      a[1] = serp_len (float)
+      a[2] = width (float)  # sets half-length of each arm, scaled by serp_len
+    """
+    n = int(a[0].real)
+    if n < 0 or n > z.size - 1:
+        return z
+
+    serp_len = a[1].real
+    # scale size like your other brushes: width / sqrt(serp_len)
+    w = (a[2].real or 0.25) / math.sqrt(max(1.0, serp_len))
+
+    # pick arm: 0 -> horizontal (real axis), 1 -> vertical (imag axis)
+    arm = 0 if np.random.random() < 0.5 else 1
+    # pick position along the chosen arm, uniform in [-w, +w]
+    t = (np.random.random() * 2.0 - 1.0) * w
+
+    if arm == 0:
+        d = t + 0j          # horizontal stroke
+    else:
+        d = 1j * t          # vertical stroke
+
+    zz = z.copy()
+    zz[n] = z[n] + d
+    return zz
+
+def op_extend(z,a,state):
+    n = int(a[0].real)
+    if n < 0 or n > z.size-1: return z
+    zz = np.empty(z.size + 1, dtype=np.complex128)
+    for i in range(z.size): zz[i] = z[i]
+    zz[z.size] = z[n]
+    return zz
+
+def op_copy(z,a,state):
+    n = int(a[0].real)
+    m = int(a[1].real)
+    if n < 0 or n > z.size-1: return z
+    if m < 0 or m > z.size-1: return z
+    zz = z.copy()
+    zz[m] = z[n]
+    return zz
+
 ALLOWED = {
-    "dot":   op_dot,
-    "xim":   xim,
-    "zz":    op_zz,
-    "zz1":   op_zz1,
-    "zz2":   op_zz2,
-    "zz3":   op_zz3,
-    "pz":    op_pz,
-    "bkr":   op_bkr,
-    "crd":   op_crd,
-    "hrt":   op_hrt,
-    "spdl":  op_spdl,
-    "lmc":   limacon,
-    "rsc":   rose_curve,
-    "lss":   lissajous,
-    "ast":   astroid,
-    "asp":   archimedean_spiral,
-    "lsp":   logarithmic_spiral,
-    "dlt":   deltoid,
-    "rply":  op_poly_regular,
-    "star":  op_star_simple,
-    "cssn":  op_cassini,
-    "lmn":   op_lemniscate,
-    "trch":  op_trochoid,
-    "hcld":  op_hypocycloid,
-    "ecld":  op_epicycloid,
-    "supf":  op_superformula,
-    "supe":  op_superellipse,
-    "eclps": op_ellipse,
-    "rect":  op_rect,
-    "rrect": op_roundrect,
-    "circ":  op_circle,
+    "copy":   op_copy,
+    "xtnd":   op_extend,
+    "snip":   op_snip,
+    "save":   op_save,
+    "get":    op_get,
+    "dot":    op_dot,
+    "xim":    xim,
+    "zz":     op_zz,
+    "zz1":    op_zz1,
+    "zz2":    op_zz2,
+    "zz3":    op_zz3,
+    "pz":     op_pz,
+    "bkr":    op_bkr,
+    "crd":    op_crd,
+    "hrt":    op_hrt,
+    "spdl":   op_spdl,
+    "lmc":    limacon,
+    "rsc":    rose_curve,
+    "lss":    lissajous,
+    "ast":    astroid,
+    "asp":    archimedean_spiral,
+    "lsp":    logarithmic_spiral,
+    "dlt":    deltoid,
+    "rply":   op_poly_regular,
+    "star":   op_star_simple,
+    "cssn":   op_cassini,
+    "lmn":    op_lemniscate,
+    "trch":   op_trochoid,
+    "hcld":   op_hypocycloid,
+    "ecld":   op_epicycloid,
+    "supf":   op_superformula,
+    "supe":   op_superellipse,
+    "eclps":  op_ellipse,
+    "rect":   op_rect,
+    "rrect":  op_roundrect,
+    "circ":   op_circle,
+    "rt":     op_rhotheta,
+    "tr":     op_thetarho,
+    "rttr":   op_rttr,
+    "sdth":   op_dither,
+    "cdth":   op_circle_dither,
+    "ndth":   op_normal_dither,
+    "adth":   op_annulus_dither,
+    "ldth":   op_line_dither,
+    "crdth":  op_cross_dither,
+    "scdth":  op_sector_dither,
 }
 
 

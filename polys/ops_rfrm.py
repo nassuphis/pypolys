@@ -37,9 +37,16 @@ def roots_toline(z,a,state):
    line = 1j * num/den
    return line
 
+def roots_add(z,a,state):
+    return z+a[0]
+
+def roots_mult(z,a,state):
+    return z*a[0]
 
 ALLOWED = {
     "rrot":      rotate_roots,
+    "radd":      roots_add,
+    "rmul":      roots_mult,
     "unitpull":  pull_unit_circle,
     "puc":       pull_unit_circle,
     "toline":    roots_toline,

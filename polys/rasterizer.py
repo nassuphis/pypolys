@@ -309,11 +309,17 @@ def write_raster_header(
     dpi: int = 150,
     font_family: str = "Helvetica",
     font_weight: str = "Bold",
-    position="top"
+    position: str = "top",
+    invert: bool = False,
 ):
     """
     Save a bilevel (1-bit) PNG from a numpy array, with optional centered header.
     img_arr must be uint8 with values 0 (black) or 255 (white).
+
+    Parameters
+    ----------
+    invert : bool
+        If True, invert black ↔ white before saving.
     """
     if img_arr.dtype != np.uint8:
         raise ValueError("img_arr must be uint8.")
@@ -324,6 +330,9 @@ def write_raster_header(
     H, W = img_arr.shape
     base = vips.Image.new_from_memory(img_arr.data, W, H, 1, "uchar")
 
+    if invert:
+        base = 255 - base  # invert pixels (fast and vectorized)
+
     if header:
         base = add_header_label(
             base,
@@ -332,7 +341,7 @@ def write_raster_header(
             dpi=dpi,
             font_family=font_family,
             font_weight=font_weight,
-            position=position
+            position=position,
         )
 
     # Final clamp to 0/255 then write as 1-bit PNG

@@ -9,12 +9,14 @@ from numba import types
 import argparse
 import ast
 
+PARAM = np.int8(0)
 
 # runif
 def op_runif(z,a,state):
     t1 = complex(np.random.random(),0)
     t2 = complex(np.random.random(),0)
     u = np.array([t1,t2],dtype=np.complex128)
+    state[PARAM]=u
     return u
 
 # serpentine scan
@@ -51,6 +53,7 @@ def serp(z,a,state):
     t1 = complex(x,0)
     t2 = complex(y,0)
     u = np.array([t1,t2],dtype=np.complex128)
+    state[PARAM]=u
     return u
 
 def serp01(z,a,state):
@@ -79,6 +82,7 @@ def serp01(z,a,state):
     t1 = complex(x,0)
     t2 = complex(y,0)
     u = np.array([t1,t2],dtype=np.complex128)
+    state[PARAM]=u
     return u
 
 def serp01d(z,a,state):
@@ -116,32 +120,12 @@ def serp01d(z,a,state):
     tt2 = complex( tt2,0 ) 
     t2 = tt2 + t2
     u = np.array([t1,t2],dtype=np.complex128)
+    state[PARAM]=u
     return u
 
-# add complex dither to inputs
-# dither:runs:0.5
-def dither(z,a,state):
-
-    serp_len = a[0].real
-    dither_width = a[1].real
-
-    dither_fact = dither_width/math.sqrt(serp_len)
-
-    t1 = dither_fact * (np.random.random()-0.5)
-    t1 = complex( t1,0 ) 
-    t1 = t1 + z[0]
-
-    t2 = dither_fact * (np.random.random()-0.5)
-    t2 = complex( t2,0 ) 
-    t2 = t2 + z[1]
-
-    u = np.array([t1,t2],dtype=np.complex128)
-
-    return u
 
 ALLOWED = {
     "runif":     op_runif,
-    "dither":    dither,
     "serp":      serp,
     "serp01":    serp01,
     "serp01d":   serp01d,
