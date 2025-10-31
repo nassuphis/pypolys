@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # ops_xfrm.py
 #
 # z2 = f(z1)
@@ -12,6 +13,31 @@ import argparse
 import ast
 import math
 
+ALLOWED = {}
+
+def spc(x, start, end, power=1.0):
+    n = x.size
+    out = np.empty(n, dtype=np.float64)
+    xmin, xmax = x[0], x[0]
+    for i in range(n):
+        v = x[i]
+        if v < xmin: xmin = v
+        if v > xmax: xmax = v
+
+    denom = xmax - xmin
+    if denom <= 0.0:
+        for i in range(n): out[i] = start
+        return out
+
+    flip = end < start      
+    for i in range(n):
+        s = (x[i] - xmin) / denom  
+        if flip: s = 1.0 - (1.0 - s)**power
+        else: s = s**power
+        out[i] = start + s * (end - start)
+
+    return out
+
 def op_circle(z,a,state):
     n = int(a[0].real)
     if n<0: return z
@@ -21,6 +47,8 @@ def op_circle(z,a,state):
     c = np.exp(1j*2*np.pi*t)
     v[n] = c
     return v
+
+ALLOWED["circ"]=op_circle
 
 def op_rhotheta(z,a,state):
     n = int(a[0].real)
@@ -33,6 +61,8 @@ def op_rhotheta(z,a,state):
     zz[n] = disk
     return zz
 
+ALLOWED["rt"]=op_rhotheta
+
 def op_thetarho(z,a,state):
     n = int(a[0].real)
     if n<0: return z
@@ -44,10 +74,14 @@ def op_thetarho(z,a,state):
     zz[n] = disk
     return zz
 
+ALLOWED["tr"]=op_thetarho
+
 def op_rttr(z,a,state):
     v1 = z[0]*np.exp(1j*2*np.pi*z[1])
     v2 = z[1]*np.exp(1j*2*np.pi*z[0])
     return np.array([v1,v2],dtype=np.complex128)
+
+ALLOWED["rttr"]=op_rttr
 
 def op_dot(z,a,state):
     n = int(a[0].real)
@@ -57,30 +91,41 @@ def op_dot(z,a,state):
     v[n] = a[1]
     return v
 
-def xim(z,a,state):
+ALLOWED["dot"]=op_dot
+
+def op_xim(z,a,state):
     v1 = 1j*z[0].real
     v2 = 1j*z[1].real
     return np.array([v1,v2],dtype=np.complex128)
 
+ALLOWED["xim"]=op_xim
+
 def op_zz(z,a,state):
     v = z[0]+z[1]*1j
     return np.array([v,v],dtype=np.complex128)
+
+ALLOWED["zz"]=op_zz
 
 def op_zz1(z,a,state):
     v1 = z[0]+z[1]*1j
     v2 = z[0]*z[1]+(z[0]+z[1])*1j
     return np.array([v1,v2],dtype=np.complex128)
 
+ALLOWED["zz1"]=op_zz1
+
 def op_zz2(z,a,state):
     v1 = z[0]+z[1]*1j
     v2 = z[0]-z[1]*1j
     return np.array([v1,v2],dtype=np.complex128)
+
+ALLOWED["zz2"]=op_zz2
 
 def op_zz3(z,a,state):
     v1 = z[0]+z[1]*1j
     v2 = z[1]+z[0]*1j
     return np.array([v1,v2],dtype=np.complex128)
 
+ALLOWED["zz3"]=op_zz3
 
 def op_pz(z,a,state):
     z0 = z[0]
@@ -93,6 +138,7 @@ def op_pz(z,a,state):
     p1 = a0+a1*z1+a2*z1**2+a3*z1**3
     return np.array([p0,p1],dtype=np.complex128)
 
+ALLOWED["pz"]=op_pz
 
 ############################################
 # Baker's map (mod1 mapping)
@@ -117,6 +163,8 @@ def op_bkr(z,a,state):
 
   return  out
 
+ALLOWED["bkr"]=op_bkr
+
 #cardioid
 def op_crd(z,a,state):
     n = int(a[0].real)
@@ -129,6 +177,8 @@ def op_crd(z,a,state):
     r = size * (1 + np.cos(theta)) * np.exp(1j * theta)
     v[n] = r 
     return v
+
+ALLOWED["crd"]=op_crd
 
 #heart
 def op_hrt(z,a,state):
@@ -147,6 +197,8 @@ def op_hrt(z,a,state):
     v[n] = rot*size*hrt
     return v
 
+ALLOWED["hrt"]=op_hrt
+
 #spindle
 def op_spdl(z,a,state):
     n = int(a[0].real)
@@ -163,7 +215,9 @@ def op_spdl(z,a,state):
     v[n] = x + 1j * y
     return v
 
-def limacon(z,a,state):
+ALLOWED["spdl"]=op_spdl
+
+def op_limacon(z,a,state):
     n = int(a[0].real)
     if n<0: return z
     if n>z.size-1: return z
@@ -176,7 +230,9 @@ def limacon(z,a,state):
     v[n] = r * np.exp(1j * theta)
     return v
 
-def rose_curve(z,a,state):
+ALLOWED["lmc"]=op_limacon
+
+def op_rose_curve(z,a,state):
     n = int(a[0].real)
     if n<0: return z
     if n>z.size-1: return z
@@ -188,6 +244,8 @@ def rose_curve(z,a,state):
     r = ap * np.cos(kp * theta)
     v[n] = r * np.exp(1j * theta)
     return v
+
+ALLOWED["rsc"]=op_rose_curve
 
 def lissajous(z,a,state):
     n = int(a[0].real)
@@ -207,6 +265,8 @@ def lissajous(z,a,state):
     v[n] = x + 1j * y
     return v
 
+ALLOWED["lss"]=lissajous
+
 def astroid(z,a,state):
     n = int(a[0].real)
     if n<0: return z
@@ -219,6 +279,8 @@ def astroid(z,a,state):
     y = ap * np.sin(theta)**3
     v[n] = x + 1j * y
     return v
+
+ALLOWED["ast"]=astroid
 
 def archimedean_spiral(z,a,state):
     n = int(a[0].real)
@@ -233,6 +295,8 @@ def archimedean_spiral(z,a,state):
     v[n] = r * np.exp(1j * theta)
     return v
 
+ALLOWED["asp"]=archimedean_spiral
+
 def logarithmic_spiral(z,a,state):
     n = int(a[0].real)
     if n<0: return z
@@ -245,6 +309,8 @@ def logarithmic_spiral(z,a,state):
     r = ap * np.exp(bp * theta)
     v[n] = r * np.exp(1j * theta)
     return v
+
+ALLOWED["lst"]=logarithmic_spiral
 
 def deltoid(z,a,state):
     n = int(a[0].real)
@@ -926,7 +992,7 @@ ALLOWED = {
     "save":   op_save,
     "get":    op_get,
     "dot":    op_dot,
-    "xim":    xim,
+    "xim":    op_xim,
     "zz":     op_zz,
     "zz1":    op_zz1,
     "zz2":    op_zz2,
@@ -936,8 +1002,8 @@ ALLOWED = {
     "crd":    op_crd,
     "hrt":    op_hrt,
     "spdl":   op_spdl,
-    "lmc":    limacon,
-    "rsc":    rose_curve,
+    "lmc":    op_limacon,
+    "rsc":    op_rose_curve,
     "lss":    lissajous,
     "ast":    astroid,
     "asp":    archimedean_spiral,
@@ -971,10 +1037,16 @@ ALLOWED = {
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--fun", type=str, default="nop")
-    ap.add_argument("--z", type=str, default="0+0j")
-    ap.add_argument("--a", type=str, default="0+0j")
+    ap.add_argument("--fun", type=str, default="nop",help="select function")
+    ap.add_argument("--plot", type=str, default=None,help="select function")
+    ap.add_argument("--z", type=str, default="0+0j",help="set argument")
+    ap.add_argument("--a", type=str, default="0+0j",help="set parameter")
+    ap.add_argument("--list", action="store_true", help="list functions.")
     args = ap.parse_args()
+    if args.list:
+        for k in sorted(ALLOWED.keys()):
+            print(k)
+        return
     z = np.array(ast.literal_eval(args.z),dtype=np.complex128)
     a = np.array(ast.literal_eval(args.a),dtype=np.complex128)
     state  = Dict.empty(key_type=types.int8,value_type=types.complex128[:])

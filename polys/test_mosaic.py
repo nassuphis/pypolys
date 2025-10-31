@@ -32,8 +32,8 @@ def main():
     ap.add_argument("--px", type=str, default="5000", help="tile pixels (square)")
     ap.add_argument("--view", type=str, default="sq5", help="viewport alias or '(ll,ur)'")
     ap.add_argument("--cols", type=int, default=0, help="force number of columns")
-    ap.add_argument("--header-pos", type=str, default="bottom", choices=["top","bottom"],
-                    help="per-tile header placement")
+    ap.add_argument("--header-pos", type=str, default="bottom", choices=["top","bottom"],help="per-tile header placement")
+    ap.add_argument("--invert", action="store_true")
     ap.add_argument("--verbose", action="store_true")
     args = ap.parse_args()
 
@@ -72,6 +72,7 @@ def main():
         vtile = rasterizer.add_header_label(
             vtile,
             header=chain,       # <- per-tile header is the chain string
+            top_margin_px = px // 40 ,
             position="bottom",  # top or bottom
             font_family="Courier New", # your defaults
             font_weight="Bold",
@@ -84,6 +85,7 @@ def main():
 
     # Binarize and write bilevel PNG (streaming, no giant NumPy)
     base = (base > 0).ifthenelse(255, 0)
+    if args.invert: base = base ^ 255
     base.pngsave(
         args.png,
         compression=1,

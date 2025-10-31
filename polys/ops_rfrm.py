@@ -17,8 +17,8 @@ def rotate_roots(z,a,state):
     return rotated
 
 def pull_unit_circle(z,a,state):
-    alpha: float = 1.0
-    sigma: float = 0.75
+    sigma = a[0].real or 0.75
+    alpha = a[1].real or 1.0
     n = z.shape[0]
     out = np.empty_like(z)
     for i in range(n):
@@ -29,6 +29,45 @@ def pull_unit_circle(z,a,state):
         d = r - 1.0
         rprime = r - alpha * d * np.exp(- (d / sigma) ** 2)
         out[i] = rprime * (np.cos(theta) + 1j * np.sin(theta))
+    return out
+
+def push_unit_circle(z, a, state):
+    sigma = a[0].real or 0.75
+    alpha = a[1].real or 1.0
+    n = z.shape[0]
+    out = np.empty_like(z)
+    for i in range(n):
+        x = z[i].real
+        y = z[i].imag
+        r = np.hypot(x, y)
+        d = r - 1.0
+        # push: add the Gaussian bump instead of subtracting it
+        rprime = r + alpha * d * np.exp(- (d / sigma) ** 2)
+
+        if r > 0.0:
+            s = rprime / r
+            out[i] = (x * s) + 1j * (y * s)  # preserve angle, avoid trig
+        else:
+            out[i] = 0.0 + 0.0j
+    return out
+
+def pull_towards_center(z, a, state):
+    alpha = 1.0
+    sigma = 0.75
+    n = z.shape[0]
+    out = np.empty_like(z)
+    for i in range(n):
+        x = z[i].real
+        y = z[i].imag
+        r = np.hypot(x, y)
+        # Gaussian falloff centered at r = 0
+        shrink = alpha * np.exp(- (r / sigma) ** 2)
+        rprime = r * (1.0 - shrink)  # reduce radius smoothly toward 0
+        if r > 0.0:
+            s = rprime / r
+            out[i] = (x * s) + 1j * (y * s)
+        else:
+            out[i] = 0.0 + 0.0j
     return out
 
 def roots_toline(z,a,state):
@@ -49,6 +88,8 @@ ALLOWED = {
     "rmul":      roots_mult,
     "unitpull":  pull_unit_circle,
     "puc":       pull_unit_circle,
+    "centerpull": pull_towards_center,
+    "pushuc":    push_unit_circle,
     "toline":    roots_toline,
     "line":      roots_toline,
 }
