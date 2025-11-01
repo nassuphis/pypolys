@@ -11,13 +11,11 @@ import re
 import math
 import expandspec
 
-# canonical order for pretty printing / footer text
-LOGO_KEYS_ORDER = ["N","dth","tda","tdw","tdt","swa","swb","sqs","frt","mrg","pix"]
+LOGO_KEYS_ORDER = ["N","dth","tda","tdw","tdt","swa","swb","sqs","frt","mrg","pix","drt","lmu","lsig"]
 
-# defaults with desired types
 LOGO_DEFAULTS = {
-    "N":   50_000,   # int
-    "dth": 1.0,      # float
+    "N":   50_000,
+    "dth": 1.0,
     "tda": 1.0,
     "tdw": 0.1,
     "tdt": 1.0,
@@ -26,7 +24,11 @@ LOGO_DEFAULTS = {
     "sqs": 0.5,
     "frt": -0.1,
     "mrg": 0.10,
-    "pix": 25_000,   # int
+    "pix": 25_000,
+    # dot-size distribution (generic units)
+    "drt": 15,        # cap on generic radius; min is 1
+    "lmu": 1.0,       # log-space mean (median = exp(lmu))
+    "lsig": 0.75,     # log-space stddev
 }
 
 def _cast_like(default_val, s: str):
@@ -65,58 +67,28 @@ def parse_logo_spec(spec: str, defaults: dict) -> dict:
 
 
 def dict_to_namespace(d: dict) -> SimpleNamespace:
-    """Map logo dict to a SimpleNamespace with attribute names your renderer expects."""
-    # map keys into the names your render_logo(args) uses
     return SimpleNamespace(
-        N=d["N"], dth=d["dth"], tda=d["tda"], tdw=d["tdw"], tdt=d["tdt"],
-        swa=d["swa"], swb=d["swb"], sqs=d["sqs"], frt=d["frt"],
-        mrg=d["mrg"], pix=d["pix"],
-        # passthrough additional runtime knobs (these have separate CLI flags)
-        min_factor=1.0, max_factor=500.0, stamp_chunk=32_768, seed=0
+        N=d["N"], 
+        dth=d["dth"], 
+        tda=d["tda"], 
+        tdw=d["tdw"], 
+        tdt=d["tdt"],
+        swa=d["swa"], 
+        swb=d["swb"], 
+        sqs=d["sqs"], 
+        frt=d["frt"],
+        mrg=d["mrg"],
+        pix=d["pix"],
+        # dot-size params (from spec)
+        drt=d["drt"], 
+        lmu=d["lmu"], 
+        lsig=d["lsig"],
+        # runtime knobs
+        stamp_chunk=32_768, seed=0,
     )
 
 def logo_dict_to_string(d: dict) -> str:
     return ",".join(f"{k}:{d[k]}" for k in LOGO_KEYS_ORDER)
-
-def build_parser():
-    p = argparse.ArgumentParser(description="Generate a bilevel dotted swirl logo (spec-driven).")
-    # primary input: one spec string OR '-' to read many from stdin
-    p.add_argument("--logo", type=str, required=True,
-                   help="Logo spec 'k:v,...'. Use '-' to read one spec per line from stdin.")
-    # extras (these *override* anything implied by logo dict only where relevant)
-    p.add_argument("--seed", type=int, default=0)
-    p.add_argument("--min-factor", type=float, default=1.0)
-    p.add_argument("--max-factor", type=float, default=500.0)
-    p.add_argument("--stamp-chunk", type=int, default=32_768)
-    p.add_argument("--invert", action="store_true")
-    p.add_argument("--out", type=str, default="logo.png")
-
-    # footer
-    p.add_argument("--footer", action="store_true", help="Add parameter string as footer text")
-    p.add_argument("--footer-dpi", type=int, default=300)
-    p.add_argument("--footer-pad", type=int, default=48)
-
-    # mosaic (batch mode): if provided and --logo is '-' (multiple lines), build a mosaic
-    p.add_argument("--mosaic", type=str, default="", help="Output path for mosaic (optional)")
-    p.add_argument("--cols", type=int, default=5, help="Columns in mosaic")
-    p.add_argument("--gap", type=int, default=20, help="Gap (px) between tiles in mosaic")
-    return p
-
-def make_mosaic(imgs: list[vips.Image], cols: int, gap: int) -> vips.Image:
-    if not imgs:
-        raise ValueError("No images to mosaic.")
-    # normalize tile size to max W/H
-    W = max(im.width for im in imgs)
-    H = max(im.height for im in imgs)
-    pad = lambda im: vips.Image.black(W, H).insert(im, (W - im.width)//2, (H - im.height)//2)
-
-    tiles = [pad(im) for im in imgs]
-    rows = []
-    for i in range(0, len(tiles), cols):
-        row = vips.Image.join(tiles[i], tiles[i+1:i+cols], direction="horizontal", expand=True, shim=gap)
-        rows.append(row)
-    mosaic = vips.Image.join(rows[0], rows[1:], direction="vertical", expand=True, shim=gap)
-    return mosaic
 
 # ---------- helpers ----------
 
@@ -171,75 +143,63 @@ def stamp_points(canvas, ys, xs, dy, dx, H, W):
 
 # ---------- main pipeline ----------
 
-def render_logo( args ):
-
+def build_logo(args):
+    """
+    Return:
+      logo: complex ndarray (logical coords, centered at 0+0j)
+      size_gen: float ndarray (generic radii), lognormal with params (lmu, lsig), clipped to [1, drt]
+    """
     np.random.seed(args.seed)
 
-    # ----- generate complex points -----
+    # geometry in logical space
     disk = ddth(args.N, args.dth)
     td1  = teardrop(disk, a=args.tda, w=args.tdw, tail=args.tdt)
     td2  = td1 * np.exp(1j * 2.0 * np.pi * 0.5)
     td   = np.concatenate([td1, td2])
     logo = swirl(td, a=args.swa, b=args.swb)
     logo = squish(logo, args.sqs)
-    logo = logo  * np.exp(1j * 2.0 * np.pi * args.frt)
+    logo = logo * np.exp(1j * 2.0 * np.pi * args.frt)  # final rot
 
-    # ----- logical spans + diameter -----
-    x_min0, x_max0 = logo.real.min(), logo.real.max()
-    y_min0, y_max0 = logo.imag.min(), logo.imag.max()
-    x_span0 = x_max0 - x_min0
-    y_span0 = y_max0 - y_min0
-    logical_diameter = max(x_span0, y_span0)
+    # lognormal sizes in *generic units* (no dependence on pix/span)
+    z = np.random.normal(0.0, 1.0, size=logo.size)
+    size_gen = np.exp(args.lmu + args.lsig * z).astype(np.float32)
+    np.clip(size_gen, 1.0, float(args.drt), out=size_gen)  # cap only; drt is not a ratio
 
-    # ----- add margin + square frame -----
-    xr_min, xr_max = x_min0, x_max0
-    yr_min, yr_max = y_min0, y_max0
+    return logo, size_gen
 
-    xr_min -= x_span0 * args.mrg
-    xr_max += x_span0 * args.mrg
-    yr_min -= y_span0 * args.mrg
-    yr_max += y_span0 * args.mrg
+def render_logo(args):
+    logo, size_gen = build_logo(args)
 
-    # enforce square canvas based on the *largest* span
-    span_max = max(xr_max - xr_min, yr_max - yr_min)
-    cx = 0.5 * (xr_min + xr_max)
-    cy = 0.5 * (yr_min + yr_max)
-    xr_min = cx - 0.5 * span_max
-    xr_max = cx + 0.5 * span_max
-    yr_min = cy - 0.5 * span_max
-    yr_max = cy + 0.5 * span_max
+    # square frame centered at (0,0)
+    rx = np.max(np.abs(logo.real)); ry = np.max(np.abs(logo.imag))
+    half0 = max(rx, ry)
+    half  = half0 * (1.0 + 2.0 * args.mrg)
+    span  = 2.0 * half
 
     W = H = int(args.pix)
-    px_per_logical = (W - 1) / span_max
+    px_per_logical = (W - 1) / span
 
-    # ----- map to pixel coords -----
-    x = logo.real
-    y = logo.imag
-    px = ((x - xr_min) * px_per_logical).astype(np.int32)
-    py = ((yr_max - y) * px_per_logical).astype(np.int32)
-    px = np.clip(px, 0, W - 1)
-    py = np.clip(py, 0, H - 1)
+    # map logical -> pixel coords
+    x = logo.real; y = logo.imag
+    px = np.rint((x + half) * px_per_logical).astype(np.int32)
+    py = np.rint((half - y) * px_per_logical).astype(np.int32)
+    px = np.clip(px, 0, W - 1); py = np.clip(py, 0, H - 1)
 
-    # ----- logical dot sizes (lognormal × diameter/pixels) -----
-    base_logical_radius = logical_diameter / W
-    lognormal = np.exp(np.random.normal(0.0, 1 , size=px.size))
-    factor = np.clip(lognormal, args.min_factor, args.max_factor)
-    r_logical = base_logical_radius * factor
-    r_px = np.maximum(1, np.round(r_logical * px_per_logical).astype(np.int32))
+    # generic size -> pixel radius 
+    scale_g2px = span / px_per_logical
+    r_px = np.maximum(1, np.rint(size_gen * scale_g2px).astype(np.int32))
     unique_r = np.unique(r_px)
 
-    # ----- rasterize -----
+    # rasterize
     canvas = np.zeros((H, W), dtype=np.uint8)
     for r in unique_r.tolist():
         idx = np.flatnonzero(r_px == r)
-        if idx.size == 0:
-            continue
+        if idx.size == 0: continue
         dy, dx = make_disc_offsets(r)
         for s in range(0, idx.size, int(args.stamp_chunk)):
             j = idx[s:s+int(args.stamp_chunk)]
             stamp_points(canvas, py[j], px[j], dy, dx, H, W)
 
-    # strictly bilevel
     np.putmask(canvas, canvas > 0, 255)
     return canvas
 
@@ -348,36 +308,40 @@ def build_mosaic_streaming(
     footer: bool,
     footer_pad: int,
     footer_dpi: int,
+    *,
+    seed: int,
+    stamp_chunk: int,
 ) -> vips.Image:
     """
     Stream tiles into a big canvas with draw_image, row-major order.
+    All build_logo parameters come from spec lines. Runtime knobs (seed, stamp_chunk)
+    are applied uniformly to all tiles.
     """
     if not spec_lines:
         raise ValueError("No specs provided for mosaic.")
 
-    # Parse the first spec to discover tile size
     d0 = parse_logo_spec(spec_lines[0], LOGO_DEFAULTS)
     tile_px = int(d0["pix"])
 
     n = len(spec_lines)
     rows = math.ceil(n / cols)
-    # canvas with gaps
     W = cols * tile_px + (cols - 1) * gap
     H = rows * tile_px + (rows - 1) * gap
-    base = vips.Image.black(W, H)  # 1-band uchar, streaming
+    base = vips.Image.black(W, H)
 
     for i, spec in enumerate(spec_lines):
         d = parse_logo_spec(spec, LOGO_DEFAULTS)
         ns = dict_to_namespace(d)
-        # keep runtime knobs default; adjust here if desired:
-        # ns.seed = ...
-        canvas = render_logo(ns)                     # NumPy (0/255)
-        vtile  = np_to_vips_gray_u8(canvas)         # VIPS 1-band
-        # ensure exact tile size (pad if needed)
+        # apply runtime knobs (do NOT override spec-controlled things like drt/lmu/lsig)
+        ns.seed = seed
+        ns.stamp_chunk = stamp_chunk
+
+        canvas = render_logo(ns)             # NumPy (0/255)
+        vtile  = np_to_vips_gray_u8(canvas)  # VIPS 1-band
+
         if vtile.width != tile_px or vtile.height != tile_px:
             vtile = pad_to_square(vtile, tile_px)
 
-        # Add footer BEFORE global invert; footer color auto-handled at end invert
         if footer:
             vtile = add_footer_label(
                 vtile,
@@ -386,7 +350,7 @@ def build_mosaic_streaming(
                 dpi=footer_dpi,
                 font="Courier New Bold 60",
                 align="centre",
-                invert=False,     # compose white text now; mosaic invert will flip to black if needed
+                invert=False,  # global invert later
             )
 
         r, c = divmod(i, cols)
@@ -394,7 +358,6 @@ def build_mosaic_streaming(
         y = r * (tile_px + gap)
         base = base.draw_image(vtile, x, y)
 
-    # Binarize and global invert at the very end
     base = (base > 0).ifthenelse(255, 0)
     if invert:
         base = base ^ 255
@@ -405,24 +368,18 @@ def build_mosaic_streaming(
 
 def build_parser():
     p = argparse.ArgumentParser(description="Generate a bilevel dotted swirl logo (spec-driven).")
-    # primary input: one spec string OR '-' to read many from stdin
     p.add_argument("--logo", type=str, required=True,
-                   help="Logo spec 'k:v,...'. Use '-' to read one spec per line from stdin.")
-    # extras (these *override* anything implied by logo dict only where relevant)
+                   help="Logo spec 'k:v,...'. May include expandspec ranges.")
+    # runtime knobs (not part of spec)
     p.add_argument("--seed", type=int, default=0)
-    p.add_argument("--min-factor", type=float, default=1.0)
-    p.add_argument("--max-factor", type=float, default=500.0)
     p.add_argument("--stamp-chunk", type=int, default=32_768)
     p.add_argument("--invert", action="store_true")
     p.add_argument("--out", type=str, default="logo.png")
-
     # footer
     p.add_argument("--footer", action="store_true", help="Add parameter string as footer text")
     p.add_argument("--footer-dpi", type=int, default=300)
     p.add_argument("--footer-pad", type=int, default=48)
-
-    # mosaic (batch mode): if provided and --logo is '-' (multiple lines), build a mosaic
-    p.add_argument("--mosaic", type=str, default="", help="Output path for mosaic (optional)")
+    # mosaic layout (used only when expansions > 1)
     p.add_argument("--cols", type=int, default=5, help="Columns in mosaic")
     p.add_argument("--gap", type=int, default=20, help="Gap (px) between tiles in mosaic")
     return p
@@ -431,11 +388,11 @@ def main():
     ap = build_parser()
     args = ap.parse_args()
 
-    # --- CASE 1: batch from stdin → streaming mosaic ---
-    if args.mosaic:
-        spec_lines = expandspec.expand_cartesian_lists(args.logo)
-        print(f"🧩 Building mosaic from {len(spec_lines)} logo specs ...")
+    # Expand spec (1 → single; >1 → mosaic)
+    spec_lines = expandspec.expand_cartesian_lists(args.logo)
 
+    if len(spec_lines) > 1:
+        print(f"🧩 Building mosaic from {len(spec_lines)} specs ...")
         mosaic = build_mosaic_streaming(
             spec_lines=spec_lines,
             cols=args.cols,
@@ -444,49 +401,33 @@ def main():
             footer=args.footer,
             footer_pad=args.footer_pad,
             footer_dpi=args.footer_dpi,
+            seed=args.seed,
+            stamp_chunk=args.stamp_chunk,
         )
-
         mosaic.write_to_file(
-            args.mosaic,
-            compression=1,
-            effort=1,
-            filter="none",
-            interlace=False,
-            strip=True,
-            bitdepth=1,
+            args.out,
+            compression=1, effort=1, filter="none", interlace=False, strip=True, bitdepth=1,
         )
-        print(f"✅ Saved mosaic {args.mosaic}")
+        print(f"✅ Saved mosaic {args.out}")
         return
 
-    # --- CASE 2: single logo render ---
-    if not args.logo:
-        print("error: --logo must be provided", file=sys.stderr)
-        sys.exit(1)
-
-    # parse single spec
-    d = parse_logo_spec(args.logo, LOGO_DEFAULTS)
+    # Single image
+    d = parse_logo_spec(spec_lines[0], LOGO_DEFAULTS)
     ns = dict_to_namespace(d)
-
-    # attach runtime knobs
     ns.seed = args.seed
-    ns.min_factor = args.min_factor
-    ns.max_factor = args.max_factor
     ns.stamp_chunk = args.stamp_chunk
 
-    # render
     print("🎨 Rendering logo with parameters:")
     print(logo_dict_to_string(d))
+
     canvas = render_logo(ns)
 
-    # convert np → vips
     H, W = canvas.shape
     base = vips.Image.new_from_memory(canvas.data, W, H, 1, "uchar")
 
-    # invert first, so footer color is correct
     if args.invert:
         base = base ^ 255
 
-    # optional footer
     if args.footer:
         base = add_footer_label(
             base,
@@ -498,18 +439,11 @@ def main():
             invert=args.invert,
         )
 
-    # save bilevel PNG
     base = (base > 0).ifthenelse(255, 0)
     base.write_to_file(
         args.out,
-        compression=1,
-        effort=1,
-        filter="none",
-        interlace=False,
-        strip=True,
-        bitdepth=1,
+        compression=1, effort=1, filter="none", interlace=False, strip=True, bitdepth=1,
     )
-
     print(f"✅ Saved {args.out}")
 
 if __name__ == "__main__":
