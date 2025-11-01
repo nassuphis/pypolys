@@ -5,13 +5,15 @@ import argparse
 import numpy as np
 import pyvips as vips
 from numba import njit, prange
-from types import SimpleNamespace
 import sys
 import re
 import math
 import expandspec
+import time
 
-LOGO_KEYS_ORDER = ["N","dth","tda","tdw","tdt","swa","swb","sqs","frt","mrg","pix","drt","lmu","lsig"]
+STAMP_CHUNK = int(32_768)  # top-level constant
+
+LOGO_KEYS_ORDER = ["N","dth","tda","tdw","tdt","swa","swb","sqs","frt","mrg","pix","drt","lmu","lsig","fos"]
 
 LOGO_DEFAULTS = {
     "N":   50_000,
@@ -25,10 +27,11 @@ LOGO_DEFAULTS = {
     "frt": -0.1,
     "mrg": 0.10,
     "pix": 25_000,
-    # dot-size distribution (generic units)
-    "drt": 15,        # cap on generic radius; min is 1
-    "lmu": 1.0,       # log-space mean (median = exp(lmu))
-    "lsig": 0.75,     # log-space stddev
+    # dot-size distribution
+    "fos": 1e-5,      # baseline fraction of span for size 1.0
+    "drt": 3000,      # cap multiplier on fos
+    "lmu":  0.0,
+    "lsig": 1.125,
 }
 
 def _cast_like(default_val, s: str):
@@ -64,28 +67,6 @@ def parse_logo_spec(spec: str, defaults: dict) -> dict:
         else:
             print(f"[warn] unknown key '{k}' ignored", file=sys.stderr)
     return out
-
-
-def dict_to_namespace(d: dict) -> SimpleNamespace:
-    return SimpleNamespace(
-        N=d["N"], 
-        dth=d["dth"], 
-        tda=d["tda"], 
-        tdw=d["tdw"], 
-        tdt=d["tdt"],
-        swa=d["swa"], 
-        swb=d["swb"], 
-        sqs=d["sqs"], 
-        frt=d["frt"],
-        mrg=d["mrg"],
-        pix=d["pix"],
-        # dot-size params (from spec)
-        drt=d["drt"], 
-        lmu=d["lmu"], 
-        lsig=d["lsig"],
-        # runtime knobs
-        stamp_chunk=32_768, seed=0,
-    )
 
 def logo_dict_to_string(d: dict) -> str:
     return ",".join(f"{k}:{d[k]}" for k in LOGO_KEYS_ORDER)
@@ -143,64 +124,74 @@ def stamp_points(canvas, ys, xs, dy, dx, H, W):
 
 # ---------- main pipeline ----------
 
-def build_logo(args):
-    """
-    Return:
-      logo: complex ndarray (logical coords, centered at 0+0j)
-      size_gen: float ndarray (generic radii), lognormal with params (lmu, lsig), clipped to [1, drt]
-    """
-    np.random.seed(args.seed)
+def build_logo(d: dict):
+    np.random.seed(0)
 
-    # geometry in logical space
-    disk = ddth(args.N, args.dth)
-    td1  = teardrop(disk, a=args.tda, w=args.tdw, tail=args.tdt)
+    disk = ddth(d["N"], d["dth"])
+    td1  = teardrop(disk, a=d["tda"], w=d["tdw"], tail=d["tdt"])
     td2  = td1 * np.exp(1j * 2.0 * np.pi * 0.5)
     td   = np.concatenate([td1, td2])
-    logo = swirl(td, a=args.swa, b=args.swb)
-    logo = squish(logo, args.sqs)
-    logo = logo * np.exp(1j * 2.0 * np.pi * args.frt)  # final rot
+    logo = swirl(td, a=d["swa"], b=d["swb"])
+    logo = squish(logo, d["sqs"])
+    logo = logo * np.exp(1j * 2.0 * np.pi * d["frt"])
 
-    # lognormal sizes in *generic units* (no dependence on pix/span)
+    # --- lognormal multipliers of fos ---
     z = np.random.normal(0.0, 1.0, size=logo.size)
-    size_gen = np.exp(args.lmu + args.lsig * z).astype(np.float32)
-    np.clip(size_gen, 1.0, float(args.drt), out=size_gen)  # cap only; drt is not a ratio
+    mult = np.exp(d["lmu"] + d["lsig"] * z).astype(np.float32)
+    np.clip(mult, 1.0, float(d["drt"]), out=mult)   # multiplier of fos
 
-    return logo, size_gen
+    return logo, mult
 
-def render_logo(args):
-    logo, size_gen = build_logo(args)
 
-    # square frame centered at (0,0)
-    rx = np.max(np.abs(logo.real)); ry = np.max(np.abs(logo.imag))
+
+def render_logo(d: dict, verbose: bool = False) -> np.ndarray:
+    t0 = time.perf_counter()
+
+    logo, mult = build_logo(d)
+
+    # ----- square frame centered at (0,0) -----
+    rx = np.max(np.abs(logo.real))
+    ry = np.max(np.abs(logo.imag))
     half0 = max(rx, ry)
-    half  = half0 * (1.0 + 2.0 * args.mrg)
+    half  = half0 * (1.0 + 2.0 * d["mrg"])
     span  = 2.0 * half
 
-    W = H = int(args.pix)
+    W = H = int(d["pix"])
     px_per_logical = (W - 1) / span
 
-    # map logical -> pixel coords
-    x = logo.real; y = logo.imag
+    # ----- map logical → pixel coords -----
+    x = logo.real
+    y = logo.imag
     px = np.rint((x + half) * px_per_logical).astype(np.int32)
     py = np.rint((half - y) * px_per_logical).astype(np.int32)
-    px = np.clip(px, 0, W - 1); py = np.clip(py, 0, H - 1)
+    px = np.clip(px, 0, W - 1)
+    py = np.clip(py, 0, H - 1)
 
-    # generic size -> pixel radius 
-    scale_g2px = span / px_per_logical
-    r_px = np.maximum(1, np.rint(size_gen * scale_g2px).astype(np.int32))
+    # ----- convert size multipliers → pixel radii -----
+    r_logical = mult * (d["fos"] * span)
+    r_px = np.rint(r_logical * px_per_logical).astype(np.int32)
+    r_px[r_px < 1] = 1
     unique_r = np.unique(r_px)
 
-    # rasterize
+    if verbose:
+        print(f"[render] N={logo.size} W=H={W} span={span:.6g} "
+              f"fos={d['fos']} drt={d['drt']} px/log={px_per_logical:.3f} "
+              f"rpx[min,max]=[{r_px.min()},{r_px.max()}] groups={unique_r.size}")
+
+    # ----- rasterize -----
     canvas = np.zeros((H, W), dtype=np.uint8)
     for r in unique_r.tolist():
         idx = np.flatnonzero(r_px == r)
-        if idx.size == 0: continue
+        if idx.size == 0:
+            continue
         dy, dx = make_disc_offsets(r)
-        for s in range(0, idx.size, int(args.stamp_chunk)):
-            j = idx[s:s+int(args.stamp_chunk)]
+        for s in range(0, idx.size, STAMP_CHUNK):
+            j = idx[s:s+STAMP_CHUNK]
             stamp_points(canvas, py[j], px[j], dy, dx, H, W)
 
     np.putmask(canvas, canvas > 0, 255)
+    if verbose:
+        print(f"[render] done in {time.perf_counter() - t0:.3f}s")
     return canvas
 
 def add_footer_label(
@@ -308,14 +299,11 @@ def build_mosaic_streaming(
     footer: bool,
     footer_pad: int,
     footer_dpi: int,
-    *,
-    seed: int,
-    stamp_chunk: int,
+    verbose: bool
 ) -> vips.Image:
     """
     Stream tiles into a big canvas with draw_image, row-major order.
-    All build_logo parameters come from spec lines. Runtime knobs (seed, stamp_chunk)
-    are applied uniformly to all tiles.
+    All build_logo parameters come from the spec lines.
     """
     if not spec_lines:
         raise ValueError("No specs provided for mosaic.")
@@ -331,12 +319,7 @@ def build_mosaic_streaming(
 
     for i, spec in enumerate(spec_lines):
         d = parse_logo_spec(spec, LOGO_DEFAULTS)
-        ns = dict_to_namespace(d)
-        # apply runtime knobs (do NOT override spec-controlled things like drt/lmu/lsig)
-        ns.seed = seed
-        ns.stamp_chunk = stamp_chunk
-
-        canvas = render_logo(ns)             # NumPy (0/255)
+        canvas = render_logo(d, verbose=verbose)
         vtile  = np_to_vips_gray_u8(canvas)  # VIPS 1-band
 
         if vtile.width != tile_px or vtile.height != tile_px:
@@ -368,20 +351,15 @@ def build_mosaic_streaming(
 
 def build_parser():
     p = argparse.ArgumentParser(description="Generate a bilevel dotted swirl logo (spec-driven).")
-    p.add_argument("--logo", type=str, required=True,
-                   help="Logo spec 'k:v,...'. May include expandspec ranges.")
-    # runtime knobs (not part of spec)
-    p.add_argument("--seed", type=int, default=0)
-    p.add_argument("--stamp-chunk", type=int, default=32_768)
+    p.add_argument("--logo", type=str, required=True, help="Logo spec 'k:v,...'. May include expandspec ranges.")
     p.add_argument("--invert", action="store_true")
     p.add_argument("--out", type=str, default="logo.png")
-    # footer
     p.add_argument("--footer", action="store_true", help="Add parameter string as footer text")
     p.add_argument("--footer-dpi", type=int, default=300)
     p.add_argument("--footer-pad", type=int, default=48)
-    # mosaic layout (used only when expansions > 1)
-    p.add_argument("--cols", type=int, default=5, help="Columns in mosaic")
+    p.add_argument("--cols", type=int, default=None, help="Columns in mosaic; default = round(sqrt(num_specs))")
     p.add_argument("--gap", type=int, default=20, help="Gap (px) between tiles in mosaic")
+    p.add_argument("--verbose", "-v", action="store_true", help="Print progress and diagnostics") 
     return p
 
 def main():
@@ -392,35 +370,39 @@ def main():
     spec_lines = expandspec.expand_cartesian_lists(args.logo)
 
     if len(spec_lines) > 1:
-        print(f"🧩 Building mosaic from {len(spec_lines)} specs ...")
+        n = len(spec_lines)
+        cols = args.cols if args.cols is not None else max(1, int(round(math.sqrt(n))))  # ← auto
+        if args.verbose:
+            print(f"🧩 Building mosaic from {n} specs with cols={cols} (auto={args.cols is None}), gap={args.gap}")
+
         mosaic = build_mosaic_streaming(
             spec_lines=spec_lines,
-            cols=args.cols,
+            cols=cols,                 # ← pass computed cols
             gap=args.gap,
             invert=args.invert,
             footer=args.footer,
             footer_pad=args.footer_pad,
             footer_dpi=args.footer_dpi,
-            seed=args.seed,
-            stamp_chunk=args.stamp_chunk,
+            verbose=args.verbose,
         )
         mosaic.write_to_file(
             args.out,
             compression=1, effort=1, filter="none", interlace=False, strip=True, bitdepth=1,
         )
-        print(f"✅ Saved mosaic {args.out}")
+        if args.verbose:
+            rows = math.ceil(n / cols)
+            print(f"✅ Saved mosaic {args.out}  ({cols}×{rows})")
+        else:
+            print(f"✅ Saved mosaic {args.out}")
         return
 
     # Single image
     d = parse_logo_spec(spec_lines[0], LOGO_DEFAULTS)
-    ns = dict_to_namespace(d)
-    ns.seed = args.seed
-    ns.stamp_chunk = args.stamp_chunk
 
     print("🎨 Rendering logo with parameters:")
     print(logo_dict_to_string(d))
 
-    canvas = render_logo(ns)
+    canvas = render_logo(d,verbose=args.verbose)
 
     H, W = canvas.shape
     base = vips.Image.new_from_memory(canvas.data, W, H, 1, "uchar")
