@@ -18,94 +18,19 @@
   columns=fullflexible,
   keepspaces=true
 }
-
-<<,cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
-fns = list.files("figure/*.pdf")
+\usepackage{array} % ensure m{} columns work
+\usepackage{enumitem}  % to control list spacing
+<<setup, include=FALSE>>=
+run_code <- FALSE   # or FALSE to disable execution
 @
-
-<<,cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
-require(glue)
-require(qpdf)
-nglue<-function(
-  ...,
-  .sep = "",
-  .envir = parent.frame(), 
-  .open = "{", 
-  .close = "}", 
-  .na = "NA", 
-  .transformer = identity_transformer
-){
-  as.character(glue(
-    ...,
-    .sep=.sep,
-    .envir=.envir,
-    .open="@[",
-    .close="]@",
-    .na="NA",
-    .transformer = .transformer
-  ))
-}
-
-make_full_directory<-function(x){
-  os_type<-.Platform$OS.type
-  if(os_type=="windows")return(paste0(gsub("\\\\","/",normalizePath(getwd())),"/",x))
-  paste0(normalizePath(getwd()),"\\",x)
-}
-
-make_pdf_page<-function(
-    fn,
-    pages=1,
-    height="10cm",
-    width="10cm",
-    minipage=TRUE,
-    valign="B"
-){
-   fname<-gsub("\\","/",tempfile(pattern = "pdf",tmpdir=make_full_directory("figure"),fileext=".pdf"),fixed=TRUE)
-   pdf_subset(fn, pages = pages, output = fname)
-   latex<-nglue(
-    if(minipage){"\\begin{minipage}[t][@[height]@][t]{@[width]@}\n"}else(""),
-    "\\includegraphics[height=@[height]@,width=@[width]@,valign=@[valign]@]{@[fname]@}\n",
-    if(minipage){"\\end{minipage}\n"}else{""},
-    .sep="\n",
-    height=height,
-    width=width,
-    fname=fname
-  )
-  latex
-}
-
-
-
-@
-
-
-<<setup_py, include=FALSE>>=
-library(reticulate)
-use_virtualenv("/Users/nicknassuphis/pypolys/.venv", required = TRUE)
-@
-
-<<,  include=FALSE, engine='python'>>=
-import argparse
-import timeit
-import numpy as np
-import pandas as pd
-from numba import njit, prange
-import matplotlib.pyplot as plt
-import matplotlib
-matplotlib.use("Agg")
-@
-
-
 
 \title{
-\vskip 5mm
+\vskip 2cm
 {\bf\huge Galaxies}
 \vskip 5mm
 {\bf\huge from}
 \vskip 5mm
-{\bf\huge Shaped Randomness:}
-\vskip 5mm
-{\bf\huge Tools \& Tutorials}
+{\bf\huge Shaped Randomnes}
 \vskip 1cm
 \begin{center}
 \includegraphics[width=15cm, height=15cm]{galaxy1.png}
@@ -121,6 +46,379 @@ matplotlib.use("Agg")
 \tableofcontents
 
 \newpage
+\section{Galaxies, Galaxies}
+
+\begin{center}
+\begin{tabular}{c@{}c@{}c@{}c}
+\includegraphics[width=5cm, height=5cm]{galaxy/m31.png} &
+\includegraphics[width=5cm, height=5cm]{galaxy/m33.png} &
+\includegraphics[width=5cm, height=5cm]{galaxy/m49.png} &
+\includegraphics[width=5cm, height=5cm]{galaxy/m64.png} \\[-5pt]
+\includegraphics[width=5cm, height=5cm]{galaxy/m63.png} &
+\includegraphics[width=5cm, height=5cm]{galaxy/ic239.png} &
+\includegraphics[width=5cm, height=5cm]{galaxy/m89.png} &
+\includegraphics[width=5cm, height=5cm]{galaxy/ngc1187.png} \\[-5pt]
+\includegraphics[width=5cm, height=5cm]{galaxy/ngc247.png} &
+\includegraphics[width=5cm, height=5cm]{galaxy/ngc3338.png} &
+\includegraphics[width=5cm, height=5cm]{galaxy/ngc4698.png} &
+\includegraphics[width=5cm, height=5cm]{galaxy/ngc4395.png}\\[-5pt]
+\includegraphics[width=5cm, height=5cm]{galaxy/m101.png} &
+\includegraphics[width=5cm, height=5cm]{galaxy/ngc1187.png} &
+\includegraphics[width=5cm, height=5cm]{galaxy/ngc253.png} &
+\includegraphics[width=5cm, height=5cm]{galaxy/ngc772.png}\\[-5pt]
+\includegraphics[width=5cm, height=5cm]{galaxy/ngc3621.png} &
+\includegraphics[width=5cm, height=5cm]{galaxy/ngc4725.png} &
+\includegraphics[width=5cm, height=5cm]{galaxy/m104.png} &
+\includegraphics[width=5cm, height=5cm]{galaxy/ngc891.png} \\[-5pt]
+\end{tabular}
+\vskip 1mm
+A selection from {\it The Cambridge Photographic Atlas of Galaxies}
+\end{center}
+
+\newpage
+\section{Key Features of Galagy Images}
+
+\begin{itemize}
+    \item random viewpoints: top down, edge on, etc.
+    \item all galaxies rotate, random orientation of rotational axis
+    \item clock-wise or counter-clockwise rotation
+    \item diversity of shapes, some have arms, others not, some have a buldge, others have a hole
+    \item sometimes highly symmetrical, sometimes deformed
+    \item dark (light absorbing) gas (interstelar hydrogen) clouds produce dark regions
+    \item closer stars (and other galaxies) form a field of visible items in addition to the galaxy itself
+    \item made up from billions of gravitationally interacting stars and gas 
+    \item most stars not visible, but some really big ones are
+    \item stars come in many sizes, a power-law distribution is evident from the images
+    \item individual star motion is the result of chaotic N-body gravitational evolution
+    \item galaxies are emergent, (mostly) stable shapes
+    \item we aim to construct a stylized image that captures important features 
+\end{itemize}
+
+\vskip 2mm
+\noindent There is a shape classification:
+\vskip 2mm
+
+\begin{center}
+    \includegraphics[width=10cm, height=10cm]{galaxy/classification.png}
+\end{center}
+
+\newpage
+\section{Examples}
+
+<<, engine='bash', eval=run_code, include=FALSE>>=
+python galaxy_cli.py \
+--chain 'rud:4e6:1,imul:0.33,rot:-0.1,walk:10e-3:100,ldot:0:1.25:200' \
+--pix 5000 --footer --out galaxy_stylize1.png --margin 0.33
+@
+
+\begin{center}
+\begin{tabular}{@{}p{7cm}p{5cm}p{7cm}@{}}
+{\bf galaxy image} & {\bf features} & {\bf stylized image} \\ \hline
+\adjustbox{valign=t}{%
+  \includegraphics[width=7cm,height=7cm]{galaxy/ngc206.png}%
+} &
+\adjustbox{valign=t,minipage={6cm}}{
+\vskip 2mm
+\begin{itemize}[leftmargin=*,topsep=3pt,partopsep=0pt,itemsep=0pt,parsep=0pt]
+  \item {\tt NGC206}
+  \item elliptical
+  \item tilted
+  \item squashed
+  \item no arms
+  \item large bulge
+  \item additional texture
+  \item sparse starfield
+  \item stars behind
+  \item stars in front
+\end{itemize}
+\vskip 2mm
+Questions:
+\vskip 2mm
+\begin{itemize}[leftmargin=*,topsep=3pt,partopsep=0pt,itemsep=0pt,parsep=0pt]
+    \item include starfield ?
+    \item add texture ?
+\end{itemize}
+}
+&
+\adjustbox{valign=t}{%
+  \includegraphics[width=7cm,height=7cm]{galaxy_stylize1.png}%
+} 
+\\
+\end{tabular}
+\end{center}
+
+<<, engine='bash', eval=run_code, include=FALSE>>=
+python galaxy_cli.py \
+--chain 'rud:1e7:1,imul:10,arms:3,swirl:3:0.1,walk:1e-1:100,ldot:0:1.1:1000' \
+--pix 5000 --footer --out galaxy_stylize2.png --margin 0
+@
+
+
+\begin{center}
+\begin{tabular}{@{}p{7cm}p{5cm}p{7cm}@{}}
+{\bf galaxy image} & {\bf features} & {\bf stylized image} \\ \hline
+\adjustbox{valign=t}{%
+  \includegraphics[width=7cm,height=7cm]{galaxy/m74.png}%
+} &
+\adjustbox{valign=t,minipage={6cm}}{
+\vskip 2mm
+\begin{itemize}[leftmargin=*,topsep=3pt,partopsep=0pt,itemsep=0pt,parsep=0pt]
+  \item {\tt M74}
+  \item spiral
+  \item counter-clockwise
+  \item front view
+  \item multiple arms
+  \item not symmetric
+  \item small bulge
+  \item almost no starfield
+\end{itemize}
+\vskip 2mm
+Questions:
+\vskip 2mm
+\begin{itemize}[leftmargin=*,topsep=3pt,partopsep=0pt,itemsep=0pt,parsep=0pt]
+    \item symmetrize arms?
+\end{itemize}
+}
+&
+\adjustbox{valign=t}{%
+  \includegraphics[width=7cm,height=7cm]{galaxy_stylize2.png}%
+} 
+\\
+\end{tabular}
+\end{center}
+
+<<, engine='bash', eval=run_code, include=FALSE, results='markup'>>=
+python galaxy_cli.py \
+--chain 'rud:4e6:0.75,td:1:0:1,mul:2,arms:2,swirl:-0.33:2,pwalk:1e-4:5:50,imul:0.5,rot:-0.12,ldot:0.5:1.25:200' \
+--pix 5000 \
+--verbose \
+--footer \
+--out galaxy_stylize3.png
+@
+
+\begin{center}
+\begin{tabular}{@{}p{7cm}p{5cm}p{7cm}@{}}
+{\bf galaxy image} & {\bf features} & {\bf stylized image} \\ \hline
+\adjustbox{valign=t}{%
+  \includegraphics[width=7cm,height=7cm]{galaxy/m81.png}%
+} &
+\adjustbox{valign=t,minipage={6cm}}{
+\vskip 2mm
+\begin{itemize}[leftmargin=*,topsep=3pt,partopsep=0pt,itemsep=0pt,parsep=0pt]
+  \item {\tt M81}
+  \item spiral
+  \item two main arms
+  \item clockwise
+  \item side view
+  \item inclined
+  \item symmetric
+  \item large bulge
+  \item visible starfield
+\end{itemize}
+\vskip 2mm
+Questions:
+\vskip 2mm
+\begin{itemize}[leftmargin=*,topsep=3pt,partopsep=0pt,itemsep=0pt,parsep=0pt]
+    \item keep starfield ?
+\end{itemize}
+}
+&
+\adjustbox{valign=t}{%
+  \includegraphics[width=7cm,height=7cm]{galaxy_stylize3.png}%
+} 
+\\
+\end{tabular}
+\end{center}
+
+\newpage
+\section{More Examples}
+
+<<, engine='bash', eval=run_code, include=FALSE>>=
+python galaxy_cli.py \
+--chain 'rud:4e6:1,imul:0.33,rot:-0.1,walk:10e-3:100,ldot:0:1.25:200' \
+--pix 5000 --footer --out galaxy_stylize4.png --margin 0.33
+@
+
+\begin{center}
+\begin{tabular}{@{}p{7cm}p{5cm}p{7cm}@{}}
+{\bf galaxy image} & {\bf features} & {\bf stylized image} \\ \hline
+\adjustbox{valign=t}{%
+  \includegraphics[width=7cm,height=7cm]{galaxy/ngc7479.png}%
+} &
+\adjustbox{valign=t,minipage={6cm}}{
+\vskip 2mm
+\begin{itemize}[leftmargin=*,topsep=3pt,partopsep=0pt,itemsep=0pt,parsep=0pt]
+  \item {\tt NGC7479}
+  \item barred
+  \item tilted
+  \item almost top down
+  \item 2 prominent arms
+  \item S-shape
+  \item counter-clockwise
+  \item large bulge
+  \item visible ``spine''
+\end{itemize}
+\vskip 2mm
+Questions:
+\vskip 2mm
+\begin{itemize}[leftmargin=*,topsep=3pt,partopsep=0pt,itemsep=0pt,parsep=0pt]
+    \item include starfield ?
+    \item add texture ?
+    \item symmetric arms
+\end{itemize}
+}
+&
+\adjustbox{valign=t}{%
+  %\includegraphics[width=7cm,height=7cm]{galaxy_stylize4.png}%
+} 
+\\
+\end{tabular}
+\end{center}
+
+<<, engine='bash', eval=run_code, include=FALSE>>=
+python galaxy_cli.py \
+--chain 'rud:4e6:1,imul:0.33,rot:-0.1,walk:10e-3:100,ldot:0:1.25:200' \
+--pix 5000 --footer --out galaxy_stylize5.png --margin 0.33
+@
+
+\begin{center}
+\begin{tabular}{@{}p{7cm}p{5cm}p{7cm}@{}}
+{\bf galaxy image} & {\bf features} & {\bf stylized image} \\ \hline
+\adjustbox{valign=t}{%
+  \includegraphics[width=7cm,height=7cm]{galaxy/ngc1365.png}%
+} &
+\adjustbox{valign=t,minipage={6cm}}{
+\vskip 2mm
+\begin{itemize}[leftmargin=*,topsep=3pt,partopsep=0pt,itemsep=0pt,parsep=0pt]
+  \item {\tt NGC1365}
+  \item barred
+  \item tilted
+  \item almost top down
+  \item 2 prominent arms
+  \item S-shape
+  \item counter-clockwise
+  \item large bulge
+  \item visible ``spine''
+\end{itemize}
+\vskip 2mm
+Questions:
+\vskip 2mm
+\begin{itemize}[leftmargin=*,topsep=3pt,partopsep=0pt,itemsep=0pt,parsep=0pt]
+    \item include starfield ?
+    \item add texture ?
+    \item symmetric arms
+\end{itemize}
+}
+&
+\adjustbox{valign=t}{%
+  %\includegraphics[width=7cm,height=7cm]{galaxy_stylize4.png}%
+} 
+\\
+\end{tabular}
+\end{center}
+
+<<, engine='bash', eval=run_code, include=FALSE>>=
+python galaxy_cli.py \
+--chain 'rud:4e6:1,imul:0.33,rot:-0.1,walk:10e-3:100,ldot:0:1.25:200' \
+--pix 5000 --footer --out galaxy_stylize6.png --margin 0.33
+@
+
+\begin{center}
+\begin{tabular}{@{}p{7cm}p{5cm}p{7cm}@{}}
+{\bf galaxy image} & {\bf features} & {\bf stylized image} \\ \hline
+\adjustbox{valign=t}{%
+  \includegraphics[width=7cm,height=7cm]{galaxy/ngc1350p.png}%
+} &
+\adjustbox{valign=t,minipage={6cm}}{
+\vskip 2mm
+\begin{itemize}[leftmargin=*,topsep=3pt,partopsep=0pt,itemsep=0pt,parsep=0pt]
+  \item {\tt NGC1350}
+  \item photommetry
+  \item barred
+  \item tilted
+  \item almost top down
+  \item 2 prominent arms
+  \item S-shape
+  \item counter-clockwise
+  \item bulge
+\end{itemize}
+\vskip 2mm
+Questions:
+\vskip 2mm
+\begin{itemize}[leftmargin=*,topsep=3pt,partopsep=0pt,itemsep=0pt,parsep=0pt]
+    \item include starfield ?
+    \item add texture ?
+    \item symmetric arms
+\end{itemize}
+}
+&
+\adjustbox{valign=t}{%
+  %\includegraphics[width=7cm,height=7cm]{galaxy_stylize4.png}%
+} 
+\\
+\end{tabular}
+\end{center}
+
+\newpage
+\section{Distribution of Star Brighness}
+
+
+\begin{center}
+\begin{tabular}{@{}p{7cm}p{7cm}p{5cm}@{}}
+{\bf photommetry} & {\bf distribution} & {\bf conclusions} \\ \hline
+\adjustbox{valign=t}{%
+  \includegraphics[width=7cm,height=7cm]{galaxy/photometry.png}%
+} &
+\adjustbox{valign=t}{%
+  \includegraphics[width=7cm,height=7cm]{galaxy/distribution.png}%
+} &
+\adjustbox{valign=t,minipage={5cm}}{
+\vskip 2mm
+\begin{itemize}[leftmargin=*,topsep=3pt,partopsep=0pt,itemsep=0pt,parsep=0pt]
+  \item star-field photommetry images used to estimate distribution
+  \item star magnitude number inversely related to brighness
+  \item histogram shows distribution is approximatel lognormal
+  \item we fit a lognormal distribution to measured statistics
+  \item use these to produce realistic-looking star-fields
+\end{itemize}
+}
+\\
+\end{tabular}
+\end{center}
+
+<<, engine='bash', eval=run_code, include=FALSE, results='markup'>>=
+python galaxy_cli.py \
+--chain 'rus:5e5:1.2,ldot:1:1.15:1000' --min 2 \
+--pix 5000 \
+--verbose \
+--footer \
+--out galaxy_lightfield3.png --invert
+@
+
+\begin{center}
+\begin{tabular}{@{}p{14cm}p{5cm}@{}}
+{\bf generated star-field image} & {\bf conclusions} \\ \hline
+\adjustbox{valign=t}{%
+  \includegraphics[width=14cm,height=14cm]{galaxy_lightfield3.png}%
+} &
+\adjustbox{valign=t,minipage={5cm}}{
+\vskip 2mm
+\begin{itemize}[leftmargin=*,topsep=3pt,partopsep=0pt,itemsep=0pt,parsep=0pt]
+  \item generated distribution looks realistic
+  \item mean 1.0
+  \item standard deviation 1.2
+  \item min dot size 2
+  \item max dot size 1000
+  \item 3 orders of magnitude variation
+  \item 5 star magnitudes are 100x brigness
+  \item good enough for making images
+\end{itemize}
+}
+\\
+\end{tabular}
+\end{center}
+
+\newpage
 \section{Title Image Construction}
 
 \begin{itemize}
@@ -130,14 +428,14 @@ matplotlib.use("Agg")
     \item the command used to create the title image:
 \end{itemize}
 
-\begin{lstlisting}[language=bash]
+<<, engine='bash', eval=run_code, echo=TRUE, results='markup'>>=
 python galaxy_cli.py \
 --chain 'rud:4e6:0.5,td:1:0:1,mul:2,arms:2,swirl:-0.33:2,pwalk:1e-4:5:50,imul:0.5,ldot:0.5:1.25:200' \
 --pix 5000 \
 --verbose \
 --footer \
 --out galaxy1.png
-\end{lstlisting}
+@
 
 \vskip 5mm
 
@@ -233,7 +531,96 @@ python galaxy_cli.py \
 
 
 \newpage
-\section{The tools}
+\section{Transformations}
+\subsection{Teardrop}
+\begin{center}
+\includegraphics[width=15cm, height=15cm]{galaxy5.png}
+\end{center}
+\begin{lstlisting}[language=bash]
+python galaxy_cli.py \
+--chain 'rud:1e6:0.5,td:1:0.01:1.25,dot:pix' \
+--pix 5000 \
+--verbose \
+--footer \
+--out galaxy5.png
+\end{lstlisting}
+
+\begin{itemize}
+    \item {\tt rud:4e6} samples from a disk
+    \item {\tt dot:pix} renders the samples as single pixels
+\end{itemize}
+
+\newpage
+\subsection{Swirl}
+\begin{center}
+\includegraphics[width=15cm, height=15cm]{galaxy6.png}
+\end{center}
+\begin{lstlisting}[language=bash]
+python galaxy_cli.py \
+--chain 'rud:1e6:0.5,td:1:0.01:1.25,swirl:-0.33:5,dot:pix' \
+--pix 5000 \
+--verbose \
+--footer \
+--out galaxy6.png
+\end{lstlisting}
+
+\begin{itemize}
+    \item {\tt rud:4e6} samples from a disk
+    \item {\tt dot:pix} renders the samples as single pixels
+\end{itemize}
+
+\newpage
+\section{Swirled Teardrop with Arms}
+\begin{center}
+\includegraphics[width=15cm, height=15cm]{galaxy7.png}
+\end{center}
+\begin{lstlisting}[language=bash]
+python galaxy_cli.py \
+--chain 'rud:1e6:0.5,td:1:0.01:1.25,swirl:-0.33:5,arms:2,dot:pix' \
+--pix 5000 \
+--verbose \
+--footer \
+--out galaxy7.png
+\end{lstlisting}
+
+\begin{itemize}
+    \item {\tt rud:4e6} samples from a disk
+    \item {\tt dot:pix} renders the samples as single pixels
+\end{itemize}
+
+
+\newpage
+\section{Tools}
+\subsection{Expansions}
+
+\noindent How much swirl to apply? We run a {\it mosaic} showing
+all options side-by-side and then decide. 
+
+\begin{center}
+\includegraphics[width=15cm, height=15cm]{galaxy8thumb.png}
+\end{center}
+\begin{lstlisting}[language=bash]
+python galaxy_cli.py \
+--chain 'rud:1e6:0.5,td:1:0.01:1.25,swirl:-0.33:{1:4},arms:2,dot:pix' \
+--pix 5000 \
+--verbose \
+--footer \
+--out galaxy8.png
+vips thumbnail galaxy8.png galaxy8thumb.png 5000 --linear
+\end{lstlisting}
+
+\begin{itemize}
+    \item {\tt swirl:-0.33:\{1:4\}} will be {\it expanded} to 4 spec strings
+    \item each spec string is rendered and the resulting images combined into a {\it mosaic}.
+    \item this is very useful when deciding between althernatives
+    \item {\tt \{...\}} expands to numberic ranges
+    \item \verb|[...]| expands comma separated lists of items.
+    \item {\tt \#\{n\}} copies the n-th expansion, so it can be `shared' at multiple points of the spec string
+    \item expansions are {\it cartesian} which means all the combinations of items across all lists are expressed
+    \item if you use many in a spec string the number of cases quickly explodes!
+    \item copies made using {\tt \#\{n\}} are {\bf not} cartesian, they just copy the referenced expansion item
+\end{itemize}
+
 
 
 \end{document}
