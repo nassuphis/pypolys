@@ -19,6 +19,7 @@ lib64/
 parts/
 sdist/
 var/
+galaxy_logo/
 wheels/
 share/python-wheels/
 *.egg-info/
@@ -56,10 +57,10 @@ cover/
 *.tiff
 *.tif
 *.jpeg
+*.jpg
 *.dzi
 *.npz
 *.mp4
-*.jpeg
 *.v
 *.pdf
 *.aux

@@ -16,9 +16,24 @@ ALLOWED = {}
 # ----- state channels (int8 keys) -----
 K_MULT = np.int8(1)   # stores the multipliers vector as complex[:] (real part used)
 
-# ----- tiny helper -----
+# ----- tiny helpers -----
 def _as_xy(z: np.ndarray):
     return z.real, z.imag  # views, no copies
+
+def _frozen_len(state) -> int:
+    mult = state.get(K_MULT)
+    return 0 if (mult is None) else mult.size
+
+def _split_head_tail(z, state):
+    k = _frozen_len(state)
+    return z[:k], z[k:]
+
+def _current_gid(state) -> int:
+    mult = state.get(K_MULT)
+    if mult is None or mult.size == 0:
+        return 1  # first sizing group
+    # next group id is always last stored gid + 1
+    return int(round(mult.imag[-1] + 1))
 
 # =========================
 # RNG ops (return new z)
@@ -54,8 +69,8 @@ ALLOWED["runif"] = op_runif
 def op_rud(z, a, state):
     N   = int(a[0].real) or 1_000_000
     dth = float(a[1].real) or 0.5
-    u1 = np.random.random(N)
-    u2 = np.random.random(N)
+    u1 = RNG.random(N)
+    u2 = RNG.random(N)
     r  = u1 ** dth
     th = np.exp(1j * 2.0 * np.pi * u2)
     z = np.concatenate((z, r*th))
@@ -71,9 +86,9 @@ def op_rua(z, a, state):
     rmax = a[2].real
     center = a[3]
     dth = float(a[4].real) or 0.5
-    u1 = np.random.uniform(low=0,high=rmax,size=N)
+    u1 = RNG.uniform(low=0,high=rmax,size=N)
     r  = u1 ** dth
-    u2 = np.random.uniform(low=start,high=end,size=N)
+    u2 = RNG.uniform(low=start,high=end,size=N)
     th = np.exp(1j * 2.0 * np.pi * u2)
     z = np.concatenate((z, r*th+center)) 
     return z
@@ -84,8 +99,8 @@ ALLOWED["rua"] = op_rua
 def op_rus(z, a, state):
     N = int(a[0].real) or 1_000_000
     dth = float(a[1].real) or 1.0
-    x = np.random.uniform(-1.0, 1.0, size=N).astype(np.float64, copy=False)
-    y = np.random.uniform(-1.0, 1.0, size=N).astype(np.float64, copy=False)
+    x = RNG.uniform(-1.0, 1.0, size=N).astype(np.float64, copy=False)
+    y = RNG.uniform(-1.0, 1.0, size=N).astype(np.float64, copy=False)
     x = np.sign(x)*np.abs(x)**dth
     y = np.sign(y)*np.abs(y)**dth
     z = np.concatenate((z,x + 1j * y))
@@ -102,8 +117,8 @@ def op_rtr(z, a, state):
     A = np.asarray((-1.0, -h), dtype=np.float64)
     B = np.asarray(( 1.0, -h), dtype=np.float64)
     C = np.asarray(( 0.0,  h), dtype=np.float64)
-    u = np.random.random(N)
-    v = np.random.random(N)
+    u = RNG.random(N)
+    v = RNG.random(N)
     # reflect across diagonal for u+v>1
     mask = (u + v) > 1.0
     u[mask] = 1.0 - u[mask]
@@ -124,9 +139,9 @@ def op_rtrd(z, a, state):
     alpha_A = max(float(a[2].real) or 1.0, 1e-6)
     alpha_B = max(float(a[3].real) or 1.0, 1e-6)
     # Dirichlet via normalized Gamma(α, 1) draws
-    gA = np.random.gamma(shape=alpha_A, scale=1.0, size=N)
-    gB = np.random.gamma(shape=alpha_B, scale=1.0, size=N)
-    gC = np.random.gamma(shape=alpha_C, scale=1.0, size=N)
+    gA = RNG.gamma(shape=alpha_A, scale=1.0, size=N)
+    gB = RNG.gamma(shape=alpha_B, scale=1.0, size=N)
+    gC = RNG.gamma(shape=alpha_C, scale=1.0, size=N)
     s  = gA + gB + gC
     wA = gA / s
     wB = gB / s
@@ -150,10 +165,10 @@ def op_rsqd(z, a, state):
     alpha_B = max(float(a[2].real) or 1.0, 1e-6)
     alpha_C = max(float(a[3].real) or 1.0, 1e-6)
     alpha_D = max(float(a[4].real) or 1.0, 1e-6)
-    gA = np.random.gamma(shape=alpha_A, scale=1.0, size=N)
-    gB = np.random.gamma(shape=alpha_B, scale=1.0, size=N)
-    gC = np.random.gamma(shape=alpha_C, scale=1.0, size=N)
-    gD = np.random.gamma(shape=alpha_D, scale=1.0, size=N)
+    gA = RNG.gamma(shape=alpha_A, scale=1.0, size=N)
+    gB = RNG.gamma(shape=alpha_B, scale=1.0, size=N)
+    gC = RNG.gamma(shape=alpha_C, scale=1.0, size=N)
+    gD = RNG.gamma(shape=alpha_D, scale=1.0, size=N)
     s  = gA + gB + gC + gD
     wA = gA / s
     wB = gB / s
@@ -198,73 +213,113 @@ ALLOWED["serp"] = op_serp
 
 # ---------- cartesian random ----------
 
+
 def op_carunif(z, a, state):
-    N = int(a[0].real) or 100
-    w = float(a[1].real) or 0.01  # pick a sensible default in your units
-    n = z.size
-    if n == 0 or N <= 0: return np.empty(0, np.complex128)
-    u = np.random.uniform(-w, +w, size=(N, n))
-    v = np.random.uniform(-w, +w, size=(N, n))
-    out = (z[None, :] + u + 1j * v).reshape(N * n)
-    return out
+    N  = int(a[0].real) or 100
+    w  = float(a[1].real) or 0.01
+    k  = _frozen_len(state)
+    head, base = z[:k], z[k:]
+    n = base.size
+    if n == 0 or N <= 0:
+        return z  # nothing to expand
+    u = RNG.uniform(-w, +w, size=(N, n))
+    v = RNG.uniform(-w, +w, size=(N, n))
+    out = (base[None, :] + u + 1j*v).reshape(N * n)
+    return np.concatenate((head, out))
 
 ALLOWED["carunif"] = op_carunif
 
 def op_cardsk(z, a, state):
-    N = int(a[0].real) or 100
-    r = float(a[1].real) or 0.02  
-    dth = float(a[2].real) or 0.5 
-    n = z.size
-    if n == 0 or N <= 0: return np.empty(0, np.complex128)
-    u = np.random.uniform(0,1, size=(N, n))
-    v = np.random.uniform(0,1, size=(N, n))
-    p =  r*(u**dth)*np.exp(1j*2*np.pi*v)
-    out = (z[None, :] + p).reshape(N * n)
-    return out
+    N   = int(a[0].real) or 100
+    r   = float(a[1].real) or 0.02
+    dth = float(a[2].real) or 0.5
+    k   = _frozen_len(state)
+    head, base = z[:k], z[k:]
+    n = base.size
+    if n == 0 or N <= 0:
+        return z
+    u = RNG.random(size=(N, n))
+    v = RNG.random(size=(N, n))
+    p = r * (u**dth) * np.exp(1j * 2.0 * np.pi * v)
+    out = (base[None, :] + p).reshape(N * n)
+    return np.concatenate((head, out))
 
 ALLOWED["cardsk"] = op_cardsk
 
 # ---------- diffusion ops ----------
 
 @njit(cache=True, nogil=True)
-def op_walk(z, a, state):
-    scale = a[0].real or 1e-3
-    steps = int(a[1].real) or 1
+def _walk_inplace(x, y, scale, steps):
+    if steps <= 0:
+        return
+    n = x.size
     for _ in range(steps):
-        u = np.random.uniform(low=-scale, high=scale, size=z.size)
-        v = np.random.uniform(low=-scale, high=scale, size=z.size)
-        d = u+1j*v
-        z += d
+        # draw per-step vectors
+        u = np.random.uniform(-scale, scale, size=n)
+        v = np.random.uniform(-scale, scale, size=n)
+        x += u
+        y += v
+
+@njit(cache=True, nogil=True)
+def _pwalk_inplace(x, y, scale, pw, steps):
+    if steps <= 0:
+        return
+    n = x.size
+    # fixed amplitude from initial positions (matches your old behavior)
+    a = (x * x + y * y) ** 0.5
+    if pw != 1.0:
+        a = a ** pw
+    for _ in range(steps):
+        u = np.random.uniform(-scale, scale, size=n)
+        v = np.random.uniform(-scale, scale, size=n)
+        x += u * a
+        y += v * a
+
+@njit(cache=True, nogil=True)
+def _disk_diffuse_inplace(x, y, scale, pw, steps):
+    if steps <= 0:
+        return
+    n = x.size
+    dist = (x * x + y * y) ** 0.5
+    if pw != 1.0:
+        dist = dist ** pw
+    for _ in range(steps):
+        u = np.random.uniform(-scale, scale, size=n)
+        v = np.random.uniform(-scale, scale, size=n)
+        x += u * dist
+        y += v * dist
+
+def op_walk(z, a, state):
+    scale = float(a[0].real) if a.size > 0 else 1e-3
+    steps = int(a[1].real) if a.size > 1 else 1
+    k = _frozen_len(state)
+    if k < z.size and steps > 0:
+        x, y = _as_xy(z)
+        _walk_inplace(x[k:], y[k:], scale, steps)
     return z
 
 ALLOWED["walk"] = op_walk
 
-@njit(cache=True, nogil=True)
 def op_pwalk(z, a, state):
-    scale = a[0].real or 1e-3
-    pow   = a[1].real or 1.0
-    steps = int(a[2].real) or 1
-    a = np.abs(z)**pow
-    for i in range(steps):
-        u = np.random.uniform(-scale, scale, size=z.size)
-        v = np.random.uniform(-scale, scale, size=z.size)
-        d = u+1j*v
-        z += d*a
+    scale = float(a[0].real) if a.size > 0 else 1e-3
+    pw    = float(a[1].real) if a.size > 1 else 1.0
+    steps = int(a[2].real) if a.size > 2 else 1
+    k = _frozen_len(state)
+    if k < z.size and steps > 0:
+        x, y = _as_xy(z)
+        _pwalk_inplace(x[k:], y[k:], scale, pw, steps)
     return z
 
 ALLOWED["pwalk"] = op_pwalk
 
-@njit(cache=True, nogil=True)
 def op_disk_diffuse(z, a, state):
-    steps = int(a[1].real)
-    if steps==0: return z
-    scale = a[0].real or 1e-3
-    pow = a[2].real or 1
-    dist = np.abs(z)**pow
-    for i in range(steps):
-        u = np.random.uniform(-scale, scale, size=z.size)
-        v = np.random.uniform(-scale, scale, size=z.size)
-        z += (u+1j*v)*dist
+    scale = float(a[0].real) if a.size > 0 else 1e-3
+    steps = int(a[1].real) if a.size > 1 else 0
+    pw    = float(a[2].real) if a.size > 2 else 1.0
+    k = _frozen_len(state)
+    if k < z.size and steps > 0:
+        x, y = _as_xy(z)
+        _disk_diffuse_inplace(x[k:], y[k:], scale, pw, steps)
     return z
 
 ALLOWED["ddiffuse"] = op_disk_diffuse
@@ -272,20 +327,35 @@ ALLOWED["ddiffuse"] = op_disk_diffuse
 # ---------- clip ops ----------
 
 def op_dclip(z, a, state):
-    r = a[0].real or 1
+    r = a[0].real or 1.0
     c = a[1]
-    mask = np.abs(z-c)>r
-    return z[mask]
+    k = _frozen_len(state)
+    if k <= 0:
+        # no frozen points; clip all
+        mask = np.abs(z - c) > r
+        return z[mask]
+    head, tail = z[:k], z[k:]
+    mask_tail = np.abs(tail - c) > r
+    return np.concatenate((head, tail[mask_tail]))
 
 ALLOWED["dclip"] = op_dclip
 
 def op_sclip(z, a, state):
-    r = a[0].real or 1
+    r = a[0].real or 1.0
     c = a[1]
-    dx = z.real - c.real
-    dy = z.imag - c.imag
-    inside = (np.abs(dx) < r) & (np.abs(dy) < r)
-    return z[~inside]
+    k = _frozen_len(state)
+    if k <= 0:
+        # no frozen points; clip all
+        dx = z.real - c.real
+        dy = z.imag - c.imag
+        inside = (np.abs(dx) < r) & (np.abs(dy) < r)
+        return z[~inside]
+
+    head, tail = z[:k], z[k:]
+    dx = tail.real - c.real
+    dy = tail.imag - c.imag
+    inside_tail = (np.abs(dx) < r) & (np.abs(dy) < r)
+    return np.concatenate((head, tail[~inside_tail]))
 
 ALLOWED["sclip"] = op_sclip
 
@@ -293,51 +363,87 @@ ALLOWED["sclip"] = op_sclip
 # ---------- simple ops ----------
 
 def op_add(z, a, state):
-    z += a[0]
+    k = _frozen_len(state)
+    if k < z.size:
+        z[k:] += a[0]
     return z
 
 ALLOWED["add"] = op_add
 
 def op_mul(z, a, state):
-    z *= a[0]
+    k = _frozen_len(state)
+    if k < z.size:
+        z[k:] *= a[0]
     return z
 
 ALLOWED["mul"] = op_mul
 
 def op_rmul(z, a, state):
-    zz = z.real * a[0] + 1j * z.imag
-    return zz
+    k = _frozen_len(state)
+    if k < z.size:
+        zz = z[k:]
+        z[k:] = zz.real * a[0] + 1j * zz.imag
+    return z
 
 ALLOWED["rmul"] = op_rmul
 
 def op_imul(z, a, state):
-    zz = z.real + 1j * z.imag * a[0]
-    return zz
+    k = _frozen_len(state)
+    if k < z.size:
+        zz = z[k:]
+        z[k:] = zz.real + 1j * zz.imag * a[0]
+    return z
 
 ALLOWED["imul"] = op_imul
 
 
 def op_rot(z, a, state):
     phi = np.exp(1j * 2.0 * np.pi * a[0].real)
-    return z * phi
-
+    k = _frozen_len(state)
+    if k < z.size:
+        z[k:] *= phi
+    return z
 ALLOWED["rot"] = op_rot
 
 def op_rth(z, a, state):
-    dth = a[0].real or 0.5
-    r = np.sign(z.imag)*np.abs(z.imag) ** dth
-    th = np.exp(1j * 2.0 * np.pi * z.real)
-    zz = r*th
-    return zz
+    """
+    Radius-from-imag (with exponent), angle-from-real:
+      r  = sign(Im(z)) * |Im(z)|^dth
+      th = exp(i * 2π * Re(z))
+      z_tail := r * th
+    Only applies to the unfrozen tail (points without sizes yet).
+    """
+    mult = state.get(K_MULT)
+    k = 0 if (mult is None) else mult.size
+
+    if k < z.size:
+        dth = float(a[0].real) if a.size > 0 else 0.5
+        tail = z[k:]
+        r  = np.sign(tail.imag) * np.abs(tail.imag) ** dth
+        th = np.exp(1j * 2.0 * np.pi * tail.real)
+        z[k:] = r * th
+    return z
 
 ALLOWED["rth"] = op_rth
 
 
 def op_toline(z, a, state):
-    num = 1+z
-    den = 1-z
-    line = 1j * num/den
-    return line
+    """
+    Cayley transform to (imag) line:
+      z_tail := i * (1 + z_tail) / (1 - z_tail)
+    Only applies to the unfrozen tail (points without sizes yet).
+    """
+    mult = state.get(K_MULT)
+    k = 0 if (mult is None) else mult.size
+
+    if k < z.size:
+        tail = z[k:]
+        z[k:] = 1j * (1.0 + tail) / (1.0 - tail)
+        # (optional) protect exact pole at z=1:
+        # denom = (1.0 - tail)
+        # denom = np.where(denom == 0, 1e-15 + 0j, denom)
+        # z[k:] = 1j * (1.0 + tail) / denom
+    return z
 
 ALLOWED["toline"] = op_toline
 
@@ -443,39 +549,46 @@ def apply_n_arms(x, y, m):
 
 def op_td(z, a, state):
     # a[0]=tda, a[1]=tdw, a[2]=tdt
-    x, y = _as_xy(z)
-    _teardrop_inplace_fast(x, y, a[0].real, a[1].real, a[2].real)
+    k = _frozen_len(state)
+    if k < z.size:
+        x, y = _as_xy(z)
+        _teardrop_inplace_fast(x[k:], y[k:], a[0].real, a[1].real, a[2].real)
     return z
 
 ALLOWED["td"] = op_td
 
 def op_arms(z, a, state):
-    # a[0]=m
     m = int(a[0].real)
     if m <= 1: return z
-    n = z.size
-    idx = np.mod(np.arange(n), m)
-    ang = (2.0*np.pi/m) * idx
-    c = np.cos(ang); s = np.sin(ang)
-    x, y = _as_xy(z)
-    xr = x*c - y*s
-    yr = x*s + y*c
-    x[:] = xr; y[:] = yr
+    k = _frozen_len(state)
+    if k < z.size:
+        n_tail = z.size - k
+        idx = np.mod(np.arange(n_tail), m)
+        ang = (2.0*np.pi/m) * idx
+        c = np.cos(ang); s = np.sin(ang)
+        x, y = _as_xy(z)
+        xr = x[k:] * c - y[k:] * s
+        yr = x[k:] * s + y[k:] * c
+        x[k:] = xr; y[k:] = yr
     return z
 
 ALLOWED["arms"] = op_arms
 
 def op_swirl(z, a, state):
     # a[0]=swa, a[1]=swb
-    x, y = _as_xy(z)
-    _swirl_inplace_fast(x, y, a[0].real, a[1].real)
+    k = _frozen_len(state)
+    if k < z.size:
+        x, y = _as_xy(z)
+        _swirl_inplace_fast(x[k:], y[k:], a[0].real, a[1].real)
     return z
 
 ALLOWED["swirl"] = op_swirl
 
+
 def op_squish(z, a, state):
-    # a[0]=sqs
-    z.imag *= a[0].real
+    k = _frozen_len(state)
+    if k < z.size:
+        z.imag[k:] *= a[0].real
     return z
 
 ALLOWED["squish"] = op_squish
@@ -515,16 +628,13 @@ def _sink_gaussian_inplace_fast(x, y, Cx, Cy, alpha, sigma):
         y[i] = y[i] - dy * f
 
 def op_sink(z, a, state):
-    """
-    Pipeline op: Gaussian sink.
-    a[0] = C (complex), a[1] = alpha (real), a[2] = sigma (real)
-    Returns z (mutated in-place).
-    """
-    C = a[0]
-    alpha = float(a[1].real if a.size > 1 else 0.0)
-    sigma = float(a[2].real if a.size > 2 else 1.0)
-    x, y = _as_xy(z)
-    _sink_gaussian_inplace_fast(x, y, C.real, C.imag, alpha, sigma)
+    C     = a[0]
+    alpha = float(a[1].real) if a.size > 1 else 0.0
+    sigma = float(a[2].real) if a.size > 2 else 1.0
+    k = 0 if state.get(K_MULT) is None else state[K_MULT].size
+    if k < z.size and (alpha != 0.0 or sigma != 0.0):
+        x, y = _as_xy(z)
+        _sink_gaussian_inplace_fast(x[k:], y[k:], C.real, C.imag, alpha, sigma)
     return z
 
 ALLOWED["sink"] = op_sink
@@ -550,16 +660,15 @@ def _nsink_inplace_fast(x, y, Cx, Cy, alpha,eps):
 
 def op_nsink(z, a, state):
     """
-    Pipeline op: Newtonian sink (inverse-square).
-      a[0] = C (complex sink location)
-      a[1] = alpha (real strength; <0 repels)
-    Returns z (mutated in-place).
+    a[0]=C (complex), a[1]=alpha (real), a[2]=eps (real, small >=0)
     """
-    C = a[0]
-    eps = a[1].real
-    alpha = float(a[1].real if a.size > 1 else 0.0)
-    x, y = _as_xy(z)
-    _nsink_inplace_fast(x, y, C.real, C.imag, alpha,eps)
+    C     = a[0]
+    alpha = float(a[1].real) if a.size > 1 else 0.0
+    eps   = float(a[2].real) if a.size > 2 else 1e-12
+    k = 0 if state.get(K_MULT) is None else state[K_MULT].size
+    if k < z.size and alpha != 0.0:
+        x, y = _as_xy(z)
+        _nsink_inplace_fast(x[k:], y[k:], C.real, C.imag, alpha, eps)
     return z
 
 ALLOWED["nsink"] = op_nsink
@@ -569,25 +678,126 @@ ALLOWED["nsink"] = op_nsink
 # =========================
 
 def op_dot_lognormal(z, a, state):
+    """
+    Assign lognormal-distributed dot sizes to the active tail
+    and mark them with the current group id (imag part).
+    """
+    k = _frozen_len(state)
+    tail_len = max(z.size - k, 0)
+    if tail_len == 0:
+        return z
+
+    # parameters
     loc   = float(a[0].real) or 0.5
     scale = float(a[1].real) or 1.25
-    drt   = float(a[2].real) or 100
-    zeta = RNG.normal(loc=loc, scale=scale, size=z.size)
-    mult = np.exp(zeta).astype(np.float64)
-    np.clip(mult, 1.0, drt, out=mult)
-    vec = mult+0j
-    state[K_MULT] = vec
+    drt   = float(a[2].real) or 100.0
+
+    # lognormal tail
+    zeta = RNG.normal(loc=loc, scale=scale, size=tail_len)
+    mult_tail_real = np.exp(zeta).astype(np.float64)
+    np.clip(mult_tail_real, 1.0, drt, out=mult_tail_real)
+
+    # group id: last gid + 1 (or 1 if first)
+    gid = _current_gid(state)
+
+    # existing multipliers?
+    mult_prev = state.get(K_MULT)
+    if mult_prev is None:
+        full_real = mult_tail_real
+        full_imag = np.full(tail_len, gid, dtype=np.float64)
+    else:
+        full_real = np.concatenate((mult_prev.real, mult_tail_real))
+        full_imag = np.concatenate((mult_prev.imag, np.full(tail_len, gid, dtype=np.float64)))
+
+    # store combined complex vector (real=size, imag=group id)
+    state[K_MULT] = (full_real + 1j * full_imag).astype(np.complex128, copy=False)
     return z
 
 ALLOWED["ldot"] = op_dot_lognormal
 
+
 def op_dot(z, a, state):
+    """
+    Assign a constant dot size to the active tail and
+    mark it with the current group id (imag part).
+    """
+    k = _frozen_len(state)
+    tail_len = max(z.size - k, 0)
+    if tail_len == 0:
+        return z
+
+    # constant size value
     val = float(a[0].real) if a.size > 0 else 1.0
-    vec = np.full(z.size, val + 0j, dtype=np.complex128)
-    state[K_MULT] = vec
+    mult_tail_real = np.full(tail_len, val, dtype=np.float64)
+
+    # current group id (last gid + 1 or 1 if first)
+    gid = _current_gid(state)
+
+    # combine with any existing multipliers
+    mult_prev = state.get(K_MULT)
+    if mult_prev is None:
+        full_real = mult_tail_real
+        full_imag = np.full(tail_len, gid, dtype=np.float64)
+    else:
+        full_real = np.concatenate((mult_prev.real, mult_tail_real))
+        full_imag = np.concatenate((mult_prev.imag, np.full(tail_len, gid, dtype=np.float64)))
+
+    # store back
+    state[K_MULT] = (full_real + 1j * full_imag).astype(np.complex128, copy=False)
     return z
 
 ALLOWED["dot"] = op_dot
+
+def op_dot_copy(z, a, state):
+    """
+    Copy size distribution from an existing group onto the active tail.
+
+    a[0] (optional): source gid (real).
+        If 0 or omitted, use the previous gid (current_gid - 1).
+
+    Behavior:
+      - Finds sizes where imag(mult) == source_gid among the frozen prefix.
+      - Samples with replacement to fill the tail.
+      - Writes sizes to the tail and tags them with a NEW gid.
+    """
+    k = _frozen_len(state)
+    tail_len = max(z.size - k, 0)
+    if tail_len == 0:
+        return z
+
+    mult = state.get(K_MULT)
+    if mult is None or mult.size == 0:
+        # nothing to copy from
+        return z
+
+    # determine source gid
+    src_gid = int(round(a[0].real)) if a.size > 0 else 0
+    if src_gid <= 0:
+        src_gid = _current_gid(state) - 1
+    if src_gid < 1:
+        return z  # no valid source group yet
+
+    # find source samples in the frozen prefix
+    src_mask = (mult.imag[:k] == src_gid)
+    if not np.any(src_mask):
+        return z  # nothing to copy from
+
+    src_sizes = mult.real[:k][src_mask]
+    # sample with replacement to fill tail
+    tail_sizes = RNG.choice(src_sizes, size=tail_len, replace=True)
+
+    # assign new gid for the copied tail
+    gid = _current_gid(state)
+
+    # combine with existing multipliers
+    full_real = np.concatenate((mult.real, tail_sizes))
+    full_imag = np.concatenate((mult.imag, np.full(tail_len, gid, dtype=np.float64)))
+
+    # store updated sizes + group ids
+    state[K_MULT] = (full_real + 1j * full_imag).astype(np.complex128, copy=False)
+    return z
+
+ALLOWED["dcopy"] = op_dot_copy
 
 # =========================
 # macros
@@ -620,7 +830,7 @@ def op_yin(z, a, state):
 ALLOWED["yin"] = op_yin
 
 # ===== executor (no JIT needed; kernels inside are Numba-fast) =====
-def apply_chain(z0: np.ndarray, names: list[str], A: np.ndarray, state) -> tuple[np.ndarray, np.ndarray]:
+def apply_chain(z0: np.ndarray, names: list[str], A: np.ndarray, state):
     z = z0
     for k, name in enumerate(names):
         fn = ALLOWED.get(name)
@@ -628,12 +838,13 @@ def apply_chain(z0: np.ndarray, names: list[str], A: np.ndarray, state) -> tuple
             raise ValueError(f"Unknown op '{name}'. Allowed: {list(ALLOWED)}")
         z = fn(z, A[k], state)
 
-    # multipliers: read from state or default 1.0
     mult_c = state.get(K_MULT)
-    if mult_c is None or mult_c.size != z.size:
+    if mult_c is None:
         mult = np.ones(z.size, dtype=np.float32)
     else:
-        mult = mult_c.real.astype(np.float32, copy=False)
+        k = mult_c.size
+        mult = np.ones(z.size, dtype=np.float32)
+        mult[:min(k, z.size)] = mult_c.real[:min(k, z.size)].astype(np.float32, copy=False)
     return z, mult
 
 # ===== build_logo from spec =====
@@ -654,7 +865,13 @@ def build_logo_from_chain(spec: str) -> tuple[np.ndarray, np.ndarray]:
     return z, mult
 
 def warmup_numba_geometry():
-    _ = op_rng_circle_njit(1024, 0.75)
-    _ = op_sizes_lognormal_njit(1024, 0.0, 1.0, 3000.0)
+    # warm up vectorized kernels on tiny arrays
+    tmp = np.zeros(8, dtype=np.complex128)
+    x, y = _as_xy(tmp)
+    _teardrop_inplace_fast(x, y, 0.8, 0.2, 0.1)
+    _swirl_inplace_fast(x, y, 0.5, 2.0)
+    _walk_inplace(x, y, 1e-3, 1)
+    _pwalk_inplace(x, y, 1e-3, 1.0, 1)
+    _disk_diffuse_inplace(x, y, 1e-3, 1.0, 1)
 
 
