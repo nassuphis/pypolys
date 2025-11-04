@@ -5,7 +5,7 @@ import argparse, math, time
 import numpy as np
 import math
 import expandspec
-from specparser import parse_names_and_args
+import specparser
 import galaxy
 import galaxy_raster
 
@@ -132,16 +132,22 @@ def build_parser():
     p.add_argument("--footer", action="store_true", help="Render the spec string as a footer title")
     p.add_argument("--footer-dpi", type=int, default=300, help="Footer text DPI (default 300)")
     p.add_argument("--footer-pad", type=int, default=48, help="Left/right padding for footer text")
+    p.add_argument(
+        "--const", action="append", default=[],
+        help="Add/override constant as NAME=VALUE (VALUE parsed like args). Repeatable."
+    )
     return p
 
 def main():
     global BUCKET_METHOD
-    galaxy_raster.warmup_raster_kernels()
-    #warmup_pages(1_000_000)  # or your expected N
     ap = build_parser()
     args = ap.parse_args()
     BUCKET_METHOD = args.bucket
 
+    for kv in args.const:
+        k, v = specparser._parse_const_kv(kv)
+        specparser.set_const(k, v)
+    specparser.set_const("pix",0.51/(args.fos*(args.pix-1)))
     specs = expandspec.expand_cartesian_lists(args.chain)
     if not specs:
         raise SystemExit("No specs produced by expandspec")
@@ -181,5 +187,6 @@ def main():
     rows = math.ceil(n / cols)
     print(f"✅ Saved mosaic {args.out}  ({cols}×{rows}, tiles={n})")
  
+ # yin: rud:10e5,sclip:1:1+0j,dclip:0.5:0+0.5j,rua:1.25e5:0.75+1.25j:0.25:0-0.5j,add:0.5j,dot:pix
 if __name__ == "__main__":
     main()

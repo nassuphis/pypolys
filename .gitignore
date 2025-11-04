@@ -66,6 +66,7 @@ cover/
 *.out
 *.toc
 test.tex
+galaxy.tex
 # Translations
 *.mo
 *.pot

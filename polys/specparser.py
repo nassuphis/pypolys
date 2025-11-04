@@ -31,6 +31,9 @@ CONST_MAP = {
 def set_const(name: str, value: complex | float) -> None:
     CONST_MAP[name.strip().lower()] = complex(value, 0.0)
 
+def get_const(name: str):
+    complex(CONST_MAP[name])
+
 # ---------- errors ----------
 
 class SpecParseError(ValueError):

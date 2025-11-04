@@ -1,0 +1,239 @@
+\documentclass{article}
+\usepackage[portrait, headheight = 0cm, margin=0.25cm, top = 0.25cm]{geometry} 
+\usepackage{graphicx}
+\usepackage[dvipsnames,table]{xcolor}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{pdfpages}
+\usepackage[export]{adjustbox} 
+\usepackage{booktabs}
+\usepackage{tikz}
+\usetikzlibrary{shadings,arrows.meta,positioning,calc,intersections}
+\usepackage{hyperref}
+\usepackage{listings}
+\lstset{
+  basicstyle=\ttfamily\small,
+  frame=single,
+  columns=fullflexible,
+  keepspaces=true
+}
+
+<<,cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+fns = list.files("figure/*.pdf")
+@
+
+<<,cache=FALSE, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, results="hide">>=
+require(glue)
+require(qpdf)
+nglue<-function(
+  ...,
+  .sep = "",
+  .envir = parent.frame(), 
+  .open = "{", 
+  .close = "}", 
+  .na = "NA", 
+  .transformer = identity_transformer
+){
+  as.character(glue(
+    ...,
+    .sep=.sep,
+    .envir=.envir,
+    .open="@[",
+    .close="]@",
+    .na="NA",
+    .transformer = .transformer
+  ))
+}
+
+make_full_directory<-function(x){
+  os_type<-.Platform$OS.type
+  if(os_type=="windows")return(paste0(gsub("\\\\","/",normalizePath(getwd())),"/",x))
+  paste0(normalizePath(getwd()),"\\",x)
+}
+
+make_pdf_page<-function(
+    fn,
+    pages=1,
+    height="10cm",
+    width="10cm",
+    minipage=TRUE,
+    valign="B"
+){
+   fname<-gsub("\\","/",tempfile(pattern = "pdf",tmpdir=make_full_directory("figure"),fileext=".pdf"),fixed=TRUE)
+   pdf_subset(fn, pages = pages, output = fname)
+   latex<-nglue(
+    if(minipage){"\\begin{minipage}[t][@[height]@][t]{@[width]@}\n"}else(""),
+    "\\includegraphics[height=@[height]@,width=@[width]@,valign=@[valign]@]{@[fname]@}\n",
+    if(minipage){"\\end{minipage}\n"}else{""},
+    .sep="\n",
+    height=height,
+    width=width,
+    fname=fname
+  )
+  latex
+}
+
+
+
+@
+
+
+<<setup_py, include=FALSE>>=
+library(reticulate)
+use_virtualenv("/Users/nicknassuphis/pypolys/.venv", required = TRUE)
+@
+
+<<,  include=FALSE, engine='python'>>=
+import argparse
+import timeit
+import numpy as np
+import pandas as pd
+from numba import njit, prange
+import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.use("Agg")
+@
+
+
+
+\title{
+\vskip 5mm
+{\bf\huge Galaxies}
+\vskip 5mm
+{\bf\huge from}
+\vskip 5mm
+{\bf\huge Shaped Randomness:}
+\vskip 5mm
+{\bf\huge Tools \& Tutorials}
+\vskip 1cm
+\begin{center}
+\includegraphics[width=15cm, height=15cm]{galaxy1.png}
+\end{center}
+\vskip 1cm
+}
+\author{Wigerich}
+
+\begin{document}
+\maketitle
+
+\newpage
+\tableofcontents
+
+\newpage
+\section{Title Image Construction}
+
+\begin{itemize}
+    \item images are rendered using the {\tt galaxy\_cli.py} script
+    \item this scrips implements a {\it domain-specific language} designed for this task
+    \item this document describes how it can be used to make interesting, complex shapes
+    \item the command used to create the title image:
+\end{itemize}
+
+\begin{lstlisting}[language=bash]
+python galaxy_cli.py \
+--chain 'rud:4e6:0.5,td:1:0:1,mul:2,arms:2,swirl:-0.33:2,pwalk:1e-4:5:50,imul:0.5,ldot:0.5:1.25:200' \
+--pix 5000 \
+--verbose \
+--footer \
+--out galaxy1.png
+\end{lstlisting}
+
+\vskip 5mm
+
+\noindent the {\tt galaxy\_cli.py} script's ``{\tt chain}'' parameter takes a {\it description string} and renders it as an image.
+the {\it description string} is a chain of operations that yield a vector of {\it points} represented as complex numbers. sizes 
+are assigned to each {\it point} to make {\it dots} and these {\it dots} are rendered as a {\tt .PNG} file. 
+
+\vskip 5mm
+
+\begin{itemize}
+    \item {\tt rud} generates random samples inside a unit disk
+    \item {\tt td} shapes random numbers to ``teardrop'' form
+    \item {\tt mul} multiplies all (x and y) by a factor
+    \item {\tt arms} performs the ``arms'' transform
+    \item {\tt swirl} performs the ``swirl'' transform
+    \item {\tt pwalk} each point does a little conditional random walk
+    \item {\tt imul} imaginary part of points (y-axis) is multiplied by a factor
+    \item {\tt ldot} points are rendered as dots with a specific distribution
+\end{itemize}
+
+\vskip 5mm
+\noindent there are three types of commands:
+\vskip 5mm
+
+\begin{itemize}
+    \item random point generation
+    \item point transformation
+    \item point to dot rendering
+\end{itemize}
+
+\vskip 5mm
+\noindent points are dimensionless, dots have size
+
+\newpage
+\section{Randomness}
+\subsection{The Disk}
+\begin{center}
+\includegraphics[width=15cm, height=15cm]{galaxy2.png}
+\end{center}
+\begin{lstlisting}[language=bash]
+python galaxy_cli.py \
+--chain 'rud:4e6:0.5,dot:pix' \
+--pix 5000 \
+--verbose \
+--footer \
+--out galaxy2.png
+\end{lstlisting}
+
+\begin{itemize}
+    \item {\tt rud:4e6} samples from a disk
+    \item {\tt dot:pix} renders the samples as single pixels
+\end{itemize}
+
+\subsection{The Square}
+\begin{center}
+\includegraphics[width=15cm, height=15cm]{galaxy3.png}
+\end{center}
+\begin{lstlisting}[language=bash]
+python galaxy_cli.py \
+--chain 'rus:4e6:0.5,dot:pix' \
+--pix 5000 \
+--verbose \
+--footer \
+--out galaxy3.png
+\end{lstlisting}
+
+\begin{itemize}
+    \item {\tt rud:4e6:0.5} samples from a disk, each raised to the 0.5 power
+    \item raising samples to a power controls point distribution inside the outline
+    \item in this example, points are closer to the vertices of the square
+    \item {\tt dot:pix} renders the samples as single pixels
+\end{itemize}
+
+\subsection{The Triangle}
+\begin{center}
+\includegraphics[width=15cm, height=15cm]{galaxy4.png}
+\end{center}
+\begin{lstlisting}[language=bash]
+python galaxy_cli.py \
+--chain 'rtr:4e6:1:1:1,dot:pix' \
+--pix 5000 \
+--verbose \
+--footer \
+--out galaxy4.png
+\end{lstlisting}
+
+\begin{itemize}
+    \item {\tt rtr:4e6:1:1:1} samples from a triangle
+    \item the three parameters express the ``force'' each of the three vertices exert
+    \item in this example, all vertices have equal weight
+    \item {\tt dot:pix} renders the samples as single pixels
+\end{itemize}
+
+
+\newpage
+\section{The tools}
+
+
+\end{document}

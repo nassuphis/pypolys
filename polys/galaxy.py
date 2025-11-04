@@ -1,7 +1,13 @@
+import math
 import numpy as np
 from numba import njit, prange, types
 from numba.typed import Dict
 import specparser
+
+
+# ===== random number generator =====
+
+RNG = np.random.default_rng(seed=42)
 
 # ===== registry =====
 
@@ -18,89 +24,322 @@ def _as_xy(z: np.ndarray):
 # RNG ops (return new z)
 # =========================
 
-def op_rng_circle(z, a, state):
-    """
-    a[0]=N, a[1]=dth, a[2]=seed (optional)
-    """
-    N   = int(a[0].real)
-    dth = float(a[1].real if a.size > 1 else 1.0)
-    if a.size > 2 and a[2].real != 0.0:
-        np.random.seed(int(a[2].real))
+
+
+def op_rnorm(z,a,state):
+     N   = int(a[0].real) or 1_000_000
+     loc  = a[1].real
+     scale = a[2].real or 1
+     u = RNG.normal(loc=loc,scale=scale,size=N)
+     v = RNG.normal(loc=loc,scale=scale,size=N)
+     z = np.concatenate((z,u+1j*v))
+     return z
+
+ALLOWED["rnorm"] = op_rnorm
+
+#square
+def op_runif(z,a,state):
+     N   = int(a[0].real) or 1_000_000
+     low  = a[1].real or -1
+     high  = a[2].real or 1
+     u = RNG.uniform(low=low,high=high,size=N)
+     v = RNG.uniform(low=low,high=high,size=N)
+     z = np.concatenate((z,u+1j*v))
+     return z
+
+ALLOWED["runif"] = op_runif
+
+
+#disk
+def op_rud(z, a, state):
+    N   = int(a[0].real) or 1_000_000
+    dth = float(a[1].real) or 0.5
     u1 = np.random.random(N)
     u2 = np.random.random(N)
     r  = u1 ** dth
-    th = 2.0 * np.pi * u2
-    c = np.cos(th); s = np.sin(th)
-    x = (r * c).astype(np.float64, copy=False)
-    y = (r * s).astype(np.float64, copy=False)
-    return x + 1j * y
+    th = np.exp(1j * 2.0 * np.pi * u2)
+    z = np.concatenate((z, r*th))
+    return z
 
-ALLOWED["rng_circle"] = op_rng_circle
+ALLOWED["rud"] = op_rud
 
-def op_rng_square(z, a, state):
-    """
-    a[0]=N, a[1]=seed (optional)
-    """
-    N = int(a[0].real)
-    if a.size > 1 and a[1].real != 0.0:
-        np.random.seed(int(a[1].real))
+#arc
+def op_rua(z, a, state):
+    N   = int(a[0].real) or 1_000_000
+    start = min(a[1].real,a[1].imag)
+    end = max(a[1].real,a[1].imag)
+    rmax = a[2].real
+    center = a[3]
+    dth = float(a[4].real) or 0.5
+    u1 = np.random.uniform(low=0,high=rmax,size=N)
+    r  = u1 ** dth
+    u2 = np.random.uniform(low=start,high=end,size=N)
+    th = np.exp(1j * 2.0 * np.pi * u2)
+    z = np.concatenate((z, r*th+center)) 
+    return z
+
+ALLOWED["rua"] = op_rua
+
+# square
+def op_rus(z, a, state):
+    N = int(a[0].real) or 1_000_000
+    dth = float(a[1].real) or 1.0
     x = np.random.uniform(-1.0, 1.0, size=N).astype(np.float64, copy=False)
     y = np.random.uniform(-1.0, 1.0, size=N).astype(np.float64, copy=False)
-    return x + 1j * y
+    x = np.sign(x)*np.abs(x)**dth
+    y = np.sign(y)*np.abs(y)**dth
+    z = np.concatenate((z,x + 1j * y))
+    return z
 
-ALLOWED["rng_square"] = op_rng_square
+ALLOWED["rus"] = op_rus
 
-@njit(cache=True, nogil=True, parallel=True, fastmath=True)
-def op_rng_circle_njit(N: int, dth: float):
-    # Numba RNG uses its own generator; reproducible per process
-    x = np.empty(N, np.float64)
-    y = np.empty(N, np.float64)
-    two_pi = 6.283185307179586
-    for i in prange(N):
-        u1 = np.random.random()               # Numba's RNG inside njit
-        u2 = np.random.random()
-        r  = u1 ** dth
-        th = two_pi * u2
-        c  = np.cos(th); s = np.sin(th)
-        x[i] = r * c; y[i] = r * s
-    return x + 1j*y
 
-ALLOWED["rng_circle_jit"] = op_rng_circle_njit
-
-@njit(cache=True, nogil=True, parallel=True, fastmath=True)
-def op_sizes_lognormal_njit(n: int, lmu: float, lsig: float, drt: float):
-    mult = np.empty(n, np.float32)
-    for i in prange(n):
-        z = np.random.normal()                # Numba RNG
-        m = np.exp(lmu + lsig * z)
-        if m < 1.0:
-            m = 1.0
-        elif m > drt:
-            m = drt
-        mult[i] = m
-    return mult
-
-ALLOWED["sizes_lognormal_jit"] = op_sizes_lognormal_njit
-
-def op_rng_triangle(z, a, state):
-    """
-    a[0]=N, a[1]=seed (optional)
-    Equilateral triangle of side ~2 centered near origin.
-    """
-    N = int(a[0].real)
-    if a.size > 1 and a[1].real != 0.0:
-        np.random.seed(int(a[1].real))
+def op_rtr(z, a, state):
+    N = int(a[0].real) or 1_000_000
+    dthx = float(a[1].real) or 1.0
+    dthy = float(a[2].real) or dthx
     h = np.sqrt(3) / 2
-    A = (-1.0, -h); B = (1.0, -h); C = (0.0, h)
-    u = np.random.random(N); v = np.random.random(N)
+    A = np.asarray((-1.0, -h), dtype=np.float64)
+    B = np.asarray(( 1.0, -h), dtype=np.float64)
+    C = np.asarray(( 0.0,  h), dtype=np.float64)
+    u = np.random.random(N)
+    v = np.random.random(N)
+    # reflect across diagonal for u+v>1
     mask = (u + v) > 1.0
     u[mask] = 1.0 - u[mask]
     v[mask] = 1.0 - v[mask]
+    # affine combination
     x = A[0] + u * (B[0] - A[0]) + v * (C[0] - A[0])
     y = A[1] + u * (B[1] - A[1]) + v * (C[1] - A[1])
-    return x + 1j * y
+    x = np.sign(x)*np.abs(x)**dthx
+    y = np.sign(y)*np.abs(y)**dthy
+    z = np.concatenate((z,x + 1j*y))
+    return z
 
-ALLOWED["rng_triangle"] = op_rng_triangle
+ALLOWED["rtr"] = op_rtr
+
+def op_rtrd(z, a, state):
+    N = int(a[0].real) or 1_000_000
+    alpha_C = max(float(a[1].real) or 1.0, 1e-6)
+    alpha_A = max(float(a[2].real) or 1.0, 1e-6)
+    alpha_B = max(float(a[3].real) or 1.0, 1e-6)
+    # Dirichlet via normalized Gamma(α, 1) draws
+    gA = np.random.gamma(shape=alpha_A, scale=1.0, size=N)
+    gB = np.random.gamma(shape=alpha_B, scale=1.0, size=N)
+    gC = np.random.gamma(shape=alpha_C, scale=1.0, size=N)
+    s  = gA + gB + gC
+    wA = gA / s
+    wB = gB / s
+    wC = gC / s
+    h = np.sqrt(3.0) / 2.0
+    shift = h / 3.0        # = √3 / 6
+    A = np.array([-1.0, -h+shift], dtype=np.float64)
+    B = np.array([ 1.0, -h+shift], dtype=np.float64)
+    C = np.array([ 0.0,  h+shift], dtype=np.float64)
+    # Linear map preserves triangular outline
+    x = wA * A[0] + wB * B[0] + wC * C[0]
+    y = wA * A[1] + wB * B[1] + wC * C[1]
+    z = np.concatenate((z,x + 1j * y))
+    return z
+
+ALLOWED["rtrd"] = op_rtrd
+
+def op_rsqd(z, a, state):
+    N = int(a[0].real) or 1_000_000
+    alpha_A = max(float(a[1].real) or 1.0, 1e-6)
+    alpha_B = max(float(a[2].real) or 1.0, 1e-6)
+    alpha_C = max(float(a[3].real) or 1.0, 1e-6)
+    alpha_D = max(float(a[4].real) or 1.0, 1e-6)
+    gA = np.random.gamma(shape=alpha_A, scale=1.0, size=N)
+    gB = np.random.gamma(shape=alpha_B, scale=1.0, size=N)
+    gC = np.random.gamma(shape=alpha_C, scale=1.0, size=N)
+    gD = np.random.gamma(shape=alpha_D, scale=1.0, size=N)
+    s  = gA + gB + gC + gD
+    wA = gA / s
+    wB = gB / s
+    wC = gC / s
+    wD = gD / s
+    A = np.array([ -1.0, +1.0], dtype=np.float64)
+    B = np.array([ +1.0, +1.0], dtype=np.float64)
+    C = np.array([ -1.0, -1.0], dtype=np.float64)
+    D = np.array([ +1.0, -1.0], dtype=np.float64)
+    # Linear map preserves square outline
+    x = wA * A[0] + wB * B[0] + wC * C[0] + wD * D[0]
+    y = wA * A[1] + wB * B[1] + wC * C[1] + wD * D[1]
+    z = np.concatenate((z,x + 1j * y))
+    return z
+
+ALLOWED["rsqd"] = op_rsqd
+
+# ---------- deterministic random ----------
+
+@njit(cache=True, nogil=True, fastmath=True)
+def op_serp(z, a, state):
+    n = int(a[0].real) or 2**20
+    n = int(round(math.sqrt(n))**2)
+    if n <= 0: return np.empty(0, np.complex128)
+    cols = int(math.sqrt(n))
+    rows = cols
+    zs = np.empty(n, np.complex128)
+    for k in range(n):
+        r = k // cols
+        c = k % cols
+        if (r & 1) == 1:
+            c_eff = cols - 1 - c
+        else:
+            c_eff = c
+        x = (c_eff + 0.5) / cols -0.5
+        y = (r + 0.5) / rows - 0.5
+        zs[k] = x + 1j * y
+    z=np.concatenate((z,zs))
+    return z
+
+ALLOWED["serp"] = op_serp
+
+# ---------- cartesian random ----------
+
+def op_carunif(z, a, state):
+    N = int(a[0].real) or 100
+    w = float(a[1].real) or 0.01  # pick a sensible default in your units
+    n = z.size
+    if n == 0 or N <= 0: return np.empty(0, np.complex128)
+    u = np.random.uniform(-w, +w, size=(N, n))
+    v = np.random.uniform(-w, +w, size=(N, n))
+    out = (z[None, :] + u + 1j * v).reshape(N * n)
+    return out
+
+ALLOWED["carunif"] = op_carunif
+
+def op_cardsk(z, a, state):
+    N = int(a[0].real) or 100
+    r = float(a[1].real) or 0.02  
+    dth = float(a[2].real) or 0.5 
+    n = z.size
+    if n == 0 or N <= 0: return np.empty(0, np.complex128)
+    u = np.random.uniform(0,1, size=(N, n))
+    v = np.random.uniform(0,1, size=(N, n))
+    p =  r*(u**dth)*np.exp(1j*2*np.pi*v)
+    out = (z[None, :] + p).reshape(N * n)
+    return out
+
+ALLOWED["cardsk"] = op_cardsk
+
+# ---------- diffusion ops ----------
+
+@njit(cache=True, nogil=True)
+def op_walk(z, a, state):
+    scale = a[0].real or 1e-3
+    steps = int(a[1].real) or 1
+    for _ in range(steps):
+        u = np.random.uniform(low=-scale, high=scale, size=z.size)
+        v = np.random.uniform(low=-scale, high=scale, size=z.size)
+        d = u+1j*v
+        z += d
+    return z
+
+ALLOWED["walk"] = op_walk
+
+@njit(cache=True, nogil=True)
+def op_pwalk(z, a, state):
+    scale = a[0].real or 1e-3
+    pow   = a[1].real or 1.0
+    steps = int(a[2].real) or 1
+    a = np.abs(z)**pow
+    for i in range(steps):
+        u = np.random.uniform(-scale, scale, size=z.size)
+        v = np.random.uniform(-scale, scale, size=z.size)
+        d = u+1j*v
+        z += d*a
+    return z
+
+ALLOWED["pwalk"] = op_pwalk
+
+@njit(cache=True, nogil=True)
+def op_disk_diffuse(z, a, state):
+    steps = int(a[1].real)
+    if steps==0: return z
+    scale = a[0].real or 1e-3
+    pow = a[2].real or 1
+    dist = np.abs(z)**pow
+    for i in range(steps):
+        u = np.random.uniform(-scale, scale, size=z.size)
+        v = np.random.uniform(-scale, scale, size=z.size)
+        z += (u+1j*v)*dist
+    return z
+
+ALLOWED["ddiffuse"] = op_disk_diffuse
+
+# ---------- clip ops ----------
+
+def op_dclip(z, a, state):
+    r = a[0].real or 1
+    c = a[1]
+    mask = np.abs(z-c)>r
+    return z[mask]
+
+ALLOWED["dclip"] = op_dclip
+
+def op_sclip(z, a, state):
+    r = a[0].real or 1
+    c = a[1]
+    dx = z.real - c.real
+    dy = z.imag - c.imag
+    inside = (np.abs(dx) < r) & (np.abs(dy) < r)
+    return z[~inside]
+
+ALLOWED["sclip"] = op_sclip
+
+
+# ---------- simple ops ----------
+
+def op_add(z, a, state):
+    z += a[0]
+    return z
+
+ALLOWED["add"] = op_add
+
+def op_mul(z, a, state):
+    z *= a[0]
+    return z
+
+ALLOWED["mul"] = op_mul
+
+def op_rmul(z, a, state):
+    zz = z.real * a[0] + 1j * z.imag
+    return zz
+
+ALLOWED["rmul"] = op_rmul
+
+def op_imul(z, a, state):
+    zz = z.real + 1j * z.imag * a[0]
+    return zz
+
+ALLOWED["imul"] = op_imul
+
+
+def op_rot(z, a, state):
+    phi = np.exp(1j * 2.0 * np.pi * a[0].real)
+    return z * phi
+
+ALLOWED["rot"] = op_rot
+
+def op_rth(z, a, state):
+    dth = a[0].real or 0.5
+    r = np.sign(z.imag)*np.abs(z.imag) ** dth
+    th = np.exp(1j * 2.0 * np.pi * z.real)
+    zz = r*th
+    return zz
+
+ALLOWED["rth"] = op_rth
+
+
+def op_toline(z, a, state):
+    num = 1+z
+    den = 1-z
+    line = 1j * num/den
+    return line
+
+ALLOWED["toline"] = op_toline
 
 # ---------- JIT kernels for build_logo ----------
 
@@ -241,58 +480,144 @@ def op_squish(z, a, state):
 
 ALLOWED["squish"] = op_squish
 
-def op_rot(z, a, state):
-    # a[0]=frt (turns)
-    phi = 2.0 * np.pi * a[0].real
-    c = np.cos(phi); s = np.sin(phi)
+
+
+# =========================
+# Sinks
+# =========================
+
+@njit(cache=True, nogil=True, parallel=True, fastmath=True)
+def _sink_gaussian_inplace_fast(x, y, Cx, Cy, alpha, sigma):
+    """
+    In-place Gaussian sink:
+      x,y : float64[:]
+      Cx,Cy : sink location
+      alpha : strength (>=0)
+      sigma : decay (>0). If sigma<=0, behaves like linear pull with factor alpha.
+    """
+    n = x.size
+    if sigma <= 0.0:
+        # linear pull: z' = (1-alpha) z + alpha C
+        one_minus = 1.0 - alpha
+        for i in prange(n):
+            xi = x[i]; yi = y[i]
+            x[i] = one_minus * xi + alpha * Cx
+            y[i] = one_minus * yi + alpha * Cy
+        return
+
+    sig2 = sigma * sigma
+    for i in prange(n):
+        dx = x[i] - Cx
+        dy = y[i] - Cy
+        r2 = dx*dx + dy*dy
+        f  = alpha * np.exp(- r2 / sig2)   # pull factor in [0, alpha]
+        x[i] = x[i] - dx * f
+        y[i] = y[i] - dy * f
+
+def op_sink(z, a, state):
+    """
+    Pipeline op: Gaussian sink.
+    a[0] = C (complex), a[1] = alpha (real), a[2] = sigma (real)
+    Returns z (mutated in-place).
+    """
+    C = a[0]
+    alpha = float(a[1].real if a.size > 1 else 0.0)
+    sigma = float(a[2].real if a.size > 2 else 1.0)
     x, y = _as_xy(z)
-    xr = x*c - y*s
-    yr = x*s + y*c
-    x[:] = xr; y[:] = yr
+    _sink_gaussian_inplace_fast(x, y, C.real, C.imag, alpha, sigma)
     return z
 
-ALLOWED["rot"] = op_rot
+ALLOWED["sink"] = op_sink
+
+@njit(cache=True, nogil=True, parallel=True, fastmath=True)
+def _nsink_inplace_fast(x, y, Cx, Cy, alpha,eps):
+    """
+    Newtonian (inverse-square) sink/repulsor:
+      z' = z - alpha * (z - C) / (|z - C|^2 + eps^2)
+    alpha > 0  -> attraction
+    alpha < 0  -> repulsion
+    """
+    n = x.size
+    for i in prange(n):
+        dx = x[i] - Cx
+        dy = y[i] - Cy
+        r2 = dx*dx + dy*dy + eps
+        inv = 1.0 / r2
+        fx = alpha * dx * inv
+        fy = alpha * dy * inv
+        x[i] = x[i] - fx
+        y[i] = y[i] - fy
+
+def op_nsink(z, a, state):
+    """
+    Pipeline op: Newtonian sink (inverse-square).
+      a[0] = C (complex sink location)
+      a[1] = alpha (real strength; <0 repels)
+    Returns z (mutated in-place).
+    """
+    C = a[0]
+    eps = a[1].real
+    alpha = float(a[1].real if a.size > 1 else 0.0)
+    x, y = _as_xy(z)
+    _nsink_inplace_fast(x, y, C.real, C.imag, alpha,eps)
+    return z
+
+ALLOWED["nsink"] = op_nsink
 
 # =========================
 # Size/mult ops (write to state)
 # =========================
 
-def op_sizes_lognormal(z, a, state):
-    """
-    a[0]=lmu, a[1]=lsig, a[2]=drt (clip upper), a[3]=seed (optional)
-    Writes multipliers (float) into state[K_MULT] as complex vector (imag=0).
-    """
-    lmu  = float(a[0].real)
-    lsig = float(a[1].real)
-    drt  = float(a[2].real) if a.size > 2 else np.inf
-    if a.size > 3 and a[3].real != 0.0:
-        np.random.seed(int(a[3].real))
-
-    zeta = np.random.normal(0.0, 1.0, size=z.size)
-    mult = np.exp(lmu + lsig * zeta).astype(np.float64)
-    if np.isfinite(drt):
-        np.clip(mult, 1.0, drt, out=mult)
-
-    # store in state as complex[:] (real=mult, imag=0)
-    vec = np.empty(mult.size, np.complex128)
-    vec.real = mult
-    vec.imag = 0.0
+def op_dot_lognormal(z, a, state):
+    loc   = float(a[0].real) or 0.5
+    scale = float(a[1].real) or 1.25
+    drt   = float(a[2].real) or 100
+    zeta = RNG.normal(loc=loc, scale=scale, size=z.size)
+    mult = np.exp(zeta).astype(np.float64)
+    np.clip(mult, 1.0, drt, out=mult)
+    vec = mult+0j
     state[K_MULT] = vec
     return z
 
-ALLOWED["sizes_ln"] = op_sizes_lognormal
+ALLOWED["ldot"] = op_dot_lognormal
 
-def op_sizes_const(z, a, state):
-    """
-    a[0]=value (default 1.0). Fallback if user doesn’t specify sizes.
-    """
+def op_dot(z, a, state):
     val = float(a[0].real) if a.size > 0 else 1.0
-    vec = np.empty(z.size, np.complex128)
-    vec.real = val; vec.imag = 0.0
+    vec = np.full(z.size, val + 0j, dtype=np.complex128)
     state[K_MULT] = vec
     return z
 
-ALLOWED["sizes"] = op_sizes_const
+ALLOWED["dot"] = op_dot
+
+# =========================
+# macros
+# =========================
+
+def macro(z0,spec:str): # spec runner
+    state = Dict.empty(key_type=types.int8, value_type=types.complex128[:])
+    names, A = specparser.parse_names_and_args(spec, MAXA=12)
+    z=z0
+    print(names)
+    for k, name in enumerate(names):
+        fn = ALLOWED.get(name)
+        if fn is None:
+            raise ValueError(f"Unknown op '{name}'.")
+        z = fn(z, A[k], state)
+    z=np.concatenate((z0,z))
+    return z
+
+def op_yin(z, a, state):
+    N = a[0].real or 1e5
+    size = a[1].real or 1
+    spec = (
+        f"rud:{N},sclip:1:1+0j,"
+        f"dclip:0.5:0+0.5j,"
+        f"rua:{N/8}:0.75+1.25j:0.25:0-0.5j,"
+        f"add:0.5j,mul:{size}"
+    )
+    return macro(z,spec)
+
+ALLOWED["yin"] = op_yin
 
 # ===== executor (no JIT needed; kernels inside are Numba-fast) =====
 def apply_chain(z0: np.ndarray, names: list[str], A: np.ndarray, state) -> tuple[np.ndarray, np.ndarray]:
