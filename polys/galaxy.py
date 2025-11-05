@@ -476,6 +476,13 @@ def op_rot(z, a, state):
     return z
 ALLOWED["rot"] = op_rot
 
+# global rotate: ignores groups. at the end.
+def op_grot(z, a, state):
+    phi = np.exp(1j * 2.0 * np.pi * a[0].real)
+    z *= phi
+    return z
+ALLOWED["grot"] = op_grot
+
 def op_rth(z, a, state):
     """
     Radius-from-imag (with exponent), angle-from-real:
@@ -517,6 +524,18 @@ def op_toline(z, a, state):
     return z
 
 ALLOWED["toline"] = op_toline
+
+def op_csum(z, a, state):
+    mult = state.get(K_MULT)
+    k = 0 if (mult is None) else mult.size
+    if k < z.size:
+        tail = z[k:]
+        z[k:] = np.cumsum(tail)
+    return z
+
+ALLOWED["csum"] = op_csum
+
+
 
 # ---------- JIT kernels for build_logo ----------
 
@@ -664,7 +683,96 @@ def op_squish(z, a, state):
 
 ALLOWED["squish"] = op_squish
 
+# ---------- kaleidoscope transforms ----------
 
+def op_elkal(z, a, state):
+    # ---- params (no a.size checks) ----
+    N            = int(a[0].real) or 8
+    inner_turns  = float(a[1].real) or 0.5  # rotations for inner ring, in turns
+    inner_ratio  = float(a[2].real) or 0.5  # 0..1; 1=circle, 0=line
+    r0  = float(a[3].real) or 0.1  # 0..1; 1=circle, 0=line
+ 
+    # ---- tail-only ----
+    k = _frozen_len(state)
+    if k >= z.size:
+        return z
+    tail  = z[k:]
+    r_raw = tail.real.astype(np.float64, copy=False)
+    th_raw= tail.imag.astype(np.float64, copy=False)
+
+    # normalize radius seed to [0,1] across the tail
+    rmin = r_raw.min(); rmax = r_raw.max()
+    denom = rmax - rmin
+    r01 = np.zeros_like(r_raw) if denom <= 0.0 else (r_raw - rmin) / denom
+
+    # ring index and ring radius (midpoints), mapped from r0..1
+    ring = np.clip((r01 * N).astype(np.int64), 0, N - 1)
+    t_ring = (ring + 0.5) / N                  # 0..1
+    rho = r0 + (1.0 - r0) * t_ring             # inner→outer radius
+
+    # angle from fractional part of theta seed
+    th = th_raw - np.floor(th_raw)
+    ang = 2.0 * np.pi * th
+
+    # per-ring ellipse squish & rotation, interpolated inner->outer
+    #   ratio(r)    : inner_ratio  --> 1.0
+    #   turns(r)    : inner_turns  --> 0.0
+    ratio = inner_ratio + (1.0 - inner_ratio) * t_ring
+    turns = inner_turns * (1.0 - t_ring)
+    rot   = np.exp(2j * np.pi * turns)         # complex unit rotation per ring
+
+    # base circle on each ring
+    cz = rho * (np.cos(ang) + 1j * np.sin(ang))
+
+    # make ellipse by scaling y by 'ratio', then rotate by 'rot'
+    ex = cz.real
+    ey = cz.imag * ratio
+    ez = (ex + 1j * ey) * rot
+
+    tail[:] = ez
+    return z
+
+ALLOWED["elkal"] = op_elkal
+
+# ellipse-kaleidoscope: hand-made version
+def op_elkal1(z, a, state):
+    N             =  int(a[0].real) or 8
+    outer_turns   =  float(a[1].real) or 0.5   # rotations at outer ring, in turns
+    inner_ratio   =  float(a[2].real) or 0.5   # 0..1; 1=circle, 0=line
+    inner_radius  =  float(a[3].real) or 0.1   #
+    k = _frozen_len(state)
+    if k >= z.size: return z
+    tail  = z[k:] # view not copy
+    t = np.round((tail.real % 1) * N)/N
+    squish = 1*t+inner_ratio*(1.0-t)
+    turn = np.exp(1j * 2* np.pi * outer_turns * t)
+    R = (1.0 * t + inner_radius * (1.0-t))
+    theta = tail.imag % 1
+    zz =  R * np.exp(1j * 2 * np.pi * theta)
+    ez = (zz.real + 1j * zz.imag * squish) * turn
+    tail[:] = ez
+    return z
+
+ALLOWED["elkal1"] = op_elkal1
+
+# line-claeidoscope: hand-made version
+def op_linkal(z, a, state):
+    N             =  int(a[0].real) or 8
+    outer_turns   =  float(a[1].real) or 0.5   # rotations at outer ring, in turns
+    inner_width   =  float(a[2].real) or 0.5   # 0..1; 1=circle, 0=line
+    k = _frozen_len(state)
+    if k >= z.size: return z
+    tail  = z[k:] # view not copy
+    t = np.round((tail.real % 1) * N)/N
+    s = tail.imag % 1
+    width = 1*t+inner_width*(1.0-t)
+    turn = np.exp(1j * 2* np.pi * outer_turns * t)
+    zz =  width * (t-0.5) + 1j * s
+    ez = zz * turn
+    tail[:] = ez
+    return z
+
+ALLOWED["linkal"] = op_linkal
 
 # =========================
 # Sinks
@@ -744,6 +852,7 @@ def op_nsink(z, a, state):
 
 ALLOWED["nsink"] = op_nsink
 
+
 # =========================
 # Size/mult ops (write to state)
 # =========================
@@ -798,8 +907,9 @@ def op_dot(z, a, state):
         return z
 
     # constant size value
-    val = float(a[0].real) if a.size > 0 else 1.0
-    mult_tail_real = np.full(tail_len, val, dtype=np.float64)
+    val = float(a[0].real) or 1.0
+    mul = float(a[1].real) or 1.0
+    mult_tail_real = np.full(tail_len, val*mul, dtype=np.float64)
 
     # current group id (last gid + 1 or 1 if first)
     gid = _current_gid(state)
@@ -870,6 +980,29 @@ def op_dot_copy(z, a, state):
 
 ALLOWED["dcopy"] = op_dot_copy
 
+def op_dneg(z, a, state):
+    """
+    Flip the sizes (real part) of the *previous* group to negative in-place.
+    Does not change group ids or geometry.
+    """
+    mult = state.get(K_MULT)
+    if mult is None or mult.size == 0:
+        return z
+
+    # previous gid is current_gid - 1
+    prev_gid = _current_gid(state) - 1
+    if prev_gid < 1:
+        return z
+
+    # flip sizes for that gid (across all written multipliers)
+    m = (mult.imag == float(prev_gid))
+    if np.any(m):
+        mult.real[m] *= -1.0
+        state[K_MULT] = mult  # store back (same array, explicit for clarity)
+    return z
+
+ALLOWED["dneg"] = op_dneg
+
 # =========================
 # macros
 # =========================
@@ -901,12 +1034,25 @@ ALLOWED["yin"] = op_yin
 
 def op_kirby(z,a,state):
     N = a[0].real or 1e7
+    dr = a[1].real or 500
     spec = (
-        f"rud:{N}:0.1,osclip:0.5,ldot:4:1.5:500"
+        f"rud:{N}:0.1,osclip:0.5,ldot:4:1.5:{dr}"
     )
     return macro(spec,z,state)
 
 ALLOWED["kirby"] = op_kirby
+
+def op_barred(z,a,state):
+    N = a[0].real or 1e7
+    swa = a[1].real or -0.33
+    swb = a[2].real or 1
+    scale = a[3].real or 1
+    spec = ( 
+        f"rud:{N}:0.5,td:1:0.01:1.25,swirl:{swa}:{swb},arms:2,mul:{scale},dot:pix"
+    )
+    return macro(spec,z,state)
+
+ALLOWED["barred"] = op_barred
 
 # ===== executor (no JIT needed; kernels inside are Numba-fast) =====
 def apply_chain(z0: np.ndarray, names: list[str], A: np.ndarray, state):

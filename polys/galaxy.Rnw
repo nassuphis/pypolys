@@ -351,8 +351,8 @@ Questions:
 
 <<, engine='bash', eval=run_code, include=FALSE>>=
 python galaxy_cli.py \
---chain 'rud:4e6:1,imul:0.33,rot:-0.1,walk:10e-3:100,ldot:0:1.25:200' \
---pix 5000 --footer --out galaxy_stylize4.png --margin 0.33
+--chain 'kirby:1e7:2000,barred:1e6:0.5:2:0.1' \
+--pix 5000 --out galaxy_stylize4.png --margin 0
 @
 
 \begin{center}
@@ -385,7 +385,7 @@ Questions:
 }
 &
 \adjustbox{valign=t}{%
-  %\includegraphics[width=7cm,height=7cm]{galaxy_stylize4.png}%
+  \includegraphics[width=7cm,height=7cm]{galaxy_stylize4.png}%
 } 
 \\
 \end{tabular}
@@ -393,8 +393,8 @@ Questions:
 
 <<, engine='bash', eval=run_code, include=FALSE>>=
 python galaxy_cli.py \
---chain 'rud:4e6:1,imul:0.33,rot:-0.1,walk:10e-3:100,ldot:0:1.25:200' \
---pix 5000 --footer --out galaxy_stylize5.png --margin 0.33
+--chain 'kirby:1e7:500,yin:4e6,imul:-0.5,arms:2,mul:3,swirl:0.4:2,rmul:0.75,mul:0.1,dot:pix' \
+--pix 5000 --out galaxy_stylize5.png --margin 0 --invert
 @
 
 \begin{center}
@@ -427,7 +427,7 @@ Questions:
 }
 &
 \adjustbox{valign=t}{%
-  %\includegraphics[width=7cm,height=7cm]{galaxy_stylize4.png}%
+  \includegraphics[width=7cm,height=7cm]{galaxy_stylize5.png}%
 } 
 \\
 \end{tabular}
@@ -435,8 +435,8 @@ Questions:
 
 <<, engine='bash', eval=run_code, include=FALSE>>=
 python galaxy_cli.py \
---chain 'rud:4e6:1,imul:0.33,rot:-0.1,walk:10e-3:100,ldot:0:1.25:200' \
---pix 5000 --footer --out galaxy_stylize6.png --margin 0.33
+--chain 'runif:5e6:0:1,elkal:25:-0.75:0.125:0.5,walk:5e-3:50,rot:-0.22,ldot:1:1.5:500,rud:1e6:2,mul:0.5,imul:0.25,rot:-0.25,rot:-0.22,ldot:1.2:1.5:2000' \
+--pix 5000 --out galaxy_stylize6.png --margin 0 --invert
 @
 
 \begin{center}
@@ -469,7 +469,7 @@ Questions:
 }
 &
 \adjustbox{valign=t}{%
-  %\includegraphics[width=7cm,height=7cm]{galaxy_stylize4.png}%
+  \includegraphics[width=7cm,height=7cm]{galaxy_stylize6.png}%
 } 
 \\
 \end{tabular}
@@ -480,8 +480,8 @@ Questions:
 
 <<, engine='bash', eval=run_code, include=FALSE>>=
 python galaxy_cli.py \
---chain 'rud:4e6:1,imul:0.33,rot:-0.1,walk:10e-3:100,ldot:0:1.25:200' \
---pix 5000 --footer --out galaxy_stylize7.png --margin 0.33
+--chain 'runif:5e6:0:1,elkal:25:-0.75:0.125:0.5,walk:5e-3:50,ldot:1:1.5:500,rud:1e6:2,mul:0.5,imul:0.25,rot:-0.25,ldot:1.2:1.5:2000,grot:-0.22' \
+--pix 5000 --out galaxy_stylize7.png --margin 0
 @
 
 \begin{center}
@@ -514,7 +514,7 @@ Questions:
 }
 &
 \adjustbox{valign=t}{%
-  %\includegraphics[width=7cm,height=7cm]{galaxy_stylize7.png}%
+  \includegraphics[width=7cm,height=7cm]{galaxy_stylize7.png}%
 } 
 \\
 \end{tabular}
@@ -522,8 +522,8 @@ Questions:
 
 <<, engine='bash', eval=run_code, include=FALSE>>=
 python galaxy_cli.py \
---chain 'rud:4e6:1,imul:0.33,rot:-0.1,walk:10e-3:100,ldot:0:1.25:200' \
---pix 5000 --footer --out galaxy_stylize8.png --margin 0.33
+--chain 'runif:5e6:0:1,elkal:50:-5:0.125:0.01,walk:5e-3:25,rot:-0.22,rmul:0.75,rot:-0.05,ldot:1:1.5:500' \
+--pix 5000 --out galaxy_stylize8.png --margin 0
 @
 
 \begin{center}
@@ -551,7 +551,7 @@ Questions:
 }
 &
 \adjustbox{valign=t}{%
-  %\includegraphics[width=7cm,height=7cm]{galaxy_stylize8.png}%
+  \includegraphics[width=7cm,height=7cm]{galaxy_stylize8.png}%
 } 
 \\
 \end{tabular}
@@ -618,7 +618,7 @@ Questions:
 
 
 \newpage
-\section{Logo Mockup}
+\section{Logo Mockup 1}
 
 \vskip 3cm
 
@@ -648,19 +648,60 @@ Questions:
 {\Huge\sffamily Symmetra} \\
 {\Huge\sffamily Capital}
 \end{tabular}} 
+\\[-0.5ex]\noalign{\vspace{2cm}}
+
+\scalebox{2}{\begin{tabular}{c}
+\adjustbox{valign=t}{\includegraphics[width=1.25cm,height=1.25cm]{galaxy_stylize4.png}} \\[-1mm]
+{\Huge\sffamily Symmetra} \\
+{\Huge\sffamily Capital}
+\end{tabular}} 
+& 
+\scalebox{2}{\begin{tabular}{c}
+\adjustbox{valign=t}{\includegraphics[width=1.25cm,height=1.25cm]{galaxy_stylize5.png}} \\[-1mm]
+{\Huge\sffamily Symmetra} \\
+{\Huge\sffamily Capital}
+\end{tabular}} 
 \\
 
 \end{tabular}
 \end{center}
 
-\vskip 5cm 
+\newpage
+\section{Logo Mockup 2}
+\vskip 3cm
 
-\begin{itemize}
-    \item any of the stylized examples can be used
-    \item invert ? stylize more ? less ?
-    \item arrangement ? top ? side ?
-    \item why not just paste a nice picture ?
-\end{itemize}
+\begin{center}
+\begin{tabular}{c@{\hspace{2cm}}c}
+
+\scalebox{2}{\begin{tabular}{c}
+\adjustbox{valign=t}{\includegraphics[width=1.25cm,height=1.25cm]{galaxy_stylize6.png}} \\[-1mm]
+{\Huge\sffamily Symmetra} \\
+{\Huge\sffamily Capital}
+\end{tabular}} 
+& 
+\scalebox{2}{\begin{tabular}{c}
+\adjustbox{valign=t}{\includegraphics[width=1.25cm,height=1.25cm]{galaxy_stylize7.png}} \\[-1mm]
+{\Huge\sffamily Symmetra} \\
+{\Huge\sffamily Capital}
+\end{tabular}} 
+\\[-0.5ex]\noalign{\vspace{2cm}}
+
+\scalebox{2}{\begin{tabular}{c}
+\adjustbox{valign=t}{\includegraphics[width=1.25cm,height=1.25cm]{galaxy_stylize8.png}} \\[-1mm]
+{\Huge\sffamily Symmetra} \\
+{\Huge\sffamily Capital}
+\end{tabular}} 
+& 
+\scalebox{2}{\begin{tabular}{c}
+\adjustbox{valign=t}{\includegraphics[width=1.25cm,height=1.25cm]{galaxy_stylize8.png}} \\[-1mm]
+{\Huge\sffamily Symmetra} \\
+{\Huge\sffamily Capital}
+\end{tabular}} 
+\\[-0.5ex]\noalign{\vspace{2cm}}
+
+\end{tabular}
+\end{center}
+
 
 \newpage
 \section{Engineering: How Images Were Constructed}

@@ -24,6 +24,17 @@ def stamp_points(
             if 0 <= y < H and 0 <= x < W:
                 canvas[y, x] = 255
 
+@njit(cache=True, nogil=True, parallel=True, fastmath=True)
+def stamp_points_val(canvas, ys, xs, dy, dx, value):
+    H, W = canvas.shape
+    n = ys.size; k = dy.size
+    for i in prange(n):
+        y0 = ys[i]; x0 = xs[i]
+        for j in range(k):
+            y = y0 + dy[j]; x = x0 + dx[j]
+            if 0 <= y < H and 0 <= x < W:
+                canvas[y, x] = value  # 255 draw, 0 erase
+
 @njit(cache=True, nogil=True)
 def bucket_by_radius(r_px: np.ndarray, r_min: int, r_max: int):
     n = r_px.size
