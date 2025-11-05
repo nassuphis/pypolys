@@ -5,16 +5,22 @@ from numba import njit, prange
 import pyvips as vips
 
 @njit(cache=True, nogil=True, parallel=True, fastmath=True)
-def stamp_points(canvas: np.ndarray,
-                 ys: np.ndarray, xs: np.ndarray,
-                 dy: np.ndarray, dx: np.ndarray):
+def stamp_points(
+    canvas: np.ndarray,
+    ys: np.ndarray, 
+    xs: np.ndarray,
+    dy: np.ndarray, 
+    dx: np.ndarray
+):
     H, W = canvas.shape
     n = ys.size
     k = dy.size
     for i in prange(n):
-        y0 = ys[i]; x0 = xs[i]
+        y0 = ys[i] 
+        x0 = xs[i]
         for j in range(k):
-            y = y0 + dy[j]; x = x0 + dx[j]
+            y = y0 + dy[j]
+            x = x0 + dx[j]
             if 0 <= y < H and 0 <= x < W:
                 canvas[y, x] = 255
 
@@ -250,6 +256,80 @@ def add_footer_label(
 
     return base  # fallback: unchanged
 
+import pyvips as vips
+
+def add_rounded_passepartout_bilevel_pct(
+    img: vips.Image,
+    margin_frac: float = 0.10,   # 10% of width
+    radius_frac: float = 0.04,   # 4% of width
+    auto_white_bg: bool = True,
+    mat_value: int | None = None,
+):
+    if img.bands != 1:
+        raise ValueError("Expected a single-band (1-channel) image.")
+    base = img if img.format == "uchar" else img.cast("uchar")
+
+    H, W = base.height, base.width
+    if H != W:
+        raise ValueError("Expected a square image.")
+
+    # px from fractions
+    margin_px = max(0, int(round(W * float(margin_frac))))
+    radius_px = max(0, int(round(W * float(radius_frac))))
+    Wc, Hc = W + 2 * margin_px, H + 2 * margin_px
+
+    # --- decide mat color (0 or 255) ---
+    if auto_white_bg:
+        b = max(2, int(round(0.005 * W)))
+        strip = vips.Image.arrayjoin(
+            [
+                base.crop(0, 0, W, b),
+                base.crop(0, H - b, W, b),
+                base.crop(0, 0, b, H),
+                base.crop(W - b, 0, b, H),
+            ],
+            across=2,
+        )
+        mean_val = float(strip.avg())
+        mat = 255 if mean_val < 96 else 0
+    else:
+        if mat_value is None:
+            mat_value = 255
+        mat = 255 if mat_value > 127 else 0
+
+    # canvas with mat color, paste the image
+    canvas  = vips.Image.black(Wc, Hc).new_from_image(mat)
+    composed = canvas.insert(base, margin_px, margin_px)
+
+    # if no rounding, just return bilevel
+    if radius_px <= 0:
+        return (composed > 127).ifthenelse(255, 0)
+
+    # --- build INNER rounded-rectangle mask ---
+    # inner window position & size
+    x0, y0 = margin_px, margin_px
+    wi, hi = W, H
+    # clamp radius to inner window
+    radius_px = min(radius_px, wi // 2, hi // 2)
+
+    # mask = 255 inside the rounded inner window, 0 elsewhere
+    mask = vips.Image.black(Wc, Hc).new_from_image(0)
+    # straight parts
+    mask = mask.draw_rect(255, x0 + radius_px, y0,            wi - 2 * radius_px, hi,              fill=True)
+    mask = mask.draw_rect(255, x0,             y0 + radius_px, wi,                hi - 2 * radius_px, fill=True)
+    # four quarter-circles (centers on the inner window corners)
+    mask = mask.draw_circle(255, x0 + radius_px,         y0 + radius_px,         radius_px, fill=True)  # TL
+    mask = mask.draw_circle(255, x0 + wi - 1 - radius_px, y0 + radius_px,         radius_px, fill=True)  # TR
+    mask = mask.draw_circle(255, x0 + radius_px,         y0 + hi - 1 - radius_px, radius_px, fill=True)  # BL
+    mask = mask.draw_circle(255, x0 + wi - 1 - radius_px, y0 + hi - 1 - radius_px, radius_px, fill=True)  # BR
+
+    # composite: show the pasted image only inside the INNER rounded window; elsewhere use mat
+    mat_img = vips.Image.black(Wc, Hc).new_from_image(mat)
+    out = mask.ifthenelse(composed, mat_img)
+
+    # enforce bilevel (safe even if already 0/255)
+    return (out > 127).ifthenelse(255, 0)
+
 def save_png_bilevel(
     canvas: np.ndarray,
     out_path: str,
@@ -279,6 +359,15 @@ def save_png_bilevel(
             align="centre",
             invert=invert,
         )
+
+    base = add_rounded_passepartout_bilevel_pct(
+        base,
+        margin_frac = 0.01,   # e.g. 0.10 = 10% of width
+        radius_frac = 0.1,   # e.g. 0.04 = 4% of width
+        auto_white_bg = True,
+        mat_value = None,   # 255 or 0 if you want to override
+    )
+
 
     base.write_to_file(
         out_path,

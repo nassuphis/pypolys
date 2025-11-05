@@ -186,6 +186,59 @@ def op_rsqd(z, a, state):
 
 ALLOWED["rsqd"] = op_rsqd
 
+def op_rsq_edge(z, a, state):
+    """
+    Sample points concentrated on square edges (L∞-unit square [-1,1]^2).
+    a[0]=N
+    a[1]=beta (edge position shape; 1=uniform along edge, >1 → toward edge middle, <1 → toward corners)
+    a[2]=thick (0=exactly on edge; >0 adds inward thickness in L∞ sense, as a fraction of half-width)
+    """
+    N     = int(a[0].real) or 1_000_000
+    beta  = float(a[1].real) or 1.0
+    thick = float(a[2].real) 
+    thick = max(0.0, min(thick, 1.0))
+
+    # choose an edge: 0=top(y=+1), 1=right(x=+1), 2=bottom(y=-1), 3=left(x=-1)
+    edge = (RNG.random(N) * 4).astype(np.int32)
+
+    # position along the edge
+    t = RNG.beta(beta, beta, size=N)  # in (0,1)
+    u = 2.0 * t - 1.0                 # map to (-1,1)
+
+    # inward offset (0 on boundary → thick toward interior)
+    if thick > 0.0:
+        # bias toward boundary; d in [0,thick]
+        d = thick * (1.0 - RNG.random(N) ** 2.0)
+    else:
+        d = np.zeros(N, dtype=np.float64)
+
+    x = np.empty(N, dtype=np.float64)
+    y = np.empty(N, dtype=np.float64)
+
+    # top: y=+1-d, x=u
+    m = (edge == 0)
+    x[m] = u[m]
+    y[m] = +1.0 - d[m]
+
+    # right: x=+1-d, y=u
+    m = (edge == 1)
+    x[m] = +1.0 - d[m]
+    y[m] = u[m]
+
+    # bottom: y=-1+d, x=u
+    m = (edge == 2)
+    x[m] = u[m]
+    y[m] = -1.0 + d[m]
+
+    # left: x=-1+d, y=u
+    m = (edge == 3)
+    x[m] = -1.0 + d[m]
+    y[m] = u[m]
+
+    return np.concatenate((z, x + 1j*y))
+
+ALLOWED["rsqedge"] = op_rsq_edge
+
 # ---------- deterministic random ----------
 
 @njit(cache=True, nogil=True, fastmath=True)
@@ -359,6 +412,24 @@ def op_sclip(z, a, state):
 
 ALLOWED["sclip"] = op_sclip
 
+def op_osclip(z, a, state):
+    r = a[0].real or 1.0
+    c = a[1]
+    k = _frozen_len(state)
+    if k <= 0:
+        # no frozen points; clip all
+        dx = z.real - c.real
+        dy = z.imag - c.imag
+        inside = (np.abs(dx) < r) & (np.abs(dy) < r)
+        return z[inside]
+
+    head, tail = z[:k], z[k:]
+    dx = tail.real - c.real
+    dy = tail.imag - c.imag
+    inside_tail = (np.abs(dx) < r) & (np.abs(dy) < r)
+    return np.concatenate((head, tail[inside_tail]))
+
+ALLOWED["osclip"] = op_osclip
 
 # ---------- simple ops ----------
 
@@ -803,11 +874,10 @@ ALLOWED["dcopy"] = op_dot_copy
 # macros
 # =========================
 
-def macro(z0,spec:str): # spec runner
-    state = Dict.empty(key_type=types.int8, value_type=types.complex128[:])
+def macro(spec:str,z0,state): # spec runner
+    #state = Dict.empty(key_type=types.int8, value_type=types.complex128[:])
     names, A = specparser.parse_names_and_args(spec, MAXA=12)
     z=z0
-    print(names)
     for k, name in enumerate(names):
         fn = ALLOWED.get(name)
         if fn is None:
@@ -825,9 +895,18 @@ def op_yin(z, a, state):
         f"rua:{N/8}:0.75+1.25j:0.25:0-0.5j,"
         f"add:0.5j,mul:{size}"
     )
-    return macro(z,spec)
+    return macro(spec,z,state)
 
 ALLOWED["yin"] = op_yin
+
+def op_kirby(z,a,state):
+    N = a[0].real or 1e7
+    spec = (
+        f"rud:{N}:0.1,osclip:0.5,ldot:4:1.5:500"
+    )
+    return macro(spec,z,state)
+
+ALLOWED["kirby"] = op_kirby
 
 # ===== executor (no JIT needed; kernels inside are Numba-fast) =====
 def apply_chain(z0: np.ndarray, names: list[str], A: np.ndarray, state):
