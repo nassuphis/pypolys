@@ -87,6 +87,19 @@ def extract_used_names(chain: str) -> set[str]:
     items = [s.strip() for s in chain.split(",") if s.strip()]
     return {item.split(":", 1)[0].lower() for item in items}
 
+
+def split_chain(chain: str):
+    out={}
+    if not chain.strip():
+        return out
+    items = [s.strip() for s in chain.split(",") if s.strip()]
+    for item in items:
+        parts = item.split(":")
+        name=parts[0]
+        values=parts[1:]
+        out[name]=values
+    return out
+
 def parse_chain(chain: str, MAXA: int = 12):
     out = []
     if not chain.strip():

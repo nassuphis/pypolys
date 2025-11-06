@@ -4,28 +4,42 @@ import numpy as np
 from numba import njit, prange
 import pyvips as vips
 
-@njit(cache=True, nogil=True, parallel=True, fastmath=True)
-def stamp_points(
-    canvas: np.ndarray,
-    ys: np.ndarray, 
-    xs: np.ndarray,
-    dy: np.ndarray, 
-    dx: np.ndarray
-):
-    H, W = canvas.shape
-    n = ys.size
-    k = dy.size
-    for i in prange(n):
-        y0 = ys[i] 
-        x0 = xs[i]
-        for j in range(k):
-            y = y0 + dy[j]
-            x = x0 + dx[j]
-            if 0 <= y < H and 0 <= x < W:
-                canvas[y, x] = 255
+# ========================================
+# dot stamping
+# ========================================
+
+# produce a stamp
+def make_disc_offsets(r: int):
+    r = int(max(1, r))
+    yy, xx = np.mgrid[-r:r+1, -r:r+1]
+    mask = (xx*xx + yy*yy) <= r*r
+    return yy[mask].astype(np.int32), xx[mask].astype(np.int32)
+
+def build_disc_offset_cache_from_rpx(r_px: np.ndarray, rmin: int) -> dict[int, tuple[np.ndarray, np.ndarray]]:
+    """
+    Build a cache {radius -> (dy, dx)} for all radii that will be stamped.
+    Uses absolute radii and ignores those < rmin.
+    """
+    if r_px.size == 0:
+        return {}
+    r_abs = np.abs(r_px).astype(np.int32, copy=False)
+    m = r_abs >= rmin
+    if not np.any(m):
+        return {}
+    radii = np.unique(r_abs[m])
+    return {int(r): make_disc_offsets(int(r)) for r in radii}
 
 @njit(cache=True, nogil=True, parallel=True, fastmath=True)
-def stamp_points_val(canvas, ys, xs, dy, dx, value):
+def stamp_points(canvas, ys, xs, dy, dx, value:np.int8=255):
+    """_summary_
+    Args:
+        canvas (np.zeros((H, W), np.uint8)): pixels are stamped here
+        ys (int32): sorted y pixel coordinate
+        xs (int32): sorted x pixel coordinate
+        dy (int32): stamp pixel y coordinate
+        dx (int32): stamp pixel x coordinate
+        value (np.int8, optional): value to stamp. Defaults to 255.
+    """
     H, W = canvas.shape
     n = ys.size; k = dy.size
     for i in prange(n):
@@ -34,6 +48,10 @@ def stamp_points_val(canvas, ys, xs, dy, dx, value):
             y = y0 + dy[j]; x = x0 + dx[j]
             if 0 <= y < H and 0 <= x < W:
                 canvas[y, x] = value  # 255 draw, 0 erase
+
+# ========================================
+# sort points by dot radius
+# ========================================
 
 @njit(cache=True, nogil=True)
 def bucket_by_radius(r_px: np.ndarray, r_min: int, r_max: int):
@@ -181,26 +199,21 @@ def bucket_by_radius_parallel(r_px: np.ndarray, r_min: int, r_max: int):
 
     return order, r_vals, starts, cnts
 
-def make_disc_offsets(r: int):
-    r = int(max(1, r))
-    yy, xx = np.mgrid[-r:r+1, -r:r+1]
-    mask = (xx*xx + yy*yy) <= r*r
-    return yy[mask].astype(np.int32), xx[mask].astype(np.int32)
 
 def project_to_canvas(z: np.ndarray, pix: int, margin_frac: float):
-    rx = np.max(np.abs(z.real)) if z.size else 1.0
-    ry = np.max(np.abs(z.imag)) if z.size else 1.0
-    half0 = max(rx, ry)
-    half  = half0 * (1.0 + 2.0 * margin_frac)
+    half  = np.max(np.abs(z)) * (1.0 + 2.0 * margin_frac)
     span  = 2.0 * half
     W = H = int(pix)
     px_per = (W - 1) / span
     px = np.rint((z.real + half) * px_per).astype(np.int32)
     py = np.rint((half - z.imag) * px_per).astype(np.int32)
-    px = np.clip(px, 0, W-1); py = np.clip(py, 0, H-1)
+    px = np.clip(px, 0, W-1)
+    py = np.clip(py, 0, H-1)
     return px, py, H, W
 
-# ---------- image output ----------
+# ========================================
+# image output
+# ========================================
 
 def add_footer_label(
     base: vips.Image,
@@ -414,6 +427,7 @@ def save_mosaic_png_bilevel(
     invert: bool,
     footer_pad_lr_px: int = 48,
     footer_dpi: int = 300,
+    thumbnail: int = None
 ) -> None:
     """
     Compose a mosaic from numpy tiles (uint8, 0/255). If 'titles' is provided,
@@ -476,11 +490,16 @@ def save_mosaic_png_bilevel(
     if invert:
         base = base ^ 255
 
-    base.write_to_file(
-        out_path,
-        compression=1, effort=1, filter="none",
-        interlace=False, strip=True, bitdepth=1,
-    )
+    if thumbnail:
+        base_thumbnail = base.thumbnail_image(thumbnail)
+        base_thumbnail.write_to_file(out_path)
+    else:
+        base.write_to_file(
+            out_path,
+            compression=1, effort=1, filter="none",
+            interlace=False, strip=True, bitdepth=1,
+        )
+
 
 # ---------- warmup ----------
 

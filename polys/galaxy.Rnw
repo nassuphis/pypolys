@@ -595,26 +595,81 @@ Questions:
 \end{tabular}
 \end{center}
 
-
-
-
 \newpage
-\section{Galaxy-related Stuff on iStock}
+\section{How to Make a Spiral 1}
+
+\vskip 2cm
+
+<<, engine='bash', eval=run_code, include=FALSE>>=
+python galaxy_cli.py \
+--chain '>[rud:1e6,idscr:10:0.4,swirl:-2:1:3,squish:0.5,rot:0.05],dot:pix:20' \
+--pix 5000 --out galaxy_spiral1.png --margin 0.2  --footer --cols 3 --thumb 5000
+@
 
 \begin{center}
-\begin{tabular}{p{8cm}p{8cm}}
-\adjustbox{valign=t}{\includegraphics[width=8cm]{galaxy_logo/boring1.jpg}} &
-\adjustbox{valign=t}{\includegraphics[width=8cm]{galaxy_logo/boring2.jpg}} \\
-\adjustbox{valign=t}{\includegraphics[width=8cm]{galaxy_logo/boring3.jpg}} &
-\adjustbox{valign=t}{\includegraphics[width=8cm]{galaxy_logo/boring4.jpg}} \\
-\adjustbox{valign=t}{\includegraphics[width=8cm]{galaxy_logo/boring5.jpg}} &
-\adjustbox{valign=t}{\includegraphics[width=8cm]{galaxy_logo/boring6.jpg}} \\
-\adjustbox{valign=t}{\includegraphics[width=8cm]{galaxy_logo/boring7.jpg}} &
-\adjustbox{valign=t}{\includegraphics[width=8cm]{galaxy_logo/boring8.jpg}} \\
-\adjustbox{valign=t}{\includegraphics[width=8cm]{galaxy_logo/boring9.jpg}} & 
-\\
-\end{tabular}
+\includegraphics[width=15cm]{galaxy_spiral1.png}
 \end{center}
+
+\vskip 2cm
+
+\begin{itemize}
+    \item make a uniform disk with {\tt rud:1e6}
+    \item vertical discretization with power-law {\tt idscr:10:0.4}
+    \item swirl with {\tt swirl:-2:1:3}
+    \item vertical squish  {\tt squish:0.5}
+    \item rotate with {\tt rot:0.05}
+    \item render with {\tt dot:pix:20}
+\end{itemize}
+
+\newpage
+\section{How to Make a Spiral 2}
+
+\vskip 2cm
+
+<<, engine='bash', eval=run_code, include=FALSE>>=
+python galaxy_cli.py \
+--chain '>[runif:5e6:0:1,elkal:25:-0.75:0.125:0.5,walk:5e-3:50],ldot:1:1.5:500' \
+--pix 5000 --out galaxy_spiral2.png --margin 0  --footer  --cols 2 --thumb 5000
+@
+
+\begin{center}
+\includegraphics[width=15cm]{galaxy_spiral2.png}
+\end{center}
+
+\vskip 2cm
+
+\begin{itemize}
+    \item make a uniform square with {\tt runif:5e6:0:1}
+    \item kaleidoscope it {\tt elkal:25:-0.75:0.125:0.5}
+    \item fuzz it with short random walk{\tt walk:5e-3:50}
+    \item render with {\tt ldot:1:1.5:500}
+\end{itemize}
+
+\newpage
+\section{How to Make a Spiral 3}
+
+\vskip 2cm
+
+<<, engine='bash', eval=run_code, include=FALSE>>=
+python galaxy_cli.py \
+--chain '>[rud:1e6:0.5,td:1:0.01:1.25,arms:2,swirl:-0.33:5],dot:pix' \
+--pix 5000 --out galaxy_spiral3.png --margin 0.2  --footer  --cols 2 --thumb 5000
+@
+
+\begin{center}
+\includegraphics[width=15cm]{galaxy_spiral3.png}
+\end{center}
+
+\vskip 2cm
+
+\begin{itemize}
+    \item make a uniform disk with {\tt rud:1e6:0.5}
+    \item apply the teardrop transform {\tt td:1:0.01:1.25}
+    \item add arms with the arms transform {\tt arms:2}
+    \item swirl it {\tt swirl:-0.33:5}
+    \item render with {\tt dot:pix}
+\end{itemize}
+
 
 
 \newpage
@@ -686,6 +741,13 @@ Questions:
 \end{tabular}} 
 \\[-0.5ex]\noalign{\vspace{2cm}}
 
+<<, engine='bash', eval=run_code, include=FALSE>>=
+python galaxy_cli.py \
+--chain 'rud:1e6,idscr:10:0.4,swirl:-2:1:3,dot:pix:20' \
+--pix 5000 --out galaxy_logo1.png --margin 0 --invert
+@
+
+
 \scalebox{2}{\begin{tabular}{c}
 \adjustbox{valign=t}{\includegraphics[width=1.25cm,height=1.25cm]{galaxy_stylize8.png}} \\[-1mm]
 {\Huge\sffamily Symmetra} \\
@@ -693,12 +755,31 @@ Questions:
 \end{tabular}} 
 & 
 \scalebox{2}{\begin{tabular}{c}
-\adjustbox{valign=t}{\includegraphics[width=1.25cm,height=1.25cm]{galaxy_stylize8.png}} \\[-1mm]
+\adjustbox{valign=t}{\includegraphics[width=1.25cm,height=1.25cm]{galaxy_logo1.png}} \\[-1mm]
 {\Huge\sffamily Symmetra} \\
 {\Huge\sffamily Capital}
 \end{tabular}} 
 \\[-0.5ex]\noalign{\vspace{2cm}}
 
+\end{tabular}
+\end{center}
+
+
+\newpage
+\section{Galaxy-related Stuff on iStock}
+
+\begin{center}
+\begin{tabular}{p{8cm}p{8cm}}
+\adjustbox{valign=t}{\includegraphics[width=8cm]{galaxy_logo/boring1.jpg}} &
+\adjustbox{valign=t}{\includegraphics[width=8cm]{galaxy_logo/boring2.jpg}} \\
+\adjustbox{valign=t}{\includegraphics[width=8cm]{galaxy_logo/boring3.jpg}} &
+\adjustbox{valign=t}{\includegraphics[width=8cm]{galaxy_logo/boring4.jpg}} \\
+\adjustbox{valign=t}{\includegraphics[width=8cm]{galaxy_logo/boring5.jpg}} &
+\adjustbox{valign=t}{\includegraphics[width=8cm]{galaxy_logo/boring6.jpg}} \\
+\adjustbox{valign=t}{\includegraphics[width=8cm]{galaxy_logo/boring7.jpg}} &
+\adjustbox{valign=t}{\includegraphics[width=8cm]{galaxy_logo/boring8.jpg}} \\
+\adjustbox{valign=t}{\includegraphics[width=8cm]{galaxy_logo/boring9.jpg}} & 
+\\
 \end{tabular}
 \end{center}
 
@@ -718,7 +799,7 @@ python galaxy_cli.py \
 --chain 'rus:5e5:1,ldot:0.5:1.4:1000,rud:1e7:1.0,td:1:0:1,mul:2,arms:2,swirl:-0.33:2,pwalk:1e-4:5:50,imul:0.5,mul:0.25,ldot:0.5:1.25:200' \
 --pix 5000 --margin 0 \
 --verbose \
---out galaxy1.png
+--out galaxy1.png 
 vips thumbnail galaxy1.png galaxy1thumb.png 5000 --linear
 rm galaxy1.png
 mv galaxy1thumb.png galaxy1.png

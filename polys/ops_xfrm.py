@@ -310,7 +310,7 @@ def logarithmic_spiral(z,a,state):
     v[n] = r * np.exp(1j * theta)
     return v
 
-ALLOWED["lst"]=logarithmic_spiral
+ALLOWED["lsp"]=logarithmic_spiral
 
 def deltoid(z,a,state):
     n = int(a[0].real)

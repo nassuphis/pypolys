@@ -468,6 +468,19 @@ def op_imul(z, a, state):
 ALLOWED["imul"] = op_imul
 
 
+# scale to mult by mult logical
+def op_norm(z, a, state):
+    k = _frozen_len(state)
+    if k < z.size:
+        scale = a[0].real or 1.0
+        tail = z[k:]
+        max_radius = np.max(np.abs(tail))
+        sz = scale * tail / max_radius
+        z[k:] = sz
+    return z
+
+ALLOWED["norm"] = op_norm
+
 def op_rot(z, a, state):
     phi = np.exp(1j * 2.0 * np.pi * a[0].real)
     k = _frozen_len(state)
@@ -535,7 +548,80 @@ def op_csum(z, a, state):
 
 ALLOWED["csum"] = op_csum
 
+def op_discr(z, a, state):
+    mult = state.get(K_MULT)
+    k = 0 if (mult is None) else mult.size
+    if k < z.size:
+        N = np.rint(a[0].real) or 10
+        dth = a[1].real or 1.0
+        tail = z[k:]
+        xdiscr = np.rint((tail.real) * N)/N
+        xdpow = np.sign(tail.real)*(np.abs(xdiscr)**dth)
+        ydiscr = np.rint((tail.imag) * N)/N
+        ydpow = np.sign(tail.imag)*(np.abs(ydiscr)**dth)
+        z[k:] = xdpow + 1j * ydpow
+    return z
 
+ALLOWED["discr"] = op_discr
+
+def op_rdscr(z, a, state):
+    mult = state.get(K_MULT)
+    k = 0 if (mult is None) else mult.size
+    if k < z.size:
+        N = int(a[0].real) or 10
+        dth = a[1].real or 1.0
+        tail = z[k:]
+        discr = np.rint((tail.real) * N)/N
+        dpow = np.sign(tail.real)*(np.abs(discr)**dth)
+        z[k:] = dpow + 1j * tail.imag
+    return z
+
+ALLOWED["rdscr"] = op_rdscr
+
+def op_idscr_old(z, a, state):
+    mult = state.get(K_MULT)
+    k = 0 if (mult is None) else mult.size
+    if k < z.size:
+        N = int(a[0].real) or 10
+        dth = a[1].real or 1.0
+        tail = z[k:]
+        discr = np.rint((tail.imag) * N)/N
+        dpow = np.sign(tail.imag)*(np.abs(discr)**dth)
+        z[k:] = tail.real + 1j * dpow
+    return z
+
+def op_idscr(z, a, state):
+    mult = state.get(K_MULT)
+    k = 0 if (mult is None) else mult.size
+    if k < z.size:
+        N   = int(a[0].real) or 10
+        dth = a[1].real or 1.0
+
+        tail = z[k:]
+        x = tail.real
+        y = tail.imag
+
+        # 1) discretize rows
+        y0 = np.rint(y * N) / N
+
+        # 2) power spacing but preserve vertical span
+        ymax = np.max(np.abs(y0)) or 1.0
+        yn   = np.abs(y0) / ymax
+        y1   = np.sign(y0) * (yn ** dth) * ymax
+
+        # 3) keep circular boundary with horizontal lines:
+        #    rescale x within each (old y0 -> new y1) row to match circle of radius R
+        R  = np.max(np.abs(tail)) or 1.0
+        R2 = R * R
+        w0 = np.sqrt(np.clip(R2 - y0*y0, 0.0, None))   # half-width before
+        w1 = np.sqrt(np.clip(R2 - y1*y1, 0.0, None))   # half-width after
+        s  = np.divide(w1, w0, out=np.ones_like(w0), where=w0 > 0)
+
+        x1 = x * s
+        z[k:] = x1 + 1j * y1
+    return z
+
+ALLOWED["idscr"] = op_idscr
 
 # ---------- JIT kernels for build_logo ----------
 
@@ -603,15 +689,16 @@ def _rmax_serial(x, y):
     return rmax
 
 @njit(cache=True, nogil=True, parallel=True, fastmath=True)
-def _swirl_inplace_fast(x, y, swa, swb):
+def _swirl_inplace_fast(x, y, swa, swb, mul):
     # keep rmax serial for determinism & simplicity
-    rmax = _rmax_serial(x, y)
+    rmax = _rmax_serial(x, y)*mul
     denom = rmax - 1.0
     if denom < 1e-9: denom = 1e-9
     two_pi = 6.283185307179586
     n = x.size
     for i in prange(n):
-        xi = x[i]; yi = y[i]
+        xi = x[i]*mul
+        yi = y[i]*mul
         r = (xi*xi + yi*yi)**0.5
         if r > 1.0:
             t = (r - 1.0) / denom
@@ -620,6 +707,9 @@ def _swirl_inplace_fast(x, y, swa, swb):
             c = np.cos(phi); s = np.sin(phi)
             x[i] = xi * c - yi * s
             y[i] = xi * s + yi * c
+        else:
+            x[i] = xi
+            y[i] = yi
 
 @njit(cache=True, nogil=True, fastmath=True)
 def apply_n_arms(x, y, m):
@@ -668,8 +758,11 @@ def op_swirl(z, a, state):
     # a[0]=swa, a[1]=swb
     k = _frozen_len(state)
     if k < z.size:
+        swa = a[0].real or 0.25
+        swb = a[1].real or 1
+        mul = a[2].real or 1.0
         x, y = _as_xy(z)
-        _swirl_inplace_fast(x[k:], y[k:], a[0].real, a[1].real)
+        _swirl_inplace_fast( x[k:], y[k:], swa, swb, mul )
     return z
 
 ALLOWED["swirl"] = op_swirl
@@ -682,6 +775,44 @@ def op_squish(z, a, state):
     return z
 
 ALLOWED["squish"] = op_squish
+
+
+# ---------- kaleidoscope transforms ----------
+def op_archimedean_spiral(z,a,state):
+    ap   =  a[0].real or 0.1
+    bp   =  a[2].real or 0.1   
+    k = _frozen_len(state)
+    if k >= z.size: return z
+    tail  = z[k:] # view not copy
+    n = int(a[0].real)
+    if n<0: return z
+    if n>z.size-1: return z
+    tp = tail.real
+    theta = 2 * np.pi * tp
+    r = ap + bp * theta
+    asp = r * np.exp(1j * theta)
+    tail[:] = asp
+    return z
+
+ALLOWED["asp"]=op_archimedean_spiral
+
+def op_logarithmic_spiral(z,a,state):
+    ap   =  a[0].real or 0.1
+    bp   =  a[2].real or 0.1   
+    k = _frozen_len(state)
+    if k >= z.size: return z
+    tail  = z[k:] # view not copy
+    n = int(a[0].real)
+    if n<0: return z
+    if n>z.size-1: return z
+    tp = tail.real
+    theta = 2 * np.pi * tp
+    r = ap + bp * theta
+    lsp = ap * np.exp(bp * theta)
+    tail[:] = lsp
+    return z
+
+ALLOWED["lsp"]=op_logarithmic_spiral
 
 # ---------- kaleidoscope transforms ----------
 
@@ -868,9 +999,10 @@ def op_dot_lognormal(z, a, state):
         return z
 
     # parameters
-    loc   = float(a[0].real) or 0.5
-    scale = float(a[1].real) or 1.25
-    drt   = float(a[2].real) or 100.0
+    loc   = a[0].real or 0.5
+    scale = a[1].real or 1.25
+    drt   = a[2].real or 100.0
+    mul   = a[3].real or 1.0
 
     # lognormal tail
     zeta = RNG.normal(loc=loc, scale=scale, size=tail_len)
@@ -890,7 +1022,7 @@ def op_dot_lognormal(z, a, state):
         full_imag = np.concatenate((mult_prev.imag, np.full(tail_len, gid, dtype=np.float64)))
 
     # store combined complex vector (real=size, imag=group id)
-    state[K_MULT] = (full_real + 1j * full_imag).astype(np.complex128, copy=False)
+    state[K_MULT] = (full_real * mul + 1j * full_imag).astype(np.complex128, copy=False)
     return z
 
 ALLOWED["ldot"] = op_dot_lognormal
@@ -906,7 +1038,7 @@ def op_dot(z, a, state):
     if tail_len == 0:
         return z
 
-    # constant size value
+    # constant times mult size value so pixels can be specified
     val = float(a[0].real) or 1.0
     mul = float(a[1].real) or 1.0
     mult_tail_real = np.full(tail_len, val*mul, dtype=np.float64)
@@ -1007,17 +1139,7 @@ ALLOWED["dneg"] = op_dneg
 # macros
 # =========================
 
-def macro(spec:str,z0,state): # spec runner
-    #state = Dict.empty(key_type=types.int8, value_type=types.complex128[:])
-    names, A = specparser.parse_names_and_args(spec, MAXA=12)
-    z=z0
-    for k, name in enumerate(names):
-        fn = ALLOWED.get(name)
-        if fn is None:
-            raise ValueError(f"Unknown op '{name}'.")
-        z = fn(z, A[k], state)
-    z=np.concatenate((z0,z))
-    return z
+
 
 def op_yin(z, a, state):
     N = a[0].real or 1e5
@@ -1055,14 +1177,24 @@ def op_barred(z,a,state):
 ALLOWED["barred"] = op_barred
 
 # ===== executor (no JIT needed; kernels inside are Numba-fast) =====
-def apply_chain(z0: np.ndarray, names: list[str], A: np.ndarray, state):
-    z = z0
+def macro(spec:str,z0,state): # spec runner
+    #state = Dict.empty(key_type=types.int8, value_type=types.complex128[:])
+    names, A = specparser.parse_names_and_args(spec, MAXA=12)
+    z=z0
     for k, name in enumerate(names):
         fn = ALLOWED.get(name)
         if fn is None:
-            raise ValueError(f"Unknown op '{name}'. Allowed: {list(ALLOWED)}")
+            raise ValueError(f"Unknown op '{name}'.")
         z = fn(z, A[k], state)
+    z=np.concatenate((z0,z))
+    return z
 
+# ===== build_logo from spec =====
+
+def build_logo_from_chain(spec: str) -> tuple[np.ndarray, np.ndarray]:
+    state = Dict.empty(key_type=types.int8, value_type=types.complex128[:])
+    z0 = np.empty(0, dtype=np.complex128)
+    z = macro(spec,z0,state)
     mult_c = state.get(K_MULT)
     if mult_c is None:
         mult = np.ones(z.size, dtype=np.float32)
@@ -1070,23 +1202,6 @@ def apply_chain(z0: np.ndarray, names: list[str], A: np.ndarray, state):
         k = mult_c.size
         mult = np.ones(z.size, dtype=np.float32)
         mult[:min(k, z.size)] = mult_c.real[:min(k, z.size)].astype(np.float32, copy=False)
-    return z, mult
-
-# ===== build_logo from spec =====
-
-def build_logo_from_chain(spec: str) -> tuple[np.ndarray, np.ndarray]:
-    """
-    Build geometry + multipliers from a pipeline spec string only.
-    Returns (z: complex128[:], mult: float32[:]).
-    """
-    names, A = specparser.parse_names_and_args(spec, MAXA=12)
-
-    # int8 -> complex128[:] typed dict (back-channel)
-    state = Dict.empty(key_type=types.int8, value_type=types.complex128[:])
-
-    # start with empty z (RNG op will create it)
-    z0 = np.empty(0, dtype=np.complex128)
-    z, mult = apply_chain(z0, names, A, state)
     return z, mult
 
 def warmup_numba_geometry():

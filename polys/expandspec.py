@@ -13,6 +13,11 @@ Only these constructs are supported:
   Produces a union of items. Items may contain a single numeric range `{...}` or a dict selector `@{...}`.
   Nested `[...]` is not supported (a literal `[` inside an item is treated as a normal character).
 
+- **Progressive list**: `>[a,b,c]`
+  Expands to the **progressive prefixes** of the list, joined by commas:
+  `>[a,b,c]` → `a`, `a,b`, `a,b,c`
+   Items follow the same rules as cartesian list items (each item may contain one `{...}` or `@{...}`).
+
 - **Numeric range**: `{a:b[:c]}`
   Expands to numbers on a line from `a` to `b` (inclusive).
   Rules:
@@ -82,6 +87,9 @@ Examples
 6) References anywhere:
    `#{2}:: a{1:3}[p,o,r]`
    → `p:: a1p, o:: a1o, r:: a1r, p:: a2p, o:: a2o, r:: a2r, p:: a3p, o:: a3o, r:: a3r`
+
+7) Progressive list:
+`>[a,b,c,d]` → `a`, `a,b`, `a,b,c`, `a,b,c,d`
 
 CLI
 ===
@@ -314,7 +322,46 @@ def _tokenize_parts(spec: str):
 
     while i < n:
         ch = spec[i]
-
+        # >[ ... ] progressive list (prefix-accumulating)
+        if ch == '>' and i + 1 < n and spec[i + 1] == '[':
+            flush_text()
+            j = i + 2
+            depth = 1
+            while j < n and depth > 0:
+                cj = spec[j]
+                # skip @{...} inside list
+                if cj == '@' and j + 1 < n and spec[j + 1] == '{':
+                    k = j + 2
+                    d = 1
+                    while k < n and d > 0:
+                        if spec[k] == '{': d += 1
+                        elif spec[k] == '}': d -= 1
+                        k += 1
+                    j = k
+                    continue
+                # skip { ... } inside list
+                if cj == '{':
+                    k = j + 1
+                    d = 1
+                    while k < n and d > 0:
+                        if spec[k] == '{': d += 1
+                        elif spec[k] == '}': d -= 1
+                        k += 1
+                    j = k
+                    continue
+                if cj == '[':
+                    # nested '[' char inside item → keep going as char
+                    j += 1
+                    continue
+                if cj == ']':
+                    depth -= 1
+                    j += 1
+                    break
+                j += 1
+            inner = spec[i + 2 : j - 1] if j - 1 >= i + 2 else ""
+            parts.append(("plist", inner))
+            i = j
+            continue
         # @{ ... } selector → single text chunk
         if ch == '@' and i + 1 < n and spec[i + 1] == '{':
             flush_text()
@@ -457,6 +504,20 @@ def _expand_list_block(block_text: str, names: List[str]) -> List[str]:
         out.extend(_expand_single_brace(it, trim_for_items=True))
     return out
 
+def _expand_progressive_list(block_text: str, names: List[str]) -> List[str]:
+    """
+    Expand >[a,b,c] into progressive comma-joined prefixes:
+      ['a', 'a,b', 'a,b,c']
+    Items use the same item-expansion rules as normal lists.
+    """
+    items = _expand_list_block(block_text, names)
+    out: List[str] = []
+    acc: List[str] = []
+    for it in items:
+        acc.append(it)
+        out.append(",".join(acc))
+    return out
+
 # =========================
 # Parse plain text into segments (Lit/Ref/Producer or ListChoices from dictsel)
 # =========================
@@ -524,6 +585,13 @@ def _segments_from_parts(parts: List[Tuple[str, str]], names: List[str]) -> List
     for kind, content in parts:
         if kind == "list":
             choices = _expand_list_block(content, names)
+            if not choices:
+                return []
+            lc = _ListChoices(choices, pid=str(listlike_ordinal))
+            listlike_ordinal += 1
+            segs.append(lc)
+        elif kind == "plist":
+            choices = _expand_progressive_list(content, names)
             if not choices:
                 return []
             lc = _ListChoices(choices, pid=str(listlike_ordinal))
@@ -759,6 +827,13 @@ def _selftest(verbose: bool = False) -> int:
          "X2Y01a::a-2-01-a","X2Y01b::b-2-01-b",
          "X2Y02a::a-2-02-a","X2Y02b::b-2-02-b"],
         msg="refs to third list-like dim")
+    
+    # ---------- NEW: Empty list yields empty expansion ----------
+    run_count("[]", 0, msg="empty list -> empty result")
+ 
+    # ---------- NEW: Progressive list ----------
+    run(">[a,b,c,d]", ["a","a,b","a,b,c","a,b,c,d"], msg="progressive list")
+    run("X>[p,o]Y", ["XpY","Xp,oY"], msg="progressive list inside text, 2 items")
 
     if verbose:
         print(f"\nPassed: {passed}, Failed: {fails}")

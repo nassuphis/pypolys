@@ -16,26 +16,21 @@ BUCKET_METHOD = "parallel"
 
 # ---------- render one chain spec into a tile ----------
 
-def render_chain_tile(spec: str, pix: int, fos: float, rmin: int,
-                      margin_frac: float, verbose: bool=False) -> np.ndarray:
+def render_chain_tile(
+        spec: str, 
+        pix: int, 
+        fos: float, 
+        rmin: int,
+        margin_frac: float, 
+        verbose: bool=False
+    ) -> np.ndarray:
     if verbose:
-        print(f"[render] Building galaxy for spec: {spec}")
+        print(f"[render] spec: {spec}")
     t0 = time.perf_counter()
+
+    specparser.set_const("pix",0.51/(fos*(pix-1)))
     z, mult = galaxy.build_logo_from_chain(spec)
-
-    # fit to square canvas with margin
-    rx = np.max(np.abs(z.real)) if z.size else 1.0
-    ry = np.max(np.abs(z.imag)) if z.size else 1.0
-    half0 = max(rx, ry)
-    half  = half0 * (1.0 + 2.0 * margin_frac)
-    span  = 2.0 * half
-    W = H = int(pix)
-    px_per = (W - 1) / span
-
-    px = np.rint((z.real + half) * px_per).astype(np.int32)
-    py = np.rint((half - z.imag) * px_per).astype(np.int32)
-    px = np.clip(px, 0, W-1)
-    py = np.clip(py, 0, H-1)
+    px,py, H,W = galaxy_raster.project_to_canvas(z,pix,margin_frac)
 
     r_px = np.rint(mult * fos * (W - 1)).astype(np.int32)
     keep = r_px >= rmin
@@ -55,7 +50,9 @@ def render_chain_tile(spec: str, pix: int, fos: float, rmin: int,
         order, r_vals, starts, counts = galaxy_raster.bucket_by_radius_parallel(r_px, rmin, r_max)
     else: 
         raise ValueError(f"invalid BUCKET_METHOD: {BUCKET_METHOD}")
-    pxs = px[order]; pys = py[order]
+    
+    pxs = px[order]
+    pys = py[order]
     t2 = time.perf_counter()
 
     if verbose:
@@ -122,6 +119,7 @@ def build_parser():
     p.add_argument("--pix", type=int, default=25000, help="Tile width/height in pixels (default 25000)")
     p.add_argument("--out", type=str, default="logo.png", help="Output PNG path")
     p.add_argument("--cols", type=int, default=None, help="Columns if chain expands to multiple tiles")
+    p.add_argument("--thumb",type=int, default=None,  help="Save thumbnail")
     p.add_argument("--gap", type=int, default=20, help="Gap between tiles in mosaic")
     p.add_argument("--invert", action="store_true", help="Invert black/white")
     p.add_argument("--fos", type=float, default=1e-5, help="Size scale: pixel radius = mult * fos * (pix-1)")
@@ -183,6 +181,7 @@ def main():
         out_path=args.out, invert=args.invert,
         footer_pad_lr_px=args.footer_pad,
         footer_dpi=args.footer_dpi,
+        thumbnail=args.thumb,
     )
     rows = math.ceil(n / cols)
     print(f"✅ Saved mosaic {args.out}  ({cols}×{rows}, tiles={n})")
