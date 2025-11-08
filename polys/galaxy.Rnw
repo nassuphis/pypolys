@@ -46,6 +46,69 @@ run_code <- FALSE   # or FALSE to disable execution
 \tableofcontents
 
 \newpage
+\section{Brief, Document Contents}
+
+\vskip 3cm 
+
+\begin{itemize}
+    \item \underline{Document Purpose}: provide inspiration and source material for the design of a {\bf logo}
+    \item \underline{Company}: {\bf Symmetra Capital} is a systematic, volatility hedge fund 
+    \item The logo needs to support the {\bf narrative} Symmetra communicates to investors
+    \item \underline{key concepts}:
+    \begin{enumerate}
+        \item technical / systematic / quantitative
+        \item stability / predictability / persistence 
+        \item focus on the ``physics'' of finance. why things are as they are.
+        \item {\bf order} from {\bf chaos}
+    \end{enumerate}
+    \item The image of a {\bf Galaxy} is a good symbol for some of these concepts: stability, physics, order from chaos.
+    \item This document contains a selection of relevant galaxy images to be uses as reference.
+    \item In addition, a set of algorithmically generated galaxy-like images is provided.
+    \item The algorithmically generated images have the stylistic idiosyncracies one would expect.
+    \item These allude to the systematic nature of Symmetra's investment process.
+    \item Ideally, the final product of the design effort is an image that is:
+    \begin{enumerate}
+        \item recognizeable as a galaxy.
+        \item looks like it was algorithmically generated.
+        \item suitable for a company logo.
+    \end{enumerate}
+    \item An importan point to consider is Symmetra's bussiness: manage client money.
+    \begin{enumerate}
+        \item Firm logo's in this sector are not as ``innovative'' as, for example, a fashion brand would be.
+        \item Colors are muted. Black, blue, green and grey dominate.
+        \item The firm's name is prominently displayed, in some cases the logo is just the name, nothing else.
+        \item Designs that might seem dated in other industries are the norm in finance.
+     \end{enumerate}
+    \item Another point to consider is the context. 
+    \begin{enumerate}
+        \item Hedge funds promise outperformance but sometimes fail to deliver, in rare cases catastrophically.
+        \item During periods of underperformance people will look for the worst, most denigrating possible associations.
+        \item The worst thing that can happen to a fund is its name becoming a meme synonymous with hybris or stupidity.
+        \item Reputational damage is much harder than financial losses to recover from.
+        \item ``Long Term Capital Management'' is the classic example to avoid. Suggest, do not promise.
+        \item One should look at the logo with an ``adversarial'' mindset and try to avoid anything that can be used like this. 
+        \item This is why a lot of funds are street names, surnames or generic terms meaning ``fund''.
+    \end{enumerate}
+   
+\end{itemize}
+
+\newpage
+\section{Cross-Section of Industry Logos}
+
+\vskip 3cm
+
+\begin{center}
+\begin{tabular}{c@{}c}
+\includegraphics[width=10cm, height=10cm]{galaxy_logo/hedge_fund_logos1.png} &
+\includegraphics[width=10cm, height=10cm]{galaxy_logo/hedge_fund_logos2.jpg} \\[-5pt]
+\includegraphics[width=10cm, height=10cm]{galaxy_logo/hedge_fund_logos3.jpg} &
+\includegraphics[width=10cm, height=10cm]{galaxy_logo/hedge_fund_logos4.jpeg}
+\end{tabular}
+\vskip 1mm
+A Selection of Financial Firm Logos
+\end{center}
+
+\newpage
 \section{Galaxies, Galaxies}
 
 \begin{center}
@@ -76,7 +139,7 @@ A selection from {\it The Cambridge Photographic Atlas of Galaxies}
 \end{center}
 
 \newpage
-\section{Key Features of Galagy Images}
+\section{Key Features of Galaxy Images}
 
 \begin{itemize}
     \item random viewpoints: top down, edge on, etc.
@@ -221,12 +284,12 @@ python galaxy_cli.py \
 \end{center}
 
 \newpage
-\section{Stylized Examples 1}
+\section{Stylized Examples 1 (Material, Not Logos)}
 
 <<, engine='bash', eval=run_code, include=FALSE>>=
 python galaxy_cli.py \
 --chain 'rus:1e6:1,ldot:0.5:1.4:1000,rud:10e6:1,imul:0.33,rot:-0.1,walk:10e-3:100,mul:0.6,ldot:0:1.25:200' \
---pix 5000  --out galaxy_stylize1.png --margin 0
+--pix 5000  --out galaxy_stylize1.png --margin 0 --pasp
 @
 
 \begin{center}
@@ -268,7 +331,7 @@ Questions:
 <<, engine='bash', eval=run_code, include=FALSE>>=
 python galaxy_cli.py \
 --chain 'kirby:5e7,rud:5e7:1,imul:10,arms:3,swirl:3:0.1,walk:1e-1:100,mul:0.02,ldot:0.33:1.2:2000' \
---pix 5000 --out galaxy_stylize2.png --margin 0
+--pix 5000 --out galaxy_stylize2.png --margin 0 --pasp
 @
 
 
@@ -307,8 +370,9 @@ Questions:
 
 <<, engine='bash', eval=run_code, include=FALSE, results='markup'>>=
 python galaxy_cli.py \
---chain 'rus:5e6:1,ldot:0.5:1.5:1000,rud:2e7:0.75,td:1:0:1,mul:2,arms:2,swirl:-0.33:2,pwalk:1e-4:5:50,imul:0.5,rot:-0.12,mul:0.25,ldot:0.5:1.25:200' \
---pix 5000 --margin 0 \
+--chain \
+'rus:5e6:1,ldot:0.5:1.5:1000,rud:2e7:0.75,td:1:0:1,mul:2,arms:2,swirl:-0.33:2,pwalk:1e-4:5:50,imul:0.5,rot:-0.12,mul:0.25,ldot:0.5:1.25:200' \
+--pix 5000 --margin 0 --pasp \
 --out galaxy_stylize3.png
 @
 
@@ -347,12 +411,12 @@ Questions:
 \end{center}
 
 \newpage
-\section{Stylized Examples 2}
+\section{Stylized Examples 2 (Material, Not Logos)}
 
 <<, engine='bash', eval=run_code, include=FALSE>>=
 python galaxy_cli.py \
 --chain 'kirby:1e7:2000,barred:1e6:0.5:2:0.1' \
---pix 5000 --out galaxy_stylize4.png --margin 0
+--pix 5000 --out galaxy_stylize4.png --margin 0 --pasp
 @
 
 \begin{center}
@@ -394,7 +458,7 @@ Questions:
 <<, engine='bash', eval=run_code, include=FALSE>>=
 python galaxy_cli.py \
 --chain 'kirby:1e7:500,yin:4e6,imul:-0.5,arms:2,mul:3,swirl:0.4:2,rmul:0.75,mul:0.1,dot:pix' \
---pix 5000 --out galaxy_stylize5.png --margin 0 --invert
+--pix 5000 --out galaxy_stylize5.png --margin 0 --invert --pasp
 @
 
 \begin{center}
@@ -435,8 +499,9 @@ Questions:
 
 <<, engine='bash', eval=run_code, include=FALSE>>=
 python galaxy_cli.py \
---chain 'runif:5e6:0:1,elkal:25:-0.75:0.125:0.5,walk:5e-3:50,rot:-0.22,ldot:1:1.5:500,rud:1e6:2,mul:0.5,imul:0.25,rot:-0.25,rot:-0.22,ldot:1.2:1.5:2000' \
---pix 5000 --out galaxy_stylize6.png --margin 0 --invert
+--chain \
+'runif:5e6:0:1,elkal:25:-0.75:0.125:0.5,walk:5e-3:50,rot:-0.22,ldot:1:1.5:500,rud:1e6:2,mul:0.5,imul:0.25,rot:-0.25,rot:-0.22,ldot:1.2:1.5:2000' \
+--pix 5000 --out galaxy_stylize6.png --margin 0 --invert --pasp
 @
 
 \begin{center}
@@ -476,12 +541,12 @@ Questions:
 \end{center}
 
 \newpage
-\section{Stylized Examples 3}
+\section{Stylized Examples 3 (Material, Not Logos)}
 
 <<, engine='bash', eval=run_code, include=FALSE>>=
 python galaxy_cli.py \
 --chain 'runif:5e6:0:1,elkal:25:-0.75:0.125:0.5,walk:5e-3:50,ldot:1:1.5:500,rud:1e6:2,mul:0.5,imul:0.25,rot:-0.25,ldot:1.2:1.5:2000,grot:-0.22' \
---pix 5000 --out galaxy_stylize7.png --margin 0
+--pix 5000 --out galaxy_stylize7.png --margin 0 --pasp
 @
 
 \begin{center}
@@ -523,7 +588,7 @@ Questions:
 <<, engine='bash', eval=run_code, include=FALSE>>=
 python galaxy_cli.py \
 --chain 'runif:5e6:0:1,elkal:50:-5:0.125:0.01,walk:5e-3:25,rot:-0.22,rmul:0.75,rot:-0.05,ldot:1:1.5:500' \
---pix 5000 --out galaxy_stylize8.png --margin 0
+--pix 5000 --out galaxy_stylize8.png --margin 0 --pasp
 @
 
 \begin{center}
@@ -560,7 +625,7 @@ Questions:
 <<, engine='bash', eval=run_code, include=FALSE>>=
 python galaxy_cli.py \
 --chain 'rud:4e6:1,imul:0.33,rot:-0.1,walk:10e-3:100,ldot:0:1.25:200' \
---pix 5000 --footer --out galaxy_stylize9.png --margin 0.33
+--pix 5000 --footer --out galaxy_stylize9.png --margin 0.33 --pasp
 @
 
 \begin{center}
@@ -596,173 +661,480 @@ Questions:
 \end{center}
 
 \newpage
-\section{How to Make a Spiral 1}
-
-\vskip 2cm
+\section{How to Make a Spiral, Part 1 (Material, Not Logos)}
 
 <<, engine='bash', eval=run_code, include=FALSE>>=
 python galaxy_cli.py \
---chain '>[rud:1e6,idscr:10:0.4,swirl:-2:1:3,squish:0.5,rot:0.05],dot:pix:20' \
---pix 5000 --out galaxy_spiral1.png --margin 0.2  --footer --cols 3 --thumb 5000
+--chain '>[rud:1e6,idscr:10:0.4,swirl:-2:1:3,sqrot:0.5:0.05],dot:pix:20' \
+--pix 5000 --out galaxy_spiral1.png --margin 0.2  --footer --cols 4 --thumb 5000
 @
 
 \begin{center}
-\includegraphics[width=15cm]{galaxy_spiral1.png}
+\includegraphics[width=20cm]{galaxy_spiral1.png}
 \end{center}
 
-\vskip 2cm
-
 \begin{itemize}
-    \item make a uniform disk with {\tt rud:1e6}
-    \item vertical discretization with power-law {\tt idscr:10:0.4}
-    \item swirl with {\tt swirl:-2:1:3}
-    \item vertical squish  {\tt squish:0.5}
-    \item rotate with {\tt rot:0.05}
-    \item render with {\tt dot:pix:20}
+    \item make a disk with 1 million random uniformly distributed points inside it: {\tt rud:1e6}
+    \item discretise y-axis coodinates to 10 bands with power-law distribution: {\tt idscr:10:0.4}
+    \item swirl all points more than 1/3 from center by 2 turns clockwise: {\tt swirl:-2:1:3}
+    \item squish by 0.5, rotate 5\% of full turn: {\tt sqrot:0.5:0.05}
+    \item render with 20 size pixels: {\tt dot:pix:20}
 \end{itemize}
 
-\newpage
-\section{How to Make a Spiral 2}
-
-\vskip 2cm
 
 <<, engine='bash', eval=run_code, include=FALSE>>=
 python galaxy_cli.py \
---chain '>[runif:5e6:0:1,elkal:25:-0.75:0.125:0.5,walk:5e-3:50],ldot:1:1.5:500' \
---pix 5000 --out galaxy_spiral2.png --margin 0  --footer  --cols 2 --thumb 5000
+--chain 'rud:1e6,idscr:10:{0.2:0.45:4},swirl:-2:1:3,dot:pix:20' \
+--pix 5000 --out galaxy_spiral1m.png --margin 0.1 --invert  --footer --cols 4 --thumb 5000
 @
 
 \begin{center}
-\includegraphics[width=15cm]{galaxy_spiral2.png}
+\includegraphics[width=20cm]{galaxy_spiral1m.png}
 \end{center}
 
-\vskip 2cm
+<<, engine='bash', eval=run_code, include=FALSE>>=
+python galaxy_cli.py \
+--chain 'rud:1e6,idscr:{10.0:100.0:4}:0.4,swirl:-2:1:3,dot:pix:20' \
+--pix 5000 --out galaxy_spiral1m2.png --margin 0.1 --invert  --footer --cols 4 --thumb 5000
+@
 
-\begin{itemize}
-    \item make a uniform square with {\tt runif:5e6:0:1}
-    \item kaleidoscope it {\tt elkal:25:-0.75:0.125:0.5}
-    \item fuzz it with short random walk{\tt walk:5e-3:50}
-    \item render with {\tt ldot:1:1.5:500}
-\end{itemize}
+\begin{center}
+\includegraphics[width=20cm]{galaxy_spiral1m2.png}
+\end{center}
 
 \newpage
-\section{How to Make a Spiral 3}
+\section{How to Make a Spiral, Part 2 (Material, Not Logos)}
 
-\vskip 2cm
+
+<<, engine='bash', eval=run_code, include=FALSE>>=
+python galaxy_cli.py \
+--chain '>[runif:5e6:0:1,elkal:25:-0.75:0.125:0.5,walk:5e-3:50,ldot:1:1.5:500],dot:pix:5' \
+--pix 5000 --out galaxy_spiral2.png --margin 0.1  --footer  --cols 4 --thumb 5000
+@
+
+\begin{center}
+\includegraphics[width=20cm]{galaxy_spiral2.png}
+\end{center}
+
+
+\begin{itemize}
+    \item make a (0,0)-(1,1) square with 5 million random uniformly distributed points inside it: {\tt runif:5e6:0:1}
+    \item apply kaleidoscope transform to each point: {\tt elkal:25:-0.75:0.125:0.5}
+    \item apply 50 random walk steps to each point for fuzziness: {\tt walk:5e-3:50}
+    \item log-normal dot size, up to 500 units: {\tt ldot:1:1.5:500}
+\end{itemize}
+
+<<, engine='bash', eval=run_code, include=FALSE>>=
+python galaxy_cli.py --chain 'runif:5e6,elkal1:{25.0:125.0:4}:-0.5:0.125:0.1,dot:pix:5' \ 
+--pix 5000 --out galaxy_spiral2m1.png --margin 0.1  --footer  --cols 4 --thumb 5000 --invert
+@
+
+\begin{center}
+\includegraphics[width=20cm]{galaxy_spiral2m1.png}
+\end{center}
+
+<<, engine='bash', eval=run_code, include=FALSE>>=
+python galaxy_cli.py \
+--chain 'runif:5e6,elkal1:200:{0.0001:-2.0:4}:0.125:0.1,dot:pix:5' \
+--pix 5000 --out galaxy_spiral2m2.png \
+--margin 0.1  --footer  --cols 4 --thumb 5000 --invert
+@
+
+\begin{center}
+\includegraphics[width=20cm]{galaxy_spiral2m2.png}
+\end{center}
+
+<<, engine='bash', eval=run_code, include=FALSE>>=
+python galaxy_cli.py \
+--chain 'runif:5e6,elkal1:200:-0.5:0.25:{0.1:0.7:4},dot:pix:5' \
+--pix 5000 --out galaxy_spiral2m3.png \
+--margin 0.1  --footer  --cols 4 --thumb 5000 --invert
+@
+
+\begin{center}
+\includegraphics[width=20cm]{galaxy_spiral2m3.png}
+\end{center}
+
+\newpage
+\section{How to Make a Spiral, Part 3 (Material, Not Logos)}
+
 
 <<, engine='bash', eval=run_code, include=FALSE>>=
 python galaxy_cli.py \
 --chain '>[rud:1e6:0.5,td:1:0.01:1.25,arms:2,swirl:-0.33:5],dot:pix' \
---pix 5000 --out galaxy_spiral3.png --margin 0.2  --footer  --cols 2 --thumb 5000
+--pix 5000 --out galaxy_spiral3.png --margin 0.1  --footer  --cols 4 --thumb 5000
 @
 
 \begin{center}
-\includegraphics[width=15cm]{galaxy_spiral3.png}
+\includegraphics[width=20cm]{galaxy_spiral3.png}
 \end{center}
 
-\vskip 2cm
 
 \begin{itemize}
-    \item make a uniform disk with {\tt rud:1e6:0.5}
+    \item make a disk with 1 million random uniformly distributed points inside it: {\tt rud:1e6}
     \item apply the teardrop transform {\tt td:1:0.01:1.25}
-    \item add arms with the arms transform {\tt arms:2}
+    \item mirror symmetrically every 1/2 turns with the arms transform: {\tt arms:2}
     \item swirl it {\tt swirl:-0.33:5}
     \item render with {\tt dot:pix}
 \end{itemize}
 
-
-
-\newpage
-\section{Logo Mockup 1}
-
-\vskip 3cm
+<<, engine='bash', eval=run_code, include=FALSE>>=
+python galaxy_cli.py \
+--chain 'rud:1e6:0.5,td:1:0.01:1.25,arms:[2,5,13,500],swirl:-0.33:5,dot:pix:5' \
+--pix 5000 --out galaxy_spiral3m1.png --margin 0.1  --footer  \
+--invert --rows 1 --thumb 5000
+@
 
 \begin{center}
-\begin{tabular}{c@{\hspace{2cm}}c}
-
-\scalebox{2}{\begin{tabular}{c}
-\adjustbox{valign=t}{\includegraphics[width=1.25cm,height=1.25cm]{galaxy1.png}} \\[-1mm]
-{\Huge\sffamily Symmetra} \\
-{\Huge\sffamily Capital}
-\end{tabular}} 
-&
-\scalebox{2}{\begin{tabular}{c}
-\adjustbox{valign=t}{\includegraphics[width=1.25cm,height=1.25cm]{galaxy_stylize1.png}} \\[-1mm]
-{\Huge\sffamily Symmetra} \\
-{\Huge\sffamily Capital}
-\end{tabular}} 
-\\[-0.5ex]\noalign{\vspace{2cm}}
-\scalebox{2}{\begin{tabular}{c}
-\adjustbox{valign=t}{\includegraphics[width=1.25cm,height=1.25cm]{galaxy_stylize2.png}} \\[-1mm]
-{\Huge\sffamily Symmetra} \\
-{\Huge\sffamily Capital}
-\end{tabular}} 
-& 
-\scalebox{2}{\begin{tabular}{c}
-\adjustbox{valign=t}{\includegraphics[width=1.25cm,height=1.25cm]{galaxy_stylize3.png}} \\[-1mm]
-{\Huge\sffamily Symmetra} \\
-{\Huge\sffamily Capital}
-\end{tabular}} 
-\\[-0.5ex]\noalign{\vspace{2cm}}
-
-\scalebox{2}{\begin{tabular}{c}
-\adjustbox{valign=t}{\includegraphics[width=1.25cm,height=1.25cm]{galaxy_stylize4.png}} \\[-1mm]
-{\Huge\sffamily Symmetra} \\
-{\Huge\sffamily Capital}
-\end{tabular}} 
-& 
-\scalebox{2}{\begin{tabular}{c}
-\adjustbox{valign=t}{\includegraphics[width=1.25cm,height=1.25cm]{galaxy_stylize5.png}} \\[-1mm]
-{\Huge\sffamily Symmetra} \\
-{\Huge\sffamily Capital}
-\end{tabular}} 
-\\
-
-\end{tabular}
+\includegraphics[width=20cm]{galaxy_spiral3m1.png}
 \end{center}
-
-\newpage
-\section{Logo Mockup 2}
-\vskip 3cm
-
-\begin{center}
-\begin{tabular}{c@{\hspace{2cm}}c}
-
-\scalebox{2}{\begin{tabular}{c}
-\adjustbox{valign=t}{\includegraphics[width=1.25cm,height=1.25cm]{galaxy_stylize6.png}} \\[-1mm]
-{\Huge\sffamily Symmetra} \\
-{\Huge\sffamily Capital}
-\end{tabular}} 
-& 
-\scalebox{2}{\begin{tabular}{c}
-\adjustbox{valign=t}{\includegraphics[width=1.25cm,height=1.25cm]{galaxy_stylize7.png}} \\[-1mm]
-{\Huge\sffamily Symmetra} \\
-{\Huge\sffamily Capital}
-\end{tabular}} 
-\\[-0.5ex]\noalign{\vspace{2cm}}
 
 <<, engine='bash', eval=run_code, include=FALSE>>=
 python galaxy_cli.py \
---chain 'rud:1e6,idscr:10:0.4,swirl:-2:1:3,dot:pix:20' \
---pix 5000 --out galaxy_logo1.png --margin 0 --invert
+--chain 'rud:1e6:0.5,td:1:0.01:1.25,arms:2,swirl:-0.33:{0.5:5.0:4},dot:pix' \
+--pix 5000 --out galaxy_spiral3m2.png --margin 0.1  --footer  \
+--invert --cols 4 --thumb 5000
 @
 
+\begin{center}
+\includegraphics[width=20cm]{galaxy_spiral3m2.png}
+\end{center}
 
+<<, engine='bash', eval=run_code, include=FALSE>>=
+python galaxy_cli.py \
+--chain 'rud:1e6:0.5,td:1:0.01:1.25,arms:2,swirl:{-1.0:-0.25:4}:1,dot:pix' \
+--pix 5000 --out galaxy_spiral3m3.png --margin 0.1  --footer  \
+--invert --cols 4 --thumb 5000
+@
+
+\begin{center}
+\includegraphics[width=20cm]{galaxy_spiral3m3.png}
+\end{center}
+
+
+\newpage
+\section{How to Make a Spiral, Part 4 (Material, Not Logos)}
+
+<<, engine='bash', eval=run_code, include=FALSE>>=
+python galaxy_cli.py \
+--chain '>[rud:1e5:0.75,rdscr:100,swirl:0.5:1:10],dot:pix:10' \
+--pix 5000 --out galaxy_spiral4.png --margin 0.1  --footer  --cols 3 --thumb 5000
+@
+
+\begin{center}
+\includegraphics[width=20cm]{galaxy_spiral4.png}
+\end{center}
+
+\begin{itemize}
+    \item make a disk with 100K random power-law distributed points inside it: {\tt rud:1e5:0.75}
+    \item discretize real part of point coordinates to 100 values: {\tt dscr:100}
+    \item swirl all points outsize radius of 1/10: {\tt swirl:0.5:1:10}
+    \item render with dot size of 10 pixels: {\tt dot:pix:10}
+    \item balance of sample size and power-law makes ``order'' appear from ``chaos''
+\end{itemize}
+
+<<, engine='bash', eval=run_code, include=FALSE>>=
+python galaxy_cli.py \
+--chain 'rud:1e4:{1:10:4},rdscr:{10.0:50.0:4},swirl:0.5:2:10,dot:pix:50' \
+--pix 5000 --out galaxy_spiral4m1.png --margin 0.1  --footer  --invert --cols 4 --thumb 5000
+@
+
+\begin{center}
+\includegraphics[width=15cm]{galaxy_spiral4m1.png}
+\end{center}
+
+\newpage
+\section{How to Make a Spiral, Part 5 (Material, Not Logos)}
+
+<<, engine='bash', eval=run_code, include=FALSE>>=
+python galaxy_cli.py \
+--chain '>[rud:5e4,ddscr:100:0.25,squish:4,swirl:2.25:0.1],dot:pix:10' \
+--pix 5000 --margin 0.1  --footer  --cols 4 --thumb 5000 \
+--out galaxy_spiral5.png
+@
+
+\begin{center}
+\includegraphics[width=20cm]{galaxy_spiral5.png}
+\end{center}
+
+
+\begin{itemize}
+    \item make a disk with 50K random uniform distributed points inside it: {\tt rud:5e4}
+    \item discretize radii of points to 100 values with a power law: {\tt ddscr:100:0.25}
+    \item elongate by factor of 4 (squish factor > 1) : {\tt squish:4}
+    \item swirl all points outsize radius of 1 with a power-law: {\tt swirl:2.25:1:0.1}
+    \item render with dot size of 10 pixels: {\tt dot:pix:10}
+\end{itemize}
+
+<<, engine='bash', eval=run_code, include=FALSE>>=
+python galaxy_cli.py \
+--chain 'rud:5e4,ddscr:100:{0.1:1.1:4},squish:4,swirl:2.25:0.1,dot:pix:10' \
+--pix 5000 --margin 0.1  --footer  --cols 4 --thumb 5000 \
+--out galaxy_spiral5m1.png --invert
+@
+
+\begin{center}
+\includegraphics[width=20cm]{galaxy_spiral5m1.png}
+\end{center}
+
+<<, engine='bash', eval=run_code, include=FALSE>>=
+python galaxy_cli.py \
+--chain 'rud:5e4,ddscr:100:0.25,squish:[2,8,32,128],swirl:2.25:0.1,dot:pix:10' \
+--pix 5000 --margin 0.1  --footer  --cols 4 --thumb 5000 --invert \
+--out galaxy_spiral5m2.png
+@
+
+\begin{center}
+\includegraphics[width=20cm]{galaxy_spiral5m2.png}
+\end{center}
+
+<<, engine='bash', eval=run_code, include=FALSE>>=
+python galaxy_cli.py \
+--chain 'rud:5e4,ddscr:100:0.25,squish:10,swirl:[1,5,25,125]:0.1,dot:pix:10' \
+--pix 5000 --margin 0.1  --footer  --cols 4 --thumb 5000 --invert \
+--out galaxy_spiral5m3.png
+@
+
+\begin{center}
+\includegraphics[width=20cm]{galaxy_spiral5m3.png}
+\end{center}
+
+\newpage
+\section{How to Make a Spiral, Part 6 (Material, Not Logos)}
+
+<<, engine='bash', eval=run_code, include=FALSE>>=
+python galaxy_cli.py \
+--chain '>[rtr:1e5,discr:10,cardsk:100:2.5e-2,swirl:1:1:10],dot:pix:1' \
+--pix 5000 --margin 0.1  --footer  --cols 4 --thumb 5000 \
+--out galaxy_spiral6.png
+@
+
+\begin{center}
+\includegraphics[width=20cm]{galaxy_spiral6.png}
+\end{center}
+
+
+\begin{itemize}
+    \item make a triangle with 10K random uniform distributed points inside it: {\tt rtr:1e5}
+    \item discretize all points to 10 by 10 grid: {\tt discr:10}
+    \item sampling of 100 points on discs around each existing points: {\tt cardsk:100:2.5e-2}
+    \item swirl all points outsize radius of 1/10 by one turn: {\tt swirl:2.25:1:0.1}
+    \item render with dot size of 1 pixels: {\tt dot:pix:1}
+\end{itemize}
+
+<<, engine='bash', eval=run_code, include=FALSE>>=
+python galaxy_cli.py \
+--chain 'rtr:1e5,discr:10,cardsk:100:{1.0:5.0:4}e-2,swirl:1:1:10,dot:pix:1' \
+--pix 5000 --margin 0.1  --footer  --cols 4 --thumb 5000 \
+--out galaxy_spiral6m1.png --invert
+@
+
+\begin{center}
+\includegraphics[width=20cm]{galaxy_spiral6m1.png}
+\end{center}
+
+<<, engine='bash', eval=run_code, include=FALSE>>=
+python galaxy_cli.py \
+--chain 'rtr:1e5,discr:10,cardsk:100:2.5e-2,swirl:[0.25,0.5,1.0,2.0]:1:10,dot:pix:1' \
+--pix 5000 --margin 0.1  --footer  --cols 4 --thumb 5000 --invert \
+--out galaxy_spiral6m2.png
+@
+
+\begin{center}
+\includegraphics[width=20cm]{galaxy_spiral6m2.png}
+\end{center}
+
+<<, engine='bash', eval=run_code, include=FALSE>>=
+python galaxy_cli.py \
+--chain 'rtr:1e5,discr:10,cardsk:100:2.5e-2,swirl:1:1:[2,8,32,128],dot:pix:1' \
+--pix 5000 --margin 0.1  --footer  --cols 4 --thumb 5000 --invert \
+--out galaxy_spiral6m3.png
+@
+
+\begin{center}
+\includegraphics[width=20cm]{galaxy_spiral6m3.png}
+\end{center}
+
+\newpage
+\section{How to Make a Spiral, Part 7 (Material, Not Logos)}
+
+<<, engine='bash', eval=run_code, include=FALSE>>=
+python galaxy_cli.py \
+--chain '>[rtrd:5e6:3,add:-0.75j,arms:2,swirl:1:0.25:100],ldot' \
+--pix 5000 --margin 0.1  --footer  --rows 1 --thumb 5000 \
+--out galaxy_spiral7.png
+@
+
+\begin{center}
+\includegraphics[width=20cm]{galaxy_spiral7.png}
+\end{center}
+
+
+\begin{itemize}
+    \item make a triangle with 1 million points from a $N=3$ diriclet distribution having $C_A=3$ : {\tt rtrd:1e6:3}
+    \item lower by 0.75: {\tt add:-0.75j}
+    \item make 2 arms: {\tt carms:2}
+    \item squish by 0.66: {\tt squish:0.66}
+    \item swirl: {\tt swirl:0.25:1:100}
+    \item lognormal dots: {\tt ldot}
+\end{itemize}
+
+<<, engine='bash', eval=run_code, include=FALSE>>=
+python galaxy_cli.py \
+--chain 'rtrd:5e6:[0.1,0.25,1,4,10],ldot' \
+--pix 5000 --margin 0.1  --footer  --rows 1 --thumb 5000 \
+--out galaxy_spiral7m1.png --invert
+@
+
+\begin{center}
+\includegraphics[width=20cm]{galaxy_spiral7m1.png}
+\end{center}
+
+<<, engine='bash', eval=run_code, include=FALSE>>=
+python galaxy_cli.py \
+--chain 'rtrd:5e6:1:[0.1,0.25,1,4,10]:#{1},ldot' \
+--pix 5000 --margin 0.1  --footer  --rows 1 --thumb 5000 \
+--out galaxy_spiral7m2.png --invert
+@
+
+\begin{center}
+\includegraphics[width=20cm]{galaxy_spiral7m2.png}
+\end{center}
+
+<<, engine='bash', eval=run_code, include=FALSE>>=
+python galaxy_cli.py \
+--chain 'rtrd:5e6:1:1:1,swirl:[0.25,0.5,1,2]:1:4,ldot' \
+--pix 5000 --margin 0.1  --footer  --rows 1 --thumb 5000 \
+--out galaxy_spiral7m3.png --invert
+@
+
+\begin{center}
+\includegraphics[width=20cm]{galaxy_spiral7m3.png}
+\end{center}
+
+\newpage
+\section{How to Make a Spiral, Part 8 (Material, Not Logos)}
+
+<<, engine='bash', eval=run_code, include=FALSE>>=
+python galaxy_cli.py \
+--chain '>[runif:1e6,elkal1:25:0.75:0.1:0.1,idscr:100:0.75,swirl:1:1:5],dot:pix:10' \
+--pix 5000 --thumb 5000 --rows 1 --footer --margin 0.1 \
+--out galaxy_spiral8.png 
+@
+
+\begin{center}
+\includegraphics[width=20cm]{galaxy_spiral8.png}
+\end{center}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%
+% Logo Mock-Ups
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+<<, engine='R',include=FALSE>>=
+make_logo<-function(l1,l2){
+knitr::asis_output(glue::glue(R"---(
+\begin{center}
+\begin{tabular}{c@{\hspace{2cm}}c}
+@[l1]@ & @[l2]@ \\ 
 \scalebox{2}{\begin{tabular}{c}
-\adjustbox{valign=t}{\includegraphics[width=1.25cm,height=1.25cm]{galaxy_stylize8.png}} \\[-1mm]
-{\Huge\sffamily Symmetra} \\
+\adjustbox{valign=t}{\includegraphics[width=1.25cm,height=1.25cm]{galaxy_logo@[l1]@.png}} \\[-1mm]
+{\Huge\sffamily Symmetra} \\ 
 {\Huge\sffamily Capital}
 \end{tabular}} 
 & 
 \scalebox{2}{\begin{tabular}{c}
-\adjustbox{valign=t}{\includegraphics[width=1.25cm,height=1.25cm]{galaxy_logo1.png}} \\[-1mm]
-{\Huge\sffamily Symmetra} \\
+\adjustbox{valign=t}{\includegraphics[width=1.25cm,height=1.25cm]{galaxy_logo@[l2]@.png}} \\[-1mm]
+{\Huge\sffamily Symmetra} \\ 
 {\Huge\sffamily Capital}
 \end{tabular}} 
-\\[-0.5ex]\noalign{\vspace{2cm}}
-
 \end{tabular}
 \end{center}
+
+\vskip 1cm
+)---",.open="@[",.close="]@"))
+}
+@
+
+<<, engine='bash', eval=run_code, include=FALSE>>=
+python galaxy_cli.py \
+--chain 'rud:1e4:1,rdscr:10,swirl:-0.5:2:10,dot:pix:50' \
+--pix 5000 ---margin 0 --invert \
+-out galaxy_logo1.png 
+
+python galaxy_cli.py \
+--chain 'rtr:1e5,discr:10,cardsk:100:5e-2,swirl:-1:1:10,dot:pix:1' \
+--pix 5000  --margin 0 --invert \
+--out galaxy_logo2.png
+
+python galaxy_cli.py \
+--chain 'kirby:5e7,rud:5e7:1,imul:10,arms:3,swirl:-3:0.1,walk:1e-1:100,mul:0.02,ldot:0.33:1.2:2000' \
+--pix 5000  --margin  -0.15  \
+--out galaxy_logo3.png
+
+python galaxy_cli.py \
+--chain \
+'rus:5e6:1,ldot:0.5:1.5:1000,rud:2e7:0.75,td:1:0:1,mul:2,arms:2,swirl:-0.33:2,pwalk:1e-4:5:50,imul:0.5,rot:-0.12,mul:0.25,ldot:0.5:1.25:200' \
+--pix 5000 --margin -0.15 --pasp \
+--out galaxy_logo4.png
+
+python galaxy_cli.py \
+--chain 'kirby:3e7:2000,barred:1e6:-0.5:2:0.1' \
+--pix 5000 --margin -0.15 \
+--out galaxy_logo5.png 
+
+python galaxy_cli.py \
+--chain 'kirby:1e7:500,yin:4e6,imul:-0.5,arms:2,mul:3,swirl:-0.4:2,rmul:0.75,mul:0.1,dot:pix' \
+--pix 5000  --margin 0 --invert \
+--out galaxy_logo6.png
+
+python galaxy_cli.py \
+--chain \
+'runif:5e6:0:1,elkal:25:0.75:0.125:0.5,walk:5e-3:50,rot:-0.22,ldot:1:1.5:500,rud:1e6:2,mul:0.5,imul:0.25,rot:-0.25,rot:-0.22,ldot:1.2:1.5:2000' \
+--pix 5000 --margin 0 --invert --pasp \
+--out galaxy_logo7.png
+
+python galaxy_cli.py \
+--chain 'runif:5e6:0:1,elkal:25:0.75:0.125:0.5,walk:5e-3:50,ldot:1:1.5:500,rud:1e6:2,mul:0.5,imul:0.25,rot:-0.25,ldot:1.2:1.5:2000,grot:-0.22' \
+--pix 5000  --margin 0 --pasp \
+--out galaxy_logo8.png
+
+python galaxy_cli.py \
+--chain 'runif:5e6:0:1,elkal:50:-5:0.125:0.01,walk:5e-3:25,rot:-0.22,rmul:0.75,rot:-0.05,ldot:1:1.5:500' \
+--pix 5000  --margin 0 --pasp \
+--out galaxy_logo9.png
+
+python galaxy_cli.py \
+--chain 'rud:1e6,idscr:10:0.4,swirl:-2:1:3,dot:pix:20' \
+--pix 5000 --margin 0 --invert \
+--out galaxy_logo10.png 
+
+python galaxy_cli.py \
+--chain 'rus:5e5:1,ldot:0.5:1.4:1000,rud:1e7:1.0,td:1:0:1,mul:2,arms:2,swirl:-0.33:2,pwalk:1e-4:5:50,imul:0.5,mul:0.25,ldot:0.5:1.25:200' \
+--pix 5000 --margin 0 --thumb 5000 --pasp \
+--out galaxy_logo11.png 
+
+python galaxy_cli.py \
+--chain 'rus:1e6:1,ldot:0.5:1.4:1000,rud:10e6:1,imul:0.33,rot:-0.1,walk:10e-3:100,mul:0.6,ldot:0:1.25:200' \
+--pix 5000  --out galaxy_logo12.png --margin -0.15 --pasp
+
+@
+
+\newpage
+\section{Logo Mockup 1 (Material, Not Logos)}
+\vskip 1cm
+\Sexpr{make_logo(10,1)}
+\Sexpr{make_logo(5,7)}
+\Sexpr{make_logo(4,6)}
+
+\newpage
+\section{Logo Mockup 2 (Material, Not Logos)}
+\vskip 1cm
+\Sexpr{make_logo(8,11)}
+\Sexpr{make_logo(2,3)}
+\Sexpr{make_logo(9,12)}
 
 
 \newpage
@@ -798,11 +1170,8 @@ python galaxy_cli.py \
 python galaxy_cli.py \
 --chain 'rus:5e5:1,ldot:0.5:1.4:1000,rud:1e7:1.0,td:1:0:1,mul:2,arms:2,swirl:-0.33:2,pwalk:1e-4:5:50,imul:0.5,mul:0.25,ldot:0.5:1.25:200' \
 --pix 5000 --margin 0 \
---verbose \
+--verbose --thumb 5000 \
 --out galaxy1.png 
-vips thumbnail galaxy1.png galaxy1thumb.png 5000 --linear
-rm galaxy1.png
-mv galaxy1thumb.png galaxy1.png
 @
 
 \vskip 5mm

@@ -1,0 +1,349 @@
+\documentclass{article}\usepackage[]{graphicx}\usepackage[dvipsnames,table]{xcolor}
+% maxwidth is the original width if it is less than linewidth
+% otherwise use linewidth (to make sure the graphics do not exceed the margin)
+\makeatletter
+\def\maxwidth{ %
+  \ifdim\Gin@nat@width>\linewidth
+    \linewidth
+  \else
+    \Gin@nat@width
+  \fi
+}
+\makeatother
+
+\definecolor{fgcolor}{rgb}{0.345, 0.345, 0.345}
+\newcommand{\hlnum}[1]{\textcolor[rgb]{0.686,0.059,0.569}{#1}}%
+\newcommand{\hlsng}[1]{\textcolor[rgb]{0.192,0.494,0.8}{#1}}%
+\newcommand{\hlcom}[1]{\textcolor[rgb]{0.678,0.584,0.686}{\textit{#1}}}%
+\newcommand{\hlopt}[1]{\textcolor[rgb]{0,0,0}{#1}}%
+\newcommand{\hldef}[1]{\textcolor[rgb]{0.345,0.345,0.345}{#1}}%
+\newcommand{\hlkwa}[1]{\textcolor[rgb]{0.161,0.373,0.58}{\textbf{#1}}}%
+\newcommand{\hlkwb}[1]{\textcolor[rgb]{0.69,0.353,0.396}{#1}}%
+\newcommand{\hlkwc}[1]{\textcolor[rgb]{0.333,0.667,0.333}{#1}}%
+\newcommand{\hlkwd}[1]{\textcolor[rgb]{0.737,0.353,0.396}{\textbf{#1}}}%
+\let\hlipl\hlkwb
+
+\usepackage{framed}
+\makeatletter
+\newenvironment{kframe}{%
+ \def\at@end@of@kframe{}%
+ \ifinner\ifhmode%
+  \def\at@end@of@kframe{\end{minipage}}%
+  \begin{minipage}{\columnwidth}%
+ \fi\fi%
+ \def\FrameCommand##1{\hskip\@totalleftmargin \hskip-\fboxsep
+ \colorbox{shadecolor}{##1}\hskip-\fboxsep
+     % There is no \\@totalrightmargin, so:
+     \hskip-\linewidth \hskip-\@totalleftmargin \hskip\columnwidth}%
+ \MakeFramed {\advance\hsize-\width
+   \@totalleftmargin\z@ \linewidth\hsize
+   \@setminipage}}%
+ {\par\unskip\endMakeFramed%
+ \at@end@of@kframe}
+\makeatother
+
+\definecolor{shadecolor}{rgb}{.97, .97, .97}
+\definecolor{messagecolor}{rgb}{0, 0, 0}
+\definecolor{warningcolor}{rgb}{1, 0, 1}
+\definecolor{errorcolor}{rgb}{1, 0, 0}
+\newenvironment{knitrout}{}{} % an empty environment to be redefined in TeX
+
+\usepackage{alltt}
+\usepackage[portrait, headheight = 0cm, margin=0.25cm, top = 0.25cm]{geometry} 
+\usepackage{graphicx}
+\usepackage[dvipsnames,table]{xcolor}
+\usepackage{amsmath,amsfonts,amssymb}
+\usepackage[export]{adjustbox}
+\usepackage{hyperref}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage{fontspec}
+
+% ---- Font families (define in preamble) ----
+\newfontfamily\SymSans{Avenir Next}
+\newfontfamily\SymSerif{Didot}
+
+% Use explicit filenames from ~/Library/Fonts (absolute path recommended)
+% Replace YOURUSER with your username if different.
+\newfontfamily\SymFiraSans[
+  Path = /Users/nicknassuphis/Library/Fonts/,
+  UprightFont    = FiraSans-Regular.ttf,
+  ItalicFont     = FiraSans-Italic.ttf,
+  BoldFont       = FiraSans-Bold.ttf,
+  BoldItalicFont = FiraSans-BoldItalic.ttf
+]{Fira Sans}
+
+\newfontfamily\SymSpectral[
+  Path = /Users/nicknassuphis/Library/Fonts/,
+  UprightFont    = Spectral-Regular.ttf,
+  ItalicFont     = Spectral-Italic.ttf,
+  BoldFont       = Spectral-Bold.ttf,
+  BoldItalicFont = Spectral-BoldItalic.ttf
+]{Spectral}
+
+\newfontfamily\SymCormorant[
+  Path = /Users/nicknassuphis/Library/Fonts/,
+  UprightFont    = CormorantGaramond-Regular.ttf,
+  ItalicFont     = CormorantGaramond-Italic.ttf,
+  BoldFont       = CormorantGaramond-Bold.ttf,
+  BoldItalicFont = CormorantGaramond-BoldItalic.ttf
+]{Cormorant Garamond}
+
+% Variable fonts
+\newfontfamily\SymEBGaramond[
+  Path = /Users/nicknassuphis/Library/Fonts/,
+  UprightFont   = EBGaramond-VariableFont_wght.ttf,
+  ItalicFont    = EBGaramond-Italic-VariableFont_wght.ttf,
+  BoldFont      = EBGaramond-VariableFont_wght.ttf,
+  BoldFeatures  = {RawFeature={+wght=700}}
+]{EB Garamond Variable}
+
+\newfontfamily\SymGeomVar[
+  Path = /Users/nicknassuphis/Library/Fonts/,
+  UprightFont  = Geom-Variable.ttf,
+  BoldFont     = Geom-Variable.ttf,
+  BoldFeatures = {RawFeature={+wght=700}}
+]{Geom Variable}
+
+% No true bold; optionally fake it
+\newfontfamily\SymIMFell[
+  Path = /Users/nicknassuphis/Library/Fonts/,
+  UprightFont = IMFellEnglish-Regular.ttf,
+  ItalicFont  = IMFellEnglish-Italic.ttf,
+  BoldFont    = IMFellEnglish-Regular.ttf,
+  BoldFeatures = {FakeBold=2}
+]{IM Fell English}
+\IfFileExists{upquote.sty}{\usepackage{upquote}}{}
+\begin{document}
+
+% ---- R macro expansion ----
+
+
+\newpage
+\section{Logo Gallery}
+\vskip 2cm
+\begin{center}
+\begin{tabular}{c@{\hspace{2cm}}c}
+\begingroup
+\setlength{\tabcolsep}{0pt}
+\begin{tabular}{@{}c@{\hspace{0.2em}}l@{}}
+  \raisebox{1mm}{\includegraphics[width=1.5cm,height=1.5cm]{galaxy_logo10.png}} &
+  \shortstack[l]{{\SymSans\Huge Symmetra}\\[-0.35ex]{\SymSans\Huge Capital}}
+\end{tabular}
+\endgroup       & \begingroup
+\setlength{\tabcolsep}{0pt}
+\begin{tabular}{@{}c@{\hspace{0.2em}}l@{}}
+  \raisebox{1mm}{\includegraphics[width=1.5cm,height=1.5cm]{galaxy_logo1.png}} &
+  \shortstack[l]{{\SymSans\Huge Symmetra}\\[-0.35ex]{\SymSans\Huge Capital}}
+\end{tabular}
+\endgroup \\[3cm]
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tabular}{c@{\hspace{2cm}}c}
+\begingroup
+\setlength{\tabcolsep}{0pt}
+\begin{tabular}{@{}c@{\hspace{0.2em}}l@{}}
+  \raisebox{1mm}{\includegraphics[width=1.5cm,height=1.5cm]{galaxy_logo10.png}} &
+  \shortstack[l]{{\SymSerif\Huge Symmetra}\\[-0.35ex]{\SymSerif\Huge Capital}}
+\end{tabular}
+\endgroup      & \begingroup
+\setlength{\tabcolsep}{0pt}
+\begin{tabular}{@{}c@{\hspace{0.2em}}l@{}}
+  \raisebox{1mm}{\includegraphics[width=1.5cm,height=1.5cm]{galaxy_logo1.png}} &
+  \shortstack[l]{{\SymSerif\Huge Symmetra}\\[-0.35ex]{\SymSerif\Huge Capital}}
+\end{tabular}
+\endgroup \\[3cm]
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tabular}{c@{\hspace{2cm}}c}
+\begingroup
+\setlength{\tabcolsep}{0pt}
+\begin{tabular}{@{}c@{\hspace{0.2em}}l@{}}
+  \raisebox{1mm}{\includegraphics[width=1.5cm,height=1.5cm]{galaxy_logo10.png}} &
+  \shortstack[l]{{\SymFiraSans\Huge Symmetra}\\[-0.35ex]{\SymFiraSans\Huge Capital}}
+\end{tabular}
+\endgroup   & \begingroup
+\setlength{\tabcolsep}{0pt}
+\begin{tabular}{@{}c@{\hspace{0.2em}}l@{}}
+  \raisebox{1mm}{\includegraphics[width=1.5cm,height=1.5cm]{galaxy_logo1.png}} &
+  \shortstack[l]{{\SymFiraSans\Huge Symmetra}\\[-0.35ex]{\SymFiraSans\Huge Capital}}
+\end{tabular}
+\endgroup \\[3cm]
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tabular}{c@{\hspace{2cm}}c}
+\begingroup
+\setlength{\tabcolsep}{0pt}
+\begin{tabular}{@{}c@{\hspace{0.2em}}l@{}}
+  \raisebox{1mm}{\includegraphics[width=1.5cm,height=1.5cm]{galaxy_logo10.png}} &
+  \shortstack[l]{{\SymSpectral\Huge Symmetra}\\[-0.35ex]{\SymSpectral\Huge Capital}}
+\end{tabular}
+\endgroup   & \begingroup
+\setlength{\tabcolsep}{0pt}
+\begin{tabular}{@{}c@{\hspace{0.2em}}l@{}}
+  \raisebox{1mm}{\includegraphics[width=1.5cm,height=1.5cm]{galaxy_logo1.png}} &
+  \shortstack[l]{{\SymSpectral\Huge Symmetra}\\[-0.35ex]{\SymSpectral\Huge Capital}}
+\end{tabular}
+\endgroup \\[3cm]
+\end{tabular}
+\end{center}
+
+\newpage
+\section{Logo Gallery}
+\vskip 2cm
+
+\begin{center}
+\begin{tabular}{c@{\hspace{2cm}}c}
+\begingroup
+\setlength{\tabcolsep}{0pt}
+\begin{tabular}{@{}c@{\hspace{0.2em}}l@{}}
+  \raisebox{1mm}{\includegraphics[width=1.5cm,height=1.5cm]{galaxy_logo10.png}} &
+  \shortstack[l]{{\SymCormorant\Huge Symmetra}\\[-0.35ex]{\SymCormorant\Huge Capital}}
+\end{tabular}
+\endgroup  & \begingroup
+\setlength{\tabcolsep}{0pt}
+\begin{tabular}{@{}c@{\hspace{0.2em}}l@{}}
+  \raisebox{1mm}{\includegraphics[width=1.5cm,height=1.5cm]{galaxy_logo1.png}} &
+  \shortstack[l]{{\SymCormorant\Huge Symmetra}\\[-0.35ex]{\SymCormorant\Huge Capital}}
+\end{tabular}
+\endgroup \\[3cm]
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tabular}{c@{\hspace{2cm}}c}
+\begingroup
+\setlength{\tabcolsep}{0pt}
+\begin{tabular}{@{}c@{\hspace{0.2em}}l@{}}
+  \raisebox{1mm}{\includegraphics[width=1.5cm,height=1.5cm]{galaxy_logo10.png}} &
+  \shortstack[l]{{\SymEBGaramond\Huge Symmetra}\\[-0.35ex]{\SymEBGaramond\Huge Capital}}
+\end{tabular}
+\endgroup & \begingroup
+\setlength{\tabcolsep}{0pt}
+\begin{tabular}{@{}c@{\hspace{0.2em}}l@{}}
+  \raisebox{1mm}{\includegraphics[width=1.5cm,height=1.5cm]{galaxy_logo1.png}} &
+  \shortstack[l]{{\SymEBGaramond\Huge Symmetra}\\[-0.35ex]{\SymEBGaramond\Huge Capital}}
+\end{tabular}
+\endgroup \\[3cm]
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tabular}{c@{\hspace{2cm}}c}
+\begingroup
+\setlength{\tabcolsep}{0pt}
+\begin{tabular}{@{}c@{\hspace{0.2em}}l@{}}
+  \raisebox{1mm}{\includegraphics[width=1.5cm,height=1.5cm]{galaxy_logo10.png}} &
+  \shortstack[l]{{\SymGeomVar\Huge Symmetra}\\[-0.35ex]{\SymGeomVar\Huge Capital}}
+\end{tabular}
+\endgroup    & \begingroup
+\setlength{\tabcolsep}{0pt}
+\begin{tabular}{@{}c@{\hspace{0.2em}}l@{}}
+  \raisebox{1mm}{\includegraphics[width=1.5cm,height=1.5cm]{galaxy_logo1.png}} &
+  \shortstack[l]{{\SymGeomVar\Huge Symmetra}\\[-0.35ex]{\SymGeomVar\Huge Capital}}
+\end{tabular}
+\endgroup \\[3cm]
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tabular}{c@{\hspace{2cm}}c}
+\begingroup
+\setlength{\tabcolsep}{0pt}
+\begin{tabular}{@{}c@{\hspace{0.2em}}l@{}}
+  \raisebox{1mm}{\includegraphics[width=1.5cm,height=1.5cm]{galaxy_logo10.png}} &
+  \shortstack[l]{{\SymIMFell\Huge Symmetra}\\[-0.35ex]{\SymIMFell\Huge Capital}}
+\end{tabular}
+\endgroup     & \begingroup
+\setlength{\tabcolsep}{0pt}
+\begin{tabular}{@{}c@{\hspace{0.2em}}l@{}}
+  \raisebox{1mm}{\includegraphics[width=1.5cm,height=1.5cm]{galaxy_logo1.png}} &
+  \shortstack[l]{{\SymIMFell\Huge Symmetra}\\[-0.35ex]{\SymIMFell\Huge Capital}}
+\end{tabular}
+\endgroup
+\end{tabular}
+\end{center}
+
+\newpage
+\section{Logo Gallery}
+
+\vskip 2cm
+\begin{center}
+\begin{tabular}{c@{\hspace{2cm}}c}
+\begingroup
+\setlength{\tabcolsep}{0pt}
+\begin{tabular}{@{}c@{\hspace{0.2em}}l@{}}
+  \raisebox{1mm}{\includegraphics[width=1.5cm,height=1.5cm]{galaxy_logo2.png}} &
+  \shortstack[l]{{\SymSans\Huge Symmetra}\\[-0.35ex]{\SymSans\Huge Capital}}
+\end{tabular}
+\endgroup       & \begingroup
+\setlength{\tabcolsep}{0pt}
+\begin{tabular}{@{}c@{\hspace{0.2em}}l@{}}
+  \raisebox{1mm}{\includegraphics[width=1.5cm,height=1.5cm]{galaxy_logo3.png}} &
+  \shortstack[l]{{\SymSans\Huge Symmetra}\\[-0.35ex]{\SymSans\Huge Capital}}
+\end{tabular}
+\endgroup \\[3cm]
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tabular}{c@{\hspace{2cm}}c}
+\begingroup
+\setlength{\tabcolsep}{0pt}
+\begin{tabular}{@{}c@{\hspace{0.2em}}l@{}}
+  \raisebox{1mm}{\includegraphics[width=1.5cm,height=1.5cm]{galaxy_logo4.png}} &
+  \shortstack[l]{{\SymSerif\Huge Symmetra}\\[-0.35ex]{\SymSerif\Huge Capital}}
+\end{tabular}
+\endgroup      & \begingroup
+\setlength{\tabcolsep}{0pt}
+\begin{tabular}{@{}c@{\hspace{0.2em}}l@{}}
+  \raisebox{1mm}{\includegraphics[width=1.5cm,height=1.5cm]{galaxy_logo5.png}} &
+  \shortstack[l]{{\SymSerif\Huge Symmetra}\\[-0.35ex]{\SymSerif\Huge Capital}}
+\end{tabular}
+\endgroup \\[3cm]
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tabular}{c@{\hspace{2cm}}c}
+\begingroup
+\setlength{\tabcolsep}{0pt}
+\begin{tabular}{@{}c@{\hspace{0.2em}}l@{}}
+  \raisebox{1mm}{\includegraphics[width=1.5cm,height=1.5cm]{galaxy_logo6.png}} &
+  \shortstack[l]{{\SymFiraSans\Huge Symmetra}\\[-0.35ex]{\SymFiraSans\Huge Capital}}
+\end{tabular}
+\endgroup   & \begingroup
+\setlength{\tabcolsep}{0pt}
+\begin{tabular}{@{}c@{\hspace{0.2em}}l@{}}
+  \raisebox{1mm}{\includegraphics[width=1.5cm,height=1.5cm]{galaxy_logo7.png}} &
+  \shortstack[l]{{\SymFiraSans\Huge Symmetra}\\[-0.35ex]{\SymFiraSans\Huge Capital}}
+\end{tabular}
+\endgroup \\[3cm]
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tabular}{c@{\hspace{2cm}}c}
+\begingroup
+\setlength{\tabcolsep}{0pt}
+\begin{tabular}{@{}c@{\hspace{0.2em}}l@{}}
+  \raisebox{1mm}{\includegraphics[width=1.5cm,height=1.5cm]{galaxy_logo8.png}} &
+  \shortstack[l]{{\SymSpectral\Huge Symmetra}\\[-0.35ex]{\SymSpectral\Huge Capital}}
+\end{tabular}
+\endgroup   & \begingroup
+\setlength{\tabcolsep}{0pt}
+\begin{tabular}{@{}c@{\hspace{0.2em}}l@{}}
+  \raisebox{1mm}{\includegraphics[width=1.5cm,height=1.5cm]{galaxy_logo9.png}} &
+  \shortstack[l]{{\SymSpectral\Huge Symmetra}\\[-0.35ex]{\SymSpectral\Huge Capital}}
+\end{tabular}
+\endgroup \\[3cm]
+\end{tabular}
+\end{center}
+
+\end{document}

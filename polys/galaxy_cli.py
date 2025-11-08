@@ -28,17 +28,22 @@ def render_chain_tile(
         print(f"[render] spec: {spec}")
     t0 = time.perf_counter()
 
+    canvas = np.zeros((int(pix), int(pix)), np.uint8)
     specparser.set_const("pix",0.51/(fos*(pix-1)))
+    specparser.set_const("fos",fos)
     z, mult = galaxy.build_logo_from_chain(spec)
-    px,py, H,W = galaxy_raster.project_to_canvas(z,pix,margin_frac)
+    if z.size<1: 
+        if verbose: print(f"[render] z.size<0")
+        return canvas
+    
+    px,py = galaxy_raster.project_to_canvas(z,pix,margin_frac)
 
-    r_px = np.rint(mult * fos * (W - 1)).astype(np.int32)
+    r_px = np.rint(mult * fos * (int(pix) - 1)).astype(np.int32)
     keep = r_px >= rmin
     kept = int(keep.sum())
     if kept == 0:
-        if verbose:
-            print(f"[render] kept=0 points after threshold (rmin={rmin})")
-        return np.zeros((H, W), np.uint8)
+        if verbose: print(f"[render] kept=0 points after threshold (rmin={rmin})")
+        return canvas
 
     px, py, r_px = px[keep], py[keep], r_px[keep]
     r_max = int(r_px.max())
@@ -56,11 +61,19 @@ def render_chain_tile(
     t2 = time.perf_counter()
 
     if verbose:
-        print(f"[render] N={z.size:,} kept={kept:,} groups={r_vals.size}, "
-              f"rmax={r_max} bucket={t2-t1:.3f}s geometry={t1-t0:.3f}s")
+        print((
+            "[render] "
+            f"N={z.size:,} "
+            f"ptp(abs(z))={np.ptp(np.abs(z))} "
+            f"mean(abs(z))={np.mean(np.abs(z))} "
+            f"kept={kept:,} "
+            f"groups={r_vals.size} "
+            f"rmax={r_max} "
+            f"bucket={t2-t1:.3f}s "
+            f"geometry={t1-t0:.3f}s"
+        ))
 
     # stamp per radius
-    canvas = np.zeros((H, W), np.uint8)
     for rr, s, c in zip(r_vals, starts, counts):
         if c <= 0:
             continue
@@ -119,14 +132,17 @@ def build_parser():
     p.add_argument("--pix", type=int, default=25000, help="Tile width/height in pixels (default 25000)")
     p.add_argument("--out", type=str, default="logo.png", help="Output PNG path")
     p.add_argument("--cols", type=int, default=None, help="Columns if chain expands to multiple tiles")
+    p.add_argument("--rows", type=int, default=None, help="Rows if chain expands to multiple tiles")
     p.add_argument("--thumb",type=int, default=None,  help="Save thumbnail")
     p.add_argument("--gap", type=int, default=20, help="Gap between tiles in mosaic")
     p.add_argument("--invert", action="store_true", help="Invert black/white")
+    p.add_argument("--pasp", action="store_true", help="Add passepartout")
     p.add_argument("--fos", type=float, default=1e-5, help="Size scale: pixel radius = mult * fos * (pix-1)")
     p.add_argument("--min", dest="rmin", type=int, default=1, help="Minimum visible integer radius (px)")
-    p.add_argument("--margin", type=float, default=0.10, help="Logical margin fraction around geometry")
+    p.add_argument("--margin", type=float, default=0.0, help="Logical margin fraction around geometry")
     p.add_argument("--bucket", type=str, default="parallel",choices=["serial","parallel"],help="Bucketing Method")
     p.add_argument("--verbose", "-v", action="store_true", help="Print detailed progress")
+    p.add_argument("--explain", "-e", action="store_true", help="Make horizontal mosaic of pipeline steps")
     p.add_argument("--footer", action="store_true", help="Render the spec string as a footer title")
     p.add_argument("--footer-dpi", type=int, default=300, help="Footer text DPI (default 300)")
     p.add_argument("--footer-pad", type=int, default=48, help="Left/right padding for footer text")
@@ -146,7 +162,17 @@ def main():
         k, v = specparser._parse_const_kv(kv)
         specparser.set_const(k, v)
     specparser.set_const("pix",0.51/(args.fos*(args.pix-1)))
-    specs = expandspec.expand_cartesian_lists(args.chain)
+
+    if args.explain: # "explain" mode: show your work
+        chain = f">[{args.chain}],dot:pix"
+        args.cols=None
+        args.rows=1
+        args.margin=0.1
+        args.footer=True
+        specs = expandspec.expand_cartesian_lists(chain)
+    else:
+        specs = expandspec.expand_cartesian_lists(args.chain)
+
     if not specs:
         raise SystemExit("No specs produced by expandspec")
 
@@ -163,7 +189,8 @@ def main():
             tiles[0], args.out, args.invert,
             footer_text=footer,
             footer_pad_lr_px=args.footer_pad,
-            footer_dpi=args.footer_dpi
+            footer_dpi=args.footer_dpi,
+            passepartout=args.pasp
         )
         if args.verbose:
             print(f"[main] Saved {args.out} ({args.pix}×{args.pix})")
@@ -172,8 +199,12 @@ def main():
         return
 
     n = len(tiles)
-    cols = args.cols if args.cols else max(1, int(round(math.sqrt(n))))
-    cols = args.cols if args.cols else max(1, int(round(math.sqrt(n))))
+    if args.cols:
+        cols = args.cols
+    elif args.rows:
+        cols = int(round(n / args.rows))
+    else: 
+        cols = max(1, int(round(math.sqrt(n))))
     titles = specs if args.footer else None  # per-tile footer = spec line
     galaxy_raster.save_mosaic_png_bilevel(
         tiles, titles,

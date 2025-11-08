@@ -12,7 +12,7 @@ import pyvips as vips
 def make_disc_offsets(r: int):
     r = int(max(1, r))
     yy, xx = np.mgrid[-r:r+1, -r:r+1]
-    mask = (xx*xx + yy*yy) <= r*r
+    mask = (xx*xx + yy*yy) < r*r
     return yy[mask].astype(np.int32), xx[mask].astype(np.int32)
 
 def build_disc_offset_cache_from_rpx(r_px: np.ndarray, rmin: int) -> dict[int, tuple[np.ndarray, np.ndarray]]:
@@ -201,15 +201,16 @@ def bucket_by_radius_parallel(r_px: np.ndarray, r_min: int, r_max: int):
 
 
 def project_to_canvas(z: np.ndarray, pix: int, margin_frac: float):
+    if z.size<1: return np.empty(dtype=np.int32), np.empty(dtype=np.int32)
     half  = np.max(np.abs(z)) * (1.0 + 2.0 * margin_frac)
     span  = 2.0 * half
-    W = H = int(pix)
-    px_per = (W - 1) / span
+    if span<1e-10: span=1
+    px_per = (int(pix) - 1) / span
     px = np.rint((z.real + half) * px_per).astype(np.int32)
     py = np.rint((half - z.imag) * px_per).astype(np.int32)
-    px = np.clip(px, 0, W-1)
-    py = np.clip(py, 0, H-1)
-    return px, py, H, W
+    px = np.clip(px, 0, int(pix)-1)
+    py = np.clip(py, 0, int(pix)-1)
+    return px, py
 
 # ========================================
 # image output
@@ -362,6 +363,7 @@ def save_png_bilevel(
     *,
     footer_pad_lr_px: int = 48,
     footer_dpi: int = 300,
+    passepartout = False
 ):
     """
     Save a bilevel (0/255) PNG from a numpy array, optionally adding a footer title.
@@ -384,13 +386,14 @@ def save_png_bilevel(
             invert=invert,
         )
 
-    base = add_rounded_passepartout_bilevel_pct(
-        base,
-        margin_frac = 0.01,   # e.g. 0.10 = 10% of width
-        radius_frac = 0.1,   # e.g. 0.04 = 4% of width
-        auto_white_bg = True,
-        mat_value = None,   # 255 or 0 if you want to override
-    )
+    if passepartout:
+        base = add_rounded_passepartout_bilevel_pct(
+            base,
+            margin_frac = 0.01,   # e.g. 0.10 = 10% of width
+            radius_frac = 0.1,   # e.g. 0.04 = 4% of width
+            auto_white_bg = True,
+            mat_value = None,   # 255 or 0 if you want to override
+        )
 
 
     base.write_to_file(

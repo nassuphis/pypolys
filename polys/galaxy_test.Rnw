@@ -1,0 +1,167 @@
+\documentclass{article}
+\usepackage[portrait, headheight = 0cm, margin=0.25cm, top = 0.25cm]{geometry} 
+\usepackage{graphicx}
+\usepackage[dvipsnames,table]{xcolor}
+\usepackage{amsmath,amsfonts,amssymb}
+\usepackage[export]{adjustbox}
+\usepackage{hyperref}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage{fontspec}
+
+% ---- Font families (define in preamble) ----
+\newfontfamily\SymSans{Avenir Next}
+\newfontfamily\SymSerif{Didot}
+
+% Use explicit filenames from ~/Library/Fonts (absolute path recommended)
+% Replace YOURUSER with your username if different.
+\newfontfamily\SymFiraSans[
+  Path = /Users/nicknassuphis/Library/Fonts/,
+  UprightFont    = FiraSans-Regular.ttf,
+  ItalicFont     = FiraSans-Italic.ttf,
+  BoldFont       = FiraSans-Bold.ttf,
+  BoldItalicFont = FiraSans-BoldItalic.ttf
+]{Fira Sans}
+
+\newfontfamily\SymSpectral[
+  Path = /Users/nicknassuphis/Library/Fonts/,
+  UprightFont    = Spectral-Regular.ttf,
+  ItalicFont     = Spectral-Italic.ttf,
+  BoldFont       = Spectral-Bold.ttf,
+  BoldItalicFont = Spectral-BoldItalic.ttf
+]{Spectral}
+
+\newfontfamily\SymCormorant[
+  Path = /Users/nicknassuphis/Library/Fonts/,
+  UprightFont    = CormorantGaramond-Regular.ttf,
+  ItalicFont     = CormorantGaramond-Italic.ttf,
+  BoldFont       = CormorantGaramond-Bold.ttf,
+  BoldItalicFont = CormorantGaramond-BoldItalic.ttf
+]{Cormorant Garamond}
+
+% Variable fonts
+\newfontfamily\SymEBGaramond[
+  Path = /Users/nicknassuphis/Library/Fonts/,
+  UprightFont   = EBGaramond-VariableFont_wght.ttf,
+  ItalicFont    = EBGaramond-Italic-VariableFont_wght.ttf,
+  BoldFont      = EBGaramond-VariableFont_wght.ttf,
+  BoldFeatures  = {RawFeature={+wght=700}}
+]{EB Garamond Variable}
+
+\newfontfamily\SymGeomVar[
+  Path = /Users/nicknassuphis/Library/Fonts/,
+  UprightFont  = Geom-Variable.ttf,
+  BoldFont     = Geom-Variable.ttf,
+  BoldFeatures = {RawFeature={+wght=700}}
+]{Geom Variable}
+
+% No true bold; optionally fake it
+\newfontfamily\SymIMFell[
+  Path = /Users/nicknassuphis/Library/Fonts/,
+  UprightFont = IMFellEnglish-Regular.ttf,
+  ItalicFont  = IMFellEnglish-Italic.ttf,
+  BoldFont    = IMFellEnglish-Regular.ttf,
+  BoldFeatures = {FakeBold=2}
+]{IM Fell English}
+
+\begin{document}
+
+% ---- R macro expansion ----
+<<, engine='R',include=FALSE>>=
+make_logo<-function(logo,font){
+knitr::asis_output(glue::glue(R"---(
+\begingroup
+\setlength{\tabcolsep}{0pt}
+\begin{tabular}{@{}c@{\hspace{0.2em}}l@{}}
+  \raisebox{1mm}{\includegraphics[width=1.5cm,height=1.5cm]{galaxy_logo@[logo]@.png}} &
+  \shortstack[l]{{\@[font]@\Huge Symmetra}\\[-0.35ex]{\@[font]@\Huge Capital}}
+\end{tabular}
+\endgroup
+)---",.open="@[",.close="]@"))
+}
+@
+
+\newpage
+\section{Logo Gallery}
+\vskip 2cm
+\begin{center}
+\begin{tabular}{c@{\hspace{2cm}}c}
+\Sexpr{make_logo(10,"SymSans")}       & \Sexpr{make_logo(1,"SymSans")} \\[3cm]
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tabular}{c@{\hspace{2cm}}c}
+\Sexpr{make_logo(10,"SymSerif")}      & \Sexpr{make_logo(1,"SymSerif")} \\[3cm]
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tabular}{c@{\hspace{2cm}}c}
+\Sexpr{make_logo(10,"SymFiraSans")}   & \Sexpr{make_logo(1,"SymFiraSans")} \\[3cm]
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tabular}{c@{\hspace{2cm}}c}
+\Sexpr{make_logo(10,"SymSpectral")}   & \Sexpr{make_logo(1,"SymSpectral")} \\[3cm]
+\end{tabular}
+\end{center}
+
+\newpage
+\section{Logo Gallery}
+\vskip 2cm
+
+\begin{center}
+\begin{tabular}{c@{\hspace{2cm}}c}
+\Sexpr{make_logo(10,"SymCormorant")}  & \Sexpr{make_logo(1,"SymCormorant")} \\[3cm]
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tabular}{c@{\hspace{2cm}}c}
+\Sexpr{make_logo(10,"SymEBGaramond")} & \Sexpr{make_logo(1,"SymEBGaramond")} \\[3cm]
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tabular}{c@{\hspace{2cm}}c}
+\Sexpr{make_logo(10,"SymGeomVar")}    & \Sexpr{make_logo(1,"SymGeomVar")} \\[3cm]
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tabular}{c@{\hspace{2cm}}c}
+\Sexpr{make_logo(10,"SymIMFell")}     & \Sexpr{make_logo(1,"SymIMFell")}
+\end{tabular}
+\end{center}
+
+\newpage
+\section{Logo Gallery}
+
+\vskip 2cm
+\begin{center}
+\begin{tabular}{c@{\hspace{2cm}}c}
+\Sexpr{make_logo("2","SymSans")}       & \Sexpr{make_logo("3","SymSans")} \\[3cm]
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tabular}{c@{\hspace{2cm}}c}
+\Sexpr{make_logo("4","SymSerif")}      & \Sexpr{make_logo("5","SymSerif")} \\[3cm]
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tabular}{c@{\hspace{2cm}}c}
+\Sexpr{make_logo("6","SymFiraSans")}   & \Sexpr{make_logo("7","SymFiraSans")} \\[3cm]
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tabular}{c@{\hspace{2cm}}c}
+\Sexpr{make_logo("8","SymSpectral")}   & \Sexpr{make_logo("9","SymSpectral")} \\[3cm]
+\end{tabular}
+\end{center}
+
+\end{document}
