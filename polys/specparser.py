@@ -115,10 +115,13 @@ def _parse_scalar(tok: str) -> complex:
 # ---------- chain parsing (CLI-safe) ----------
 
 SKIP_PREFIXES = {"!"}
-
 def _is_skipped_name(raw: str) -> bool:
     s = raw.lstrip()
     return bool(s) and s[0] in SKIP_PREFIXES
+
+def _strip_nonfunctional_prefix(raw: str) -> str:
+    s = raw.lstrip()
+    return s[1:] if s.startswith("_") else raw
 
 def _split_top_level(s: str, sep: str) -> list[str]:
     out, buf, depth = [], [], 0
@@ -159,7 +162,9 @@ def split_chain(chain: str):
         name_raw = parts[0].strip()
         if _is_skipped_name(name_raw):
             continue
-        out[name_raw] = parts[1:]
+        name = _strip_nonfunctional_prefix(name_raw)
+        name = name.lower()
+        out[name] = parts[1:]
     return out
 
 def parse_chain(chain: str, MAXA: int = 12):
@@ -174,7 +179,8 @@ def parse_chain(chain: str, MAXA: int = 12):
         name_raw = parts[0].strip()
         if _is_skipped_name(name_raw):
             continue
-        name = name_raw.lower()
+        name = _strip_nonfunctional_prefix(name_raw)
+        name = name.lower()
         arg_tokens = parts[1:MAXA+1]
         args = tuple(_parse_scalar(tok) for tok in arg_tokens)
         out.append((name, args))

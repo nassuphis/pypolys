@@ -4,7 +4,6 @@ from numba import njit, prange, types
 from numba.typed import Dict
 import specparser
 
-
 # ===== random number generator =====
 
 RNG = np.random.default_rng(seed=42)
@@ -34,6 +33,18 @@ def _current_gid(state) -> int:
         return 1  # first sizing group
     # next group id is always last stored gid + 1
     return int(round(mult.imag[-1] + 1))
+
+# ----- jited calcs -----
+
+@njit(cache=True, nogil=True)
+def _smoothstep_scalar(x: float, w: float) -> float:
+    if w==0.0:
+        if x<=0.0: return 0.0
+        return 1.0
+    t = (x + w) / (2.0 * w)
+    if t < 0.0: t = 0.0
+    elif t > 1.0: t = 1.0
+    return t * t * (3.0 - 2.0 * t)
 
 # =========================
 # RNG ops (return new z)
@@ -81,11 +92,11 @@ ALLOWED["rud"] = op_rud
 #arc
 def op_rua(z, a, state):
     N   = int(a[0].real) or 1_000_000
-    start = min(a[1].real,a[1].imag)
-    end = max(a[1].real,a[1].imag)
-    rmax = a[2].real
-    center = a[3]
-    dth = float(a[4].real) or 0.5
+    start = min(a[1].real,a[2].real)
+    end = max(a[1].real,a[2].real)
+    rmax = a[3].real or 1.0
+    center = a[4]
+    dth = float(a[5].real) or 0.5
     u1 = RNG.uniform(low=0,high=rmax,size=N)
     r  = u1 ** dth
     u2 = RNG.uniform(low=start,high=end,size=N)
@@ -1002,7 +1013,7 @@ def op_clpoutdisk(z, a, state):
     keep = np.abs(tail - c) < r
     return np.concatenate((head, tail[keep]))
 
-ALLOWED["cloutdisk"] = op_clpoutdisk
+ALLOWED["clpoutdisk"] = op_clpoutdisk
 
 def op_clpinsq(z, a, state):
     r = a[0].real or 1.0
@@ -1070,6 +1081,24 @@ def op_add(z, a, state):
 
 ALLOWED["add"] = op_add
 
+def op_ibase(z, a, state):
+    k = _frozen_len(state)
+    if k < z.size:
+        fac = a[0].real or 1
+        z[k:] += - 1j*np.min(z[k:].imag)*fac
+    return z
+
+ALLOWED["ibase"] = op_ibase
+
+def op_itip(z, a, state):
+    k = _frozen_len(state)
+    if k < z.size:
+        fac = a[0].real or 1
+        z[k:] += - 1j*np.max(z[k:].imag)*fac
+    return z
+
+ALLOWED["itip"] = op_itip
+
 def op_mul(z, a, state):
     k = _frozen_len(state)
     if k < z.size:
@@ -1084,8 +1113,27 @@ def op_rmul(z, a, state):
         zz = z[k:]
         z[k:] = zz.real * a[0] + 1j * zz.imag
     return z
-
 ALLOWED["rmul"] = op_rmul
+
+def op_loflip(z, a, state):
+    k = _frozen_len(state)
+    if k < z.size:
+        zz = z[k:]
+        mask = zz.imag - a[0] < 0
+        zz = np.where(mask, -np.conj(zz), zz)
+        z[k:] = zz
+    return z
+ALLOWED["loflip"] = op_loflip
+
+def op_hiflip(z, a, state):
+    k = _frozen_len(state)
+    if k < z.size:
+        zz = z[k:]
+        mask = zz.imag - a[0] > 0
+        zz = np.where(mask, -np.conj(zz), zz)
+        z[k:] = zz
+    return z
+ALLOWED["hiflip"] = op_hiflip
 
 def op_imul(z, a, state):
     k = _frozen_len(state)
@@ -1093,7 +1141,6 @@ def op_imul(z, a, state):
         zz = z[k:]
         z[k:] = zz.real + 1j * zz.imag * a[0]
     return z
-
 ALLOWED["imul"] = op_imul
 
 
@@ -1104,7 +1151,6 @@ def op_center(z, a, state):
         tail = z[k:]
         z[k:] -= np.mean(tail)
     return z
-
 ALLOWED["center"] = op_center
 
 # scale to mult by mult logical
@@ -1117,7 +1163,6 @@ def op_norm(z, a, state):
         sz = scale * tail / max_radius
         z[k:] = sz
     return z
-
 ALLOWED["norm"] = op_norm
 
 # Global normalization (ignores groups):
@@ -1132,7 +1177,6 @@ def op_gnorm(z, a, state):
     R = np.max(np.abs(z)) or 1.0
     if R != 0.0: z *= (scale / R)
     return z
-
 ALLOWED["gnorm"] = op_gnorm
 
 
@@ -1143,7 +1187,6 @@ def op_rot(z, a, state):
     if k < z.size:
         z[k:] *= phi
     return z
-
 ALLOWED["rot"] = op_rot
 
 def op_sqrot(z, a, state):
@@ -1155,7 +1198,6 @@ def op_sqrot(z, a, state):
         zz = (tail.real + 1j * tail.imag * squish) * phi
         z[k:] = zz
     return z
-
 ALLOWED["sqrot"] = op_sqrot
 
 
@@ -1452,78 +1494,194 @@ def op_life(z, a, state):
 
 ALLOWED["life"] = op_life
 
-# GRADual PIXELization: gradpix
-def op_gradpix(z, a, state):
-    if z.size < 1: 
+
+# GRADual PIXELization (stochastic): gradpix
+def op_gpixsq(z, a, state):
+    if z.size < 1:
         return z
     k = _frozen_len(state)
-    if k >= z.size: 
+    if k >= z.size:
         return z
-
-    head, tail = z[:k], z[k:]
 
     nx = int(a[0].real) or 256
     ny = int(a[0].imag) or nx
-    g  = float(a[1].real) or 0.0
-    # Clamp g to [0, 1] to avoid overshoot
-    if g <= 0.0:
-        return z
-    if g > 1.0:
-        g = 1.0
+    gw = max(0.0, min(1.0, a[1].real))
+    gloc = max(0.0, min(a[2].real or 0.5,1.0))
+    dth = a[3].real or 0.25
+    final_w  = a[4].real or 1.0
 
-    x = tail.real
-    y = tail.imag
+
+    head, tail = z[:k], z[k:]
+    x, y = tail.real, tail.imag
 
     xmin, xmax = x.min(), x.max()
     ymin, ymax = y.min(), y.max()
     if not np.isfinite(xmin + xmax + ymin + ymax):
         return z
-    if xmax == xmin: 
+    if xmax == xmin:
         xmax = xmin + 1e-12
-    if ymax == ymin: 
+    if ymax == ymin:
         ymax = ymin + 1e-12
 
-    # Use the same binning convention as op_pixelate (histogram2d edges)
+    # --- compute 2D histogram (core step) ---
     H, xedges, yedges = np.histogram2d(
         x, y,
         bins=[nx, ny],
         range=[[xmin, xmax], [ymin, ymax]]
     )
 
-    # Bin indices for each point (vectorized)
+    # --- assign each point to its bin ---
     ix = np.searchsorted(xedges, x, side="right") - 1
     iy = np.searchsorted(yedges, y, side="right") - 1
-    # Clip to valid bins
     ix = np.clip(ix, 0, nx - 1)
     iy = np.clip(iy, 0, ny - 1)
+    flat = ix * ny + iy
+    order = np.argsort(flat, kind="mergesort")
+    flat_sorted = flat[order]
 
-    # Bin centers
-    cx = 0.5 * (xedges[:-1] + xedges[1:])
-    cy = 0.5 * (yedges[:-1] + yedges[1:])
+    if flat_sorted.size == 0:
+        return z
 
-    # Target centers for each point
-    x_c = cx[ix]
-    y_c = cy[iy]
-    centers = x_c + 1j * y_c
+    cut = np.flatnonzero(np.diff(flat_sorted)) + 1
+    starts = np.concatenate(([0], cut))
+    ends   = np.concatenate((cut, [flat_sorted.size]))
 
-    # Move a fraction g toward bin centers
-    moved = tail + g * (centers - tail)
+    # --- stochastic pixelization per bin ---
+    for s, e in zip(starts, ends):
+        pos_sorted = order[s:e]
+        n_bin = pos_sorted.size
+        if n_bin == 0: continue
 
-    out = np.empty_like(z)
-    out[:k] = head
-    out[k:] = moved
-    return out
+         # bin coordinates
+        b_ix = ix[pos_sorted[0]]
+        b_iy = iy[pos_sorted[0]]
+        x0, x1 = xedges[b_ix], xedges[b_ix + 1]
+        y0, y1 = yedges[b_iy], yedges[b_iy + 1]
+        cx = (x0+x1)/2
+        cy = (y0+y1)/2
+        wx = (x1-x0)
+        wy = (y1-y0)
 
-ALLOWED["gradpix"] = op_gradpix
+
+        h = _smoothstep_scalar( b_ix/(nx-1) - gloc ,  gw )
+ 
+        m = int(round( h * n_bin))
+        if m <= 0: continue
+
+        # random candidate points inside this bin
+        rx = (RNG.random(n_bin)-0.5)
+        ry = (RNG.random(n_bin)-0.5)
+        rx = np.sign(rx)*(np.abs(rx)**dth)
+        ry = np.sign(ry)*(np.abs(ry)**dth)
+        wfac = ( final_w * h + 1.0 * (1-h) )
+        cand_x = cx + rx * wx * wfac
+        cand_y = cy + ry * wy * wfac
+
+        # replace g*n_bin points with random ones
+        replace_idx = RNG.choice(pos_sorted, size=m, replace=False)
+        sample_idx  = RNG.integers(0, n_bin, size=m)
+        tail.real[replace_idx] = cand_x[sample_idx]
+        tail.imag[replace_idx] = cand_y[sample_idx]
+
+    z[k:] = tail
+    return z
+
+ALLOWED["gpixsq"] = op_gpixsq
+
+
+# GRADual PIXELization (stochastic): gradpix
+def op_gpixdsk(z, a, state):
+    if z.size < 1: return z
+    k = _frozen_len(state)
+    if k >= z.size: return z
+
+    nx = int(a[0].real) or 256
+    ny = int(a[0].imag) or nx
+    gw = max(0.0, min(1.0, a[1].real))
+    gloc = max(0.0, min(a[2].real or 0.5,1.0))
+    dth = a[3].real or 0.5
+    final_w  = a[4].real or 1.0
+
+
+    head, tail = z[:k], z[k:]
+    x, y = tail.real, tail.imag
+
+    xmin, xmax = x.min(), x.max()
+    ymin, ymax = y.min(), y.max()
+    if not np.isfinite(xmin + xmax + ymin + ymax):
+        return z
+    if xmax == xmin:
+        xmax = xmin + 1e-12
+    if ymax == ymin:
+        ymax = ymin + 1e-12
+
+    # --- compute 2D histogram (core step) ---
+    H, xedges, yedges = np.histogram2d(
+        x, y,
+        bins=[nx, ny],
+        range=[[xmin, xmax], [ymin, ymax]]
+    )
+
+    # --- assign each point to its bin ---
+    ix = np.searchsorted(xedges, x, side="right") - 1
+    iy = np.searchsorted(yedges, y, side="right") - 1
+    ix = np.clip(ix, 0, nx - 1)
+    iy = np.clip(iy, 0, ny - 1)
+    flat = ix * ny + iy
+    order = np.argsort(flat, kind="mergesort")
+    flat_sorted = flat[order]
+
+    if flat_sorted.size == 0:
+        return z
+
+    cut = np.flatnonzero(np.diff(flat_sorted)) + 1
+    starts = np.concatenate(([0], cut))
+    ends   = np.concatenate((cut, [flat_sorted.size]))
+
+    # --- stochastic pixelization per bin ---
+    for s, e in zip(starts, ends):
+        pos_sorted = order[s:e]
+        n_bin = pos_sorted.size
+        if n_bin == 0: continue
+
+         # bin coordinates
+        b_ix = ix[pos_sorted[0]]
+        b_iy = iy[pos_sorted[0]]
+        x0, x1 = xedges[b_ix], xedges[b_ix + 1]
+        y0, y1 = yedges[b_iy], yedges[b_iy + 1]
+        cx = (x0+x1)/2
+        cy = (y0+y1)/2
+        wx = (x1-x0)
+        wy = (y1-y0)
+
+
+        h = _smoothstep_scalar( b_ix/(nx-1) - gloc ,  gw )
+ 
+        m = int(round( h * n_bin))
+        if m <= 0: continue
+
+        # random candidate points inside this bin
+        rho = RNG.random(n_bin)
+        theta = RNG.random(n_bin)
+        wfac = ( final_w * h + 1.0 * (1-h) )
+        uc = 0.5*(wx+wy)*(wfac*(rho**dth))*np.exp(1j*2*np.pi*theta)        
+        cand_x = cx + uc.real
+        cand_y = cy + uc.imag
+
+        # replace g*n_bin points with random ones
+        replace_idx = RNG.choice(pos_sorted, size=m, replace=False)
+        sample_idx  = RNG.integers(0, n_bin, size=m)
+        tail.real[replace_idx] = cand_x[sample_idx]
+        tail.imag[replace_idx] = cand_y[sample_idx]
+
+    z[k:] = tail
+    return z
+
+ALLOWED["gpixdsk"] = op_gpixdsk
+
 
 # ---------- JIT kernels for build_logo ----------
 
-@njit(cache=True, nogil=True)
-def _smoothstep_scalar(x: float, w: float) -> float:
-    t = (x + w) / (2.0 * w)
-    if t < 0.0: t = 0.0
-    elif t > 1.0: t = 1.0
-    return t * t * (3.0 - 2.0 * t)
 
 @njit(cache=True, nogil=True)
 def _teardrop_inplace(x, y, a, w, tail):
@@ -1895,160 +2053,162 @@ def op_gsink(z, a, state):
 
 ALLOWED["gsink"] = op_gsink
 
-# =========================
+# ==================================================
 # Size/mult ops (write to state)
-# =========================
+# ==================================================
 
-def op_dot_lognormal(z, a, state):
-    """
-    Assign lognormal-distributed dot sizes to the active tail
-    and mark them with the current group id (imag part).
-    """
+def _dot_add(z,state,sizes):
+    if z.size<1: return
     k = _frozen_len(state)
-    tail_len = max(z.size - k, 0)
-    if tail_len == 0:
-        return z
+    if k>=z.size: return z
+    head, tail = z[:k], z[k:]
+    if sizes.size != tail.size: raise ValueError(f"sizes.size != tail.size.")
+    new_gid = np.full(tail.size, _current_gid(state), dtype=np.float64)
+    new_dots = sizes + 1j * new_gid
+    prev_dots = state.get(K_MULT)
+    if prev_dots is None:
+        state[K_MULT] = new_dots.astype(np.complex128, copy=False)
+    else:
+        state[K_MULT] = np.concatenate((prev_dots, new_dots))
+    return
 
-    # parameters
+def _dot_gid(state,gid):
+    dots = state[K_MULT]
+    mask = ( (dots.imag).astype(np.int64) == int(gid) )
+    return mask
+
+def _dot_set(z,state,mask,sizes,gid):
+    masked = np.sum(mask)
+    if masked<1: return
+    if sizes.size != masked: return
+    dots = state[K_MULT]
+    dots[mask] = sizes + 1j * int(gid)
+    state[K_MULT] = dots 
+    return z
+
+
+def op_ldot(z, a, state):
+    if z.size<1: return z
+    k = _frozen_len(state)
+    if k>=z.size: return z
+    head, tail = z[:k], z[k:]
     loc   = a[0].real or 0.5
     scale = a[1].real or 1.25
     drt   = a[2].real or 100.0
-    mul   = a[3].real or 1.0
-
-    # lognormal tail
-    zeta = RNG.normal(loc=loc, scale=scale, size=tail_len)
+    zeta = RNG.normal(loc=loc, scale=scale, size=tail.size)
     mult_tail_real = np.exp(zeta).astype(np.float64)
     np.clip(mult_tail_real, 1.0, drt, out=mult_tail_real)
-
-    # group id: last gid + 1 (or 1 if first)
-    gid = _current_gid(state)
-
-    # existing multipliers?
-    mult_prev = state.get(K_MULT)
-    if mult_prev is None:
-        full_real = mult_tail_real
-        full_imag = np.full(tail_len, gid, dtype=np.float64)
-    else:
-        full_real = np.concatenate((mult_prev.real, mult_tail_real))
-        full_imag = np.concatenate((mult_prev.imag, np.full(tail_len, gid, dtype=np.float64)))
-
-    # store combined complex vector (real=size, imag=group id)
-    state[K_MULT] = (full_real * mul + 1j * full_imag).astype(np.complex128, copy=False)
+    _dot_add(z,state,mult_tail_real)
     return z
-
-ALLOWED["ldot"] = op_dot_lognormal
-
+ALLOWED["ldot"] = op_ldot
 
 def op_dot(z, a, state):
-    """
-    Assign a constant dot size to the active tail and
-    mark it with the current group id (imag part).
-    """
+    if z.size<1: return z
     k = _frozen_len(state)
-    tail_len = max(z.size - k, 0)
-    if tail_len == 0:
-        return z
-
-    # constant times mult size value so pixels can be specified
+    if k>=z.size: return z
+    head, tail = z[:k], z[k:]
     val = float(a[0].real) or 1.0
     mul = float(a[1].real) or 1.0
-    mult_tail_real = np.full(tail_len, val*mul, dtype=np.float64)
-
-    # current group id (last gid + 1 or 1 if first)
-    gid = _current_gid(state)
-
-    # combine with any existing multipliers
-    mult_prev = state.get(K_MULT)
-    if mult_prev is None:
-        full_real = mult_tail_real
-        full_imag = np.full(tail_len, gid, dtype=np.float64)
-    else:
-        full_real = np.concatenate((mult_prev.real, mult_tail_real))
-        full_imag = np.concatenate((mult_prev.imag, np.full(tail_len, gid, dtype=np.float64)))
-
-    # store back
-    state[K_MULT] = (full_real + 1j * full_imag).astype(np.complex128, copy=False)
+    sizes = np.full(tail.size, val*mul, dtype=np.float64)
+    _dot_add(z,state,sizes)
     return z
-
 ALLOWED["dot"] = op_dot
 
+def op_dotrhset(z, a, state):
+    gid = _current_gid(state)
+    if gid == 1: return z # no previous gid
+    mask = ( z.real >0 ) & _dot_gid(state,gid-1)
+    new_size = a[0].real * a[1].real or 1
+    _dot_set(z,state,mask, new_size, gid-1)
+    return z
+ALLOWED["dotrhset"] = op_dotrhset
+
+def op_dotulset(z, a, state):
+    gid = _current_gid(state)
+    if gid == 1: return z # no previous gid
+    mask =  ( z.real >0 ) & ( z.imag >0 ) & _dot_gid(state,gid-1)
+    new_size = a[0].real * a[1].real or 1
+    _dot_set(z,state, mask,new_size, gid-1)
+    return z
+ALLOWED["dotulset"] = op_dotulset
+
+def op_dotlrset(z, a, state):
+    gid = _current_gid(state)
+    if gid == 1: return z # no previous gid
+    mask = ( z.real <0 ) & ( z.imag <0 )  & _dot_gid(state,gid-1)
+    new_size = a[0].real * a[1].real or 1
+    _dot_set(z,state, mask,new_size,gid-1)
+    return z
+ALLOWED["dotlrset"] = op_dotlrset
+
+def op_doturln(z, a, state):
+    gid = _current_gid(state)
+    if gid == 1: return z # no previous gid
+    mask = ( z.real >0 ) & ( z.imag >0 )  & _dot_gid(state,gid-1)
+    masked = sum(mask)
+    if masked<1: return z
+    loc   = a[0].real or 0.5
+    scale = a[1].real or 1.25
+    drt   = a[2].real or 100.0
+    zeta = RNG.normal(loc=loc, scale=scale, size=masked)
+    new_size = np.exp(zeta).astype(np.float64)
+    np.clip(new_size, 1.0, drt, out=new_size)
+    _dot_set(z,state,mask, new_size, gid-1)
+    return z
+ALLOWED["doturln"] = op_doturln
+
+def op_dotllln(z, a, state):
+    gid = _current_gid(state)
+    if gid == 1: return z # no previous gid
+    mask = ( z.real <0 ) & ( z.imag <0 )  & _dot_gid(state,gid-1)
+    masked = np.sum(mask)
+    if masked<1: return z # nothing to do
+    loc   = a[0].real or 0.5
+    scale = a[1].real or 1.25
+    drt   = a[2].real or 100.0
+    zeta = RNG.normal(loc=loc, scale=scale, size=masked)
+    new_size = np.exp(zeta).astype(np.float64)
+    np.clip(new_size, 1.0, drt, out=new_size)
+    _dot_set(z,state,mask, new_size, gid-1)
+    return z
+ALLOWED["dotllln"] = op_dotllln
+
+
 def op_dot_copy(z, a, state):
-    """
-    Copy size distribution from an existing group onto the active tail.
-
-    a[0] (optional): source gid (real).
-        If 0 or omitted, use the previous gid (current_gid - 1).
-
-    Behavior:
-      - Finds sizes where imag(mult) == source_gid among the frozen prefix.
-      - Samples with replacement to fill the tail.
-      - Writes sizes to the tail and tags them with a NEW gid.
-    """
     k = _frozen_len(state)
     tail_len = max(z.size - k, 0)
-    if tail_len == 0:
-        return z
-
+    if tail_len == 0: return z
     mult = state.get(K_MULT)
-    if mult is None or mult.size == 0:
-        # nothing to copy from
-        return z
-
-    # determine source gid
+    if mult is None or mult.size == 0: return z
     src_gid = int(round(a[0].real)) if a.size > 0 else 0
-    if src_gid <= 0:
-        src_gid = _current_gid(state) - 1
-    if src_gid < 1:
-        return z  # no valid source group yet
-
-    # find source samples in the frozen prefix
+    if src_gid <= 0: src_gid = _current_gid(state) - 1
+    if src_gid < 1:return z  
     src_mask = (mult.imag[:k] == src_gid)
-    if not np.any(src_mask):
-        return z  # nothing to copy from
-
+    if not np.any(src_mask): return z 
     src_sizes = mult.real[:k][src_mask]
-    # sample with replacement to fill tail
     tail_sizes = RNG.choice(src_sizes, size=tail_len, replace=True)
-
-    # assign new gid for the copied tail
     gid = _current_gid(state)
-
-    # combine with existing multipliers
     full_real = np.concatenate((mult.real, tail_sizes))
     full_imag = np.concatenate((mult.imag, np.full(tail_len, gid, dtype=np.float64)))
-
-    # store updated sizes + group ids
     state[K_MULT] = (full_real + 1j * full_imag).astype(np.complex128, copy=False)
     return z
-
 ALLOWED["dcopy"] = op_dot_copy
 
 def op_dneg(z, a, state):
-    """
-    Flip the sizes (real part) of the *previous* group to negative in-place.
-    Does not change group ids or geometry.
-    """
     mult = state.get(K_MULT)
-    if mult is None or mult.size == 0:
-        return z
-
-    # previous gid is current_gid - 1
+    if mult is None or mult.size == 0: return z
     prev_gid = _current_gid(state) - 1
-    if prev_gid < 1:
-        return z
-
-    # flip sizes for that gid (across all written multipliers)
+    if prev_gid < 1: return z
     m = (mult.imag == float(prev_gid))
     if np.any(m):
         mult.real[m] *= -1.0
         state[K_MULT] = mult  # store back (same array, explicit for clarity)
     return z
-
 ALLOWED["dneg"] = op_dneg
 
-# =========================
+# ==================================================
 # macro processor
-# =========================
+# ==================================================
 
 def macro(spec:str,z0,state): # spec runner
     #state = Dict.empty(key_type=types.int8, value_type=types.complex128[:])
@@ -2061,9 +2221,9 @@ def macro(spec:str,z0,state): # spec runner
         z = fn(z, A[k], state)
     return z
 
-# =========================
+# ==================================================
 # macros
-# =========================
+# ==================================================
 
 def op_frame(z,a, state):
     N = a[0].real or 1e6
@@ -2158,9 +2318,9 @@ def op_barred(z,a,state):
 ALLOWED["barred"] = op_barred
 
 
-
-# ===== build_logo from spec =====
-
+# ==================================================
+# build_logo from spec 
+# ==================================================
 def build_logo_from_chain(spec: str) -> tuple[np.ndarray, np.ndarray]:
     state = Dict.empty(key_type=types.int8, value_type=types.complex128[:])
     z0 = np.empty(0, dtype=np.complex128)
