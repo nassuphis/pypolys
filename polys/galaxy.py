@@ -1,6 +1,6 @@
 import math
 import numpy as np
-from numba import njit, prange, types
+from numba import njit, prange, types, complex128, int32, float64
 from numba.typed import Dict
 import specparser
 
@@ -34,7 +34,9 @@ def _current_gid(state) -> int:
     # next group id is always last stored gid + 1
     return int(round(mult.imag[-1] + 1))
 
-# ----- jited calcs -----
+# ==================================================
+# jited calcs
+# ==================================================
 
 @njit(cache=True, nogil=True)
 def _smoothstep_scalar(x: float, w: float) -> float:
@@ -46,11 +48,9 @@ def _smoothstep_scalar(x: float, w: float) -> float:
     elif t > 1.0: t = 1.0
     return t * t * (3.0 - 2.0 * t)
 
-# =========================
+# ==================================================
 # RNG ops (return new z)
-# =========================
-
-
+# ==================================================
 
 def op_rnorm(z,a,state):
      N   = int(a[0].real) or 1_000_000
@@ -119,7 +119,7 @@ def op_rus(z, a, state):
 
 ALLOWED["rus"] = op_rus
 
-
+# triangle
 def op_rtr(z, a, state):
     N = int(a[0].real) or 1_000_000
     dthx = float(a[1].real) or 1.0
@@ -145,6 +145,7 @@ def op_rtr(z, a, state):
 
 ALLOWED["rtr"] = op_rtr
 
+# triangle, diriclet
 def op_rtrd(z, a, state):
     N = int(a[0].real) or 1_000_000
     alpha_C = max(float(a[1].real) or 1.0, 1e-6)
@@ -171,6 +172,7 @@ def op_rtrd(z, a, state):
 
 ALLOWED["rtrd"] = op_rtrd
 
+# square diriclet
 def op_rsqd(z, a, state):
     N = int(a[0].real) or 1_000_000
     alpha_A = max(float(a[1].real) or 1.0, 1e-6)
@@ -198,6 +200,7 @@ def op_rsqd(z, a, state):
 
 ALLOWED["rsqd"] = op_rsqd
 
+# square 
 def op_rsq_edge(z, a, state):
     """
     Sample points concentrated on square edges (L∞-unit square [-1,1]^2).
@@ -251,8 +254,11 @@ def op_rsq_edge(z, a, state):
 
 ALLOWED["rsqedge"] = op_rsq_edge
 
-# ---------- deterministic random ----------
+# ==================================================
+# deterministic generation
+# ==================================================
 
+# serpentine
 @njit(cache=True, nogil=True, fastmath=True)
 def op_serp(z, a, state):
     n = int(a[0].real) or 2**20
@@ -275,6 +281,10 @@ def op_serp(z, a, state):
     return z
 
 ALLOWED["serp"] = op_serp
+
+# ==================================================
+# attractors
+# ==================================================
 
 @njit(cache=True, nogil=True, fastmath=True)
 def _lorenz_rk4_project(N, dt, sigma, rho, beta,
@@ -559,6 +569,40 @@ def op_ginger(z, a, state):
 
 ALLOWED["ginger"] = op_ginger
 
+# ==================================================
+# self-similar
+# ==================================================
+
+def _resample_by_arclength(p, N):
+    d = np.abs(np.diff(p))
+    s = np.concatenate(([0.0], np.cumsum(d)))
+    t = np.linspace(0.0, s[-1], N)
+    j = np.searchsorted(s, t, side="right") - 1
+    j = np.clip(j, 0, len(p)-2)
+    w = (t - s[j]) / (s[j+1] - s[j] + 1e-18)
+    return p[j] + w * (p[j+1] - p[j])
+
+def _normalize01(p: np.ndarray) -> np.ndarray:
+    xr = p.real; yr = p.imag
+    rx = np.ptp(xr); ry = np.ptp(yr)
+    if rx > 0: xr = (xr - xr.min()) / rx
+    else:      xr = xr - xr.min()
+    if ry > 0: yr = (yr - yr.min()) / ry
+    else:      yr = yr - yr.min()
+    return xr + 1j * yr
+
+def _points_from_mask(mask: np.ndarray, xmin, xmax, ymin, ymax) -> np.ndarray:
+    j_idx, i_idx = np.nonzero(mask)
+    n = mask.shape[0]
+    x = xmin + (xmax - xmin) * (i_idx.astype(np.float64) / (n - 1))
+    y = ymin + (ymax - ymin) * (j_idx.astype(np.float64) / (n - 1))
+    return x + 1j * y
+
+def _downsample_points(p: np.ndarray, N: int) -> np.ndarray:
+    if p.size <= N:
+        return p
+    idx = np.linspace(0, p.size - 1, N, dtype=np.int64)
+    return p[idx]
 
 def hilbert_curve(order: int) -> np.ndarray:
     """
@@ -587,12 +631,228 @@ def hilbert_curve(order: int) -> np.ndarray:
         y[i] = yi
     return (x / (n - 1)) + 1j * (y / (n - 1))
 
-def op_hilbert(z,a,state):
-    order = int(a[0].real) or 6
-    pts = hilbert_curve(order)
+def op_hilbert(z, a, state):
+    """
+    a[0] = target point count (default 1e3)
+    """
+    Nreq  = int(a[0].real) or 1000
+
+    # Smallest order with >= Nreq points: 4^k >= Nreq  =>  k >= log4(Nreq)
+    k = max(1, int(math.ceil( math.log(Nreq, 4) )))
+    pts = hilbert_curve(k)                 # length = 4**k
+
+    if pts.size > Nreq:                    # cap to exactly Nreq (uniform by index)
+        pts = _resample_by_arclength(pts, Nreq)
+
     return np.concatenate((z, pts))
 
 ALLOWED["hilbert"] = op_hilbert
+
+# --- Moore curve via L-system; returns CLOSED polyline (start==end) normalized to [0,1]x[0,1] ---
+def moore_curve(order: int) -> np.ndarray:
+    # build string with simultaneous rewriting
+    seq = "LFL+F+LFL"
+    for _ in range(max(0, int(order))):
+        out = []
+        for ch in seq:
+            if ch == "L":
+                out.append("-RF+LFL+FR-")
+            elif ch == "R":
+                out.append("+LF-RFR-FL+")
+            else:
+                out.append(ch)
+        seq = "".join(out)
+
+    pos = 0.0 + 0.0j
+    ang = 0.0  # radians; 0 = +x
+    pts = [pos]
+    for c in seq:
+        if c == "F":
+            pos += (np.cos(ang) + 1j*np.sin(ang))
+            pts.append(pos)
+        elif c == "+": ang += np.pi/2
+        elif c == "-": ang -= np.pi/2
+        # ignore L/R
+    arr = np.asarray(pts, dtype=np.complex128)
+
+    # normalize to [0,1] x [0,1]
+    rx = np.ptp(arr.real); ry = np.ptp(arr.imag)
+    if rx > 0: arr = (arr.real - arr.real.min())/rx + 1j*arr.imag
+    if ry > 0: arr = arr.real + 1j*(arr.imag - arr.imag.min())/ry
+
+    # drop duplicate closing point
+    if arr.size > 1 and arr[0] == arr[-1]:
+        arr = arr[:-1]
+
+    return arr
+
+def op_moore(z, a, state):
+    """
+    Moore (closed Hilbert) curve.
+      a[0] = target points (default 1e3)  -> generates >=N, then resamples to exactly N
+    """
+    Nreq = int(a[0].real) or 1000
+
+    # For Moore, number of segments per order k equals 4**k (like Hilbert),
+    # so closed polyline points = 4**k + 1.
+    k = max(1, int(math.ceil(math.log(max(Nreq-1, 1), 4))))
+    pts = moore_curve(k)  # closed, normalized
+
+    # resample to exactly Nreq points on the closed path
+    if pts.size != Nreq:
+        pts = _resample_by_arclength(pts, Nreq)
+
+    return np.concatenate((z, pts))
+
+ALLOWED["moore"] = op_moore
+
+# --- Gosper / flowsnake curve; returns open polyline normalized to [0,1]×[0,1] ---
+def gosper_curve(order: int, step: float = 1.0) -> np.ndarray:
+    order = max(0, int(order))
+    seq = "A"
+    for _ in range(order):
+        out = []
+        for ch in seq:  # simultaneous rewrite
+            if ch == "A":
+                out.append("A+B++B-A--AA-B+")
+            elif ch == "B":
+                out.append("-A+BB++B+A--A-B")  # ✅ fixed rule
+            else:
+                out.append(ch)
+        seq = "".join(out)
+
+    # draw using complex direction with 60° rotations
+    pos = 0.0 + 0.0j
+    dirc = 1.0 + 0.0j
+    rot  = np.exp(1j * (np.pi / 3.0))  # 60°
+    pts = [pos]
+    for ch in seq:
+        if ch == "A" or ch == "B":
+            pos += step * dirc
+            pts.append(pos)
+        elif ch == "+": dirc *= rot
+        elif ch == "-": dirc /= rot
+
+    arr = np.asarray(pts, dtype=np.complex128)
+
+    # normalize to [0,1]×[0,1]
+    xr, yr = arr.real, arr.imag
+    rx, ry = np.ptp(xr), np.ptp(yr)
+    if rx > 0: xr = (xr - xr.min()) / rx
+    else:      xr = xr - xr.min()
+    if ry > 0: yr = (yr - yr.min()) / ry
+    else:      yr = yr - yr.min()
+    out = xr + 1j * yr
+
+    # ensure open
+    if out.size > 1 and out[0] == out[-1]:
+        out = out[:-1]
+    return out
+
+def op_gosper(z, a, state):
+    Nreq = int(a[0].real) or 1000
+    step = a[1].real or 1.0
+    # native points ≈ 7**order + 1
+    order = max(1, int(math.ceil(math.log(max(Nreq - 1, 1), 7))))
+    pts = gosper_curve(order, step=step)
+
+    # optional: resample to exactly Nreq (keep if your pipeline expects exact N)
+    # if pts.size != Nreq:
+    #     pts = _resample_by_arclength(pts, Nreq)
+
+    return np.concatenate((z, pts))
+
+ALLOWED["gosper"] = op_gosper
+
+# --- Levy C curve (open polyline), normalized to [0,1]×[0,1] ---
+def levy_c_curve(order: int) -> np.ndarray:
+    order = max(0, int(order))
+    z = np.array([0.0 + 0.0j, 1.0 + 0.0j], dtype=np.complex128)
+    rot = (1.0 + 1.0j) / 2.0  # rotate +45°, scale 1/√2
+
+    for _ in range(order):
+        p0 = z[:-1]            # length m
+        p1 = z[1:]             # length m
+        a  = p1 - p0
+        q  = p0 + a * rot      # length m
+
+        out = np.empty(p0.size * 2 + 1, dtype=np.complex128)  # length 2m+1
+        out[0:-1:2] = p0       # fill positions 0,2,4,...,2m-2  (m slots)
+        out[1:-1:2] = q        # fill positions 1,3,5,...,2m-1  (m slots)
+        out[-1]     = p1[-1]   # final endpoint
+        z = out
+
+    # normalize to [0,1]×[0,1]
+    rx = np.ptp(z.real); ry = np.ptp(z.imag)
+    if rx > 0: z = (z.real - z.real.min())/rx + 1j*z.imag
+    if ry > 0: z = z.real + 1j*(z.imag - z.imag.min())/ry
+    return z
+
+def op_levyc(z, a, state):
+    Nreq = int(a[0].real) or 1000
+    order = max(1, int(np.ceil(np.log2(max(Nreq - 1, 1)))))  # points = 2**order + 1
+    pts = levy_c_curve(order)
+
+    # optional: resample to exactly Nreq (by arclength) if you use that helper
+    # if pts.size != Nreq:
+    #     pts = _resample_by_arclength(pts, Nreq)
+
+    return np.concatenate((z, pts))
+
+ALLOWED["levyc"] = op_levyc
+
+def _compact_bits(v: np.ndarray) -> np.ndarray:
+    """Remove interleaved zeros: ..0a0b0c0d -> abcd (for 2D morton)."""
+    v = v & np.uint64(0x5555555555555555)
+    v = (v | (v >> 1))  & np.uint64(0x3333333333333333)
+    v = (v | (v >> 2))  & np.uint64(0x0f0f0f0f0f0f0f0f)
+    v = (v | (v >> 4))  & np.uint64(0x00ff00ff00ff00ff)
+    v = (v | (v >> 8))  & np.uint64(0x0000ffff0000ffff)
+    v = (v | (v >> 16)) & np.uint64(0x00000000ffffffff)
+    return v.astype(np.uint64, copy=False)
+
+def morton_decode2D(m: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Given Morton codes m (uint64), return x,y (uint32) on a 2^k grid."""
+    m = m.astype(np.uint64, copy=False)
+    x = _compact_bits(m)
+    y = _compact_bits(m >> 1)
+    return x.astype(np.uint32), y.astype(np.uint32)
+
+def zcurve_points(order: int) -> np.ndarray:
+    """
+    Morton (Z) traversal over a 2^order x 2^order grid.
+    Returns complex points normalized to [0,1]×[0,1], open polyline (no repeat).
+    """
+    order = max(1, int(order))
+    n = 1 << order           # grid side
+    N = n * n                # total points
+    m = np.arange(N, dtype=np.uint64)
+    x, y = morton_decode2D(m)
+    # normalize to [0,1]
+    if n > 1:
+        z = (x / (n - 1)) + 1j * (y / (n - 1))
+    else:
+        z = x.astype(np.float64) + 1j * y.astype(np.float64)
+    return z.astype(np.complex128, copy=False)
+
+def op_zcurve(z, a, state):
+    """
+    Z-curve (Morton order) over a 2^k x 2^k grid.
+      a[0] = target point count (default 1e3)
+    Behavior: choose smallest k with 4^k >= Nreq, then uniformly index-subsample to exactly Nreq.
+    """
+    Nreq = int(a[0].real) or 1000
+    # 4^k >= Nreq  ->  k >= log4(Nreq)
+    k = max(1, int(math.ceil(math.log(max(Nreq,1), 4))))
+    pts = zcurve_points(k)  # length = 4**k
+
+    if pts.size > Nreq:
+        idx = np.linspace(0, pts.size - 1, Nreq, dtype=np.int64)
+        pts = pts[idx]
+
+    return np.concatenate((z, pts))
+
+ALLOWED["zcurve"] = op_zcurve
 
 def dragon_curve(iterations: int, step: float = 1.0) -> np.ndarray:
     """
@@ -666,18 +926,29 @@ def _koch_snowflake(iterations: int, side: float, center: complex, turn: float) 
 
 def op_koch(z, a, state):
     """
-    Koch snowflake generator (appends complex points).
-      a[0] = iterations (int, default 6)
-      a[1] = side       (real side length of initial triangle, default 1.0)
-      a[2] = center     (complex center, default 0+0j)
-      a[3] = turn       (real turns, 0..1, default 0.0)
+    Koch snowflake generator (appends ~N points).
+      a[0] = target N points (default 1e3)
+      a[1] = side
+      a[2] = center (complex)
+      a[3] = turn (0..1)
     """
-    it   = int(a[0].real) or 6
-    side = a[1].real or 1.0
-    cen  = a[2]
-    turn = a[3].real or 0.0
+    N     = int(a[0].real) or 1000
+    side  = a[1].real or 1.0
+    cen   = a[2]
+    turn  = a[3].real or 0.0
 
-    pts = _koch_snowflake(it, side, cen, turn)
+    # iterations needed to reach at least N points: 3*4^it + 1 >= N
+    # => it >= log4((N-1)/3)
+    x  = max((N - 1) / 3.0, 1.0)             # guard small N
+    it = int(np.ceil(np.log(x) / np.log(4.0)))
+
+    pts = _koch_snowflake(it, side, cen, turn)   # returns closed polyline
+
+    # Optional: subsample to exactly N points (spread along the path)
+    if pts.size > N:
+        idx = np.linspace(0, pts.size - 1, N, dtype=np.int64)
+        pts = pts[idx]
+
     return np.concatenate((z, pts))
 
 ALLOWED["koch"] = op_koch
@@ -729,6 +1000,309 @@ def op_sierpcarpet(z, a, state):
 
 ALLOWED["sierpcarpet"] = op_sierpcarpet
 
+@njit(cache=True)
+def _peano_points(order: int) -> np.ndarray:
+    """
+    Peano serpentine fill over a 3^order × 3^order grid.
+    Open polyline, points = (3^order)^2.
+    """
+    order = max(0, int(order))
+    n = 1
+    for _ in range(order):
+        n *= 3
+
+    N = n * n
+    xs = np.empty(N, np.float64)
+    ys = np.empty(N, np.float64)
+
+    idx = 0
+    for j in range(n):
+        if (j & 1) == 0:
+            # left -> right
+            for i in range(n):
+                xs[idx] = i
+                ys[idx] = j
+                idx += 1
+        else:
+            # right -> left
+            for i in range(n-1, -1, -1):
+                xs[idx] = i
+                ys[idx] = j
+                idx += 1
+
+    # normalize to [0,1]×[0,1]
+    if n > 1:
+        xs = (xs - 0.0) / (n - 1)
+        ys = (ys - 0.0) / (n - 1)
+    return xs + 1j * ys
+
+
+def op_peano(z, a, state):
+    """
+    Peano serpentine (3^k × 3^k raster snake), Numba-backed.
+      a[0] = target points (default 1e3)
+    """
+    Nreq = int(a[0].real) or 1000
+    # native points = (3^k)^2 => 9^k, choose smallest k with 9^k >= Nreq
+    k = max(1, int(math.ceil(math.log(max(Nreq, 1), 9))))
+    pts = _peano_points(k)
+
+    # cap to exactly Nreq (optional)
+    if pts.size > Nreq:
+        pts = _resample_by_arclength(pts, Nreq)
+
+    return np.concatenate((z, pts))
+
+ALLOWED["peano"] = op_peano
+
+# ---------- core: 3^k × 3^k Peano serpentine path (continuous) ----------
+@njit(cache=True)
+def _peano_poly_points(order: int) -> np.ndarray:
+    """
+    Peano serpentine over a 3^order × 3^order grid.
+    Returns an OPEN polyline: length = (3^order)^2 points.
+    Consecutive points are adjacent grid centers → continuous path.
+    """
+    order = max(0, int(order))
+    n = 1
+    for _ in range(order):
+        n *= 3
+
+    N = n * n
+    xs = np.empty(N, np.float64)
+    ys = np.empty(N, np.float64)
+
+    idx = 0
+    for j in range(n):
+        if (j & 1) == 0:
+            # left → right
+            for i in range(n):
+                xs[idx] = i
+                ys[idx] = j
+                idx += 1
+        else:
+            # right → left
+            for i in range(n - 1, -1, -1):
+                xs[idx] = i
+                ys[idx] = j
+                idx += 1
+
+    # normalize to [0,1]×[0,1] (grid centers mapped to unit square)
+    if n > 1:
+        xs = xs / (n - 1)
+        ys = ys / (n - 1)
+    return xs + 1j * ys
+
+def op_peano_poly(z, a, state):
+    """
+    Peano serpentine polyline (continuous path).
+      a[0] = target points (default 1e3)
+    Behavior: choose smallest k with 9^k >= Nreq, generate native path (length 9^k),
+              then resample by arclength to exactly Nreq for uniform density.
+    """
+    Nreq = int(a[0].real) or 1000
+    k = max(1, int(math.ceil(math.log(max(Nreq, 1), 9))))  # 9^k >= Nreq
+
+    pts = _peano_poly_points(k)      # native length = 9**k
+    if pts.size != Nreq:
+        pts = _resample_by_arclength(pts, Nreq)
+
+    return np.concatenate((z, pts))
+
+ALLOWED["peano_poly"] = op_peano_poly
+
+# ---- core: deterministic centers via base-5 digit expansion ----
+# mapping for the 5 kept cells in each 3x3: center, +x, -x, +y, -y
+# offsets are applied with scales 1/3, 1/3^2, ..., 1/3^order
+_OFFS5_X = np.array([0.0,  1.0, -1.0,  0.0,  0.0], dtype=np.float64)
+_OFFS5_Y = np.array([0.0,  0.0,  0.0,  1.0, -1.0], dtype=np.float64)
+
+@njit(cache=True)
+def _vicsek_points(order: int) -> np.ndarray:
+    """
+    Vicsek (cross) fractal points at recursion depth 'order'.
+    Returns complex128, length = 5**order (open point set, not a polyline).
+    """
+    order = max(0, int(order))
+    # total points = 5**order
+    npts = 1
+    for _ in range(order):
+        npts *= 5
+
+    xs = np.empty(npts, np.float64)
+    ys = np.empty(npts, np.float64)
+
+    for i in range(npts):
+        t = i
+        x = 0.0
+        y = 0.0
+        scale = 1.0 / 3.0
+        for _ in range(order):
+            d = t % 5            # which subcell this digit picks
+            t //= 5
+            x += _OFFS5_X[d] * scale
+            y += _OFFS5_Y[d] * scale
+            scale /= 3.0
+        xs[i] = x
+        ys[i] = y
+
+    # normalize to [0,1]×[0,1]
+    xr = xs
+    yr = ys
+    rx = xr.max() - xr.min()
+    ry = yr.max() - yr.min()
+    if rx > 0.0:
+        xr = (xr - xr.min()) / rx
+    else:
+        xr = xr - xr.min()
+    if ry > 0.0:
+        yr = (yr - yr.min()) / ry
+    else:
+        yr = yr - yr.min()
+
+    return xr + 1j * yr
+
+#
+
+# ---- op ----
+def op_vicsek(z, a, state):
+    """
+    Vicsek (cross) fractal as a point set (not a polyline).
+      a[0] = target points (default 1e3)
+    We choose the smallest 'order' with 5**order >= Nreq and, if necessary,
+    downsample to exactly Nreq (uniform by index).
+    """
+    Nreq = int(a[0].real) or 1000
+    order = max(0, int(math.ceil(math.log(max(Nreq, 1), 5))))
+
+    pts = _vicsek_points(order)      # length = 5**order
+    if pts.size > Nreq:
+        pts = _downsample_points(pts, Nreq)
+
+    return np.concatenate((z, pts))
+
+ALLOWED["vicsek"] = op_vicsek
+
+# ---------------- julia set ----------------
+
+@njit("int32(complex128, complex128, int32, int32, float64)", fastmath=True, cache=True)
+def _julia_escape_single(
+    z0: np.complex128,
+    c: np.complex128,
+    eqn: int = 0,
+    max_iter: int = 400,
+    bailout2: float = 4.0,
+) -> np.int32:
+    z = z0
+    for k in range(max_iter):
+        if eqn==0:
+            z =  z*z*z*z*z*z - z*z*z*z + c
+        elif eqn==1:
+            z =  np.exp(1j*2*np.pi*np.abs(z)) + c
+        else:
+            z = z*z + c
+        if np.abs(z) > bailout2:
+            return k
+    return max_iter
+
+# vectorized, parallel caller
+@njit("int32[:](complex128[:], complex128, int32, int32, float64)",
+      parallel=True, fastmath=True, cache=True)
+def julia_escape_vec(z0, c, eqn, max_iter, bailout2):
+    n = z0.size
+    out = np.empty(n, np.int32)
+    for i in prange(n):
+        out[i] = _julia_escape_single(z0[i], c, max_iter, bailout2)
+    return out
+
+@njit("complex128[:](int64,float64,complex128)",fastmath=True, cache=True)
+def _points(N,w:float=1,center:complex=0+0j):
+    re = -w + 2 * w * np.random.rand(N)
+    im = -w + 2 * w * np.random.rand(N)
+    return re + 1j*im + center
+
+#
+MAX_ITER_CONST = np.int32(1000)
+BAILOUT2_CONST = np.float64(4.0)
+@njit("complex128[:](int64, complex128, float64, complex128, int32, int32)", fastmath=True, cache=True)
+def julia_sample(N, c, w, center, thresh, eqn):
+    z0 = _points(N, w,center)
+    iters = julia_escape_vec(z0, c, eqn, MAX_ITER_CONST, BAILOUT2_CONST)
+    keep = 0
+    for i in range(N):
+        if iters[i] > thresh:
+            keep += 1
+    out = np.empty(keep, np.complex128)
+    j = 0
+    for i in range(N):
+        if iters[i] > thresh:
+            out[j] = z0[i]
+            j += 1
+    return out
+
+def julia(N: int, c: np.complex128= -0.8 + 0.156j,maxi:int=200,w:float=1.5,eqn:int=0) -> np.ndarray:
+    N = int(N)
+    out  = np.zeros(N, np.complex128)
+    kept = 0
+    # 1) probe sample
+    boost = 10
+    s = julia_sample(
+        np.int64(boost*N), 
+        np.complex128(c), 
+        np.float64(w), 
+        np.complex128(0+0j), 
+        np.int32(maxi),
+        np.int32(eqn)
+    )
+    take = min(s.size, N)
+    if take:
+        out[:take] = s[:take]
+        kept += take
+    else:
+        return out
+    p = max(0.01, (s.size / (boost*N)))
+    draw = 2*int(math.ceil(N / p))
+    print(f"p: {p}")
+    if draw < 1: draw = 1
+    center = np.mean(out[:kept])
+    w = 0.5 * max(
+        np.ptp(out[:kept].real),
+        np.ptp(out[:kept].imag)
+    ) * 1.5
+    rounds = 0
+    while kept < N:
+        rounds += 1
+        need = (N - kept)
+        s = julia_sample(np.int64(draw), np.complex128(c), np.float64(w),np.complex128(center), np.int32(300))
+        take = min(s.size, need)
+        if take:
+            out[kept:kept + take] = s[:take]
+            kept += take
+        if rounds > 10 : break
+        center = np.mean(out[:kept])
+        w = 0.5 * max(
+            np.ptp(out[:kept].real),
+            np.ptp(out[:kept].imag)
+        ) * 1.15
+    print(f"kept: {kept}")
+    return out[:min(kept,N)]  # exactly N filled unless the defensive break triggered
+
+def op_julia(z, a, state):
+    N = int(a[0].real) or 1e6   
+    if N<1 : return z
+    c = a[1] or   -0.8 + 0.156j
+    maxi = int(a[2].real) or 200
+    w = a[3].real or 1.5
+    eqn = int(a[4].real)
+    pts = julia(N,c,maxi,w,eqn)
+    return np.concatenate((z, pts))
+
+
+ALLOWED["julia"] = op_julia
+
+
+# fern IFS system
+
 @njit(cache=True, nogil=True, fastmath=True)
 def _fern_iter(N, burn, x0, y0):
     out = np.empty(N, np.complex128)
@@ -750,6 +1324,8 @@ def _fern_iter(N, burn, x0, y0):
             k += 1
     return out
 
+
+
 def op_fern(z, a, state):
     N    = int(a[0].real) or 300_000
     burn = int(a[1].real) or 100
@@ -762,7 +1338,16 @@ ALLOWED["fern"] = op_fern
 def _dragon_curve(iterations: int, step: float) -> np.ndarray:
     seq = "FX"
     for _ in range(iterations):
-        seq = seq.replace("X", "X+YF+").replace("Y", "-FX-Y")
+        out = []
+        for ch in seq:
+            if ch == "X":
+                out.append("X+YF+")
+            elif ch == "Y":
+                out.append("-FX-Y")
+            else:
+                out.append(ch)
+        seq = "".join(out)
+
     pos = 0.0 + 0.0j
     ang = 0.0
     pts = [pos]
@@ -772,15 +1357,20 @@ def _dragon_curve(iterations: int, step: float) -> np.ndarray:
             pts.append(pos)
         elif c == "+": ang += np.pi/2
         elif c == "-": ang -= np.pi/2
-    arr = np.array(pts, np.complex128)
-    # normalize to ~unit box
+
+    arr = np.asarray(pts, np.complex128)
+    # normalize to ~unit box (optional)
     arr /= (np.max(arr.real) - np.min(arr.real) + 1e-12)
     return arr
 
 def op_dragon(z, a, state):
-    it   = int(a[0].real) or 15
+    Nreq = int(a[0].real) or 1000
     step = a[1].real or 1.0
-    pts  = _dragon_curve(it, step)
+    it = int(np.ceil(np.log2(max(1, Nreq - 1))))  # smallest it with ≥ Nreq points
+    pts = _dragon_curve(it, step)
+    # If you want ≤ Nreq strictly, truncate (keeps path prefix)
+    if pts.size > Nreq:
+        pts = pts[:Nreq]
     return np.concatenate((z, pts))
 
 ALLOWED["dragon"] = op_dragon
@@ -989,9 +1579,10 @@ def op_disk_diffuse(z, a, state):
 
 ALLOWED["ddiffuse"] = op_disk_diffuse
 
-# ---------- clip ops ----------
+# ============================================================
 # "clip in" means remove inside
 # "clip out" means remove outside
+# ============================================================
 
 def op_clpindisk(z, a, state):
     r = a[0].real or 1.0
@@ -1071,7 +1662,9 @@ def op_clpoutrect(z, a, state):
 
 ALLOWED["clproutrect"] = op_clpoutrect
 
-# ---------- simple ops ----------
+# ============================================================
+# simple transfomation
+# ============================================================
 
 def op_add(z, a, state):
     k = _frozen_len(state)
@@ -1093,25 +1686,21 @@ ALLOWED["ibase"] = op_ibase
 def op_itip(z, a, state):
     k = _frozen_len(state)
     if k < z.size:
-        fac = a[0].real or 1
-        z[k:] += - 1j*np.max(z[k:].imag)*fac
+        z[k:] += - 1j*np.max(z[k:].imag) * (a[0].real or 1)
     return z
 
 ALLOWED["itip"] = op_itip
 
 def op_mul(z, a, state):
     k = _frozen_len(state)
-    if k < z.size:
-        z[k:] *= a[0]
+    if k < z.size: z[k:] *= a[0]
     return z
-
 ALLOWED["mul"] = op_mul
 
 def op_rmul(z, a, state):
     k = _frozen_len(state)
     if k < z.size:
-        zz = z[k:]
-        z[k:] = zz.real * a[0] + 1j * zz.imag
+        z[k:] = z[k:].real * a[0] + 1j * z[k:].imag
     return z
 ALLOWED["rmul"] = op_rmul
 
@@ -1142,7 +1731,6 @@ def op_imul(z, a, state):
         z[k:] = zz.real + 1j * zz.imag * a[0]
     return z
 ALLOWED["imul"] = op_imul
-
 
 # center
 def op_center(z, a, state):
@@ -1179,13 +1767,10 @@ def op_gnorm(z, a, state):
     return z
 ALLOWED["gnorm"] = op_gnorm
 
-
-
 def op_rot(z, a, state):
-    phi = np.exp(1j * 2.0 * np.pi * a[0].real)
     k = _frozen_len(state)
     if k < z.size:
-        z[k:] *= phi
+        z[k:] *= np.exp(1j * 2.0 * np.pi * a[0].real)
     return z
 ALLOWED["rot"] = op_rot
 
@@ -1200,25 +1785,14 @@ def op_sqrot(z, a, state):
     return z
 ALLOWED["sqrot"] = op_sqrot
 
-
 # global rotate: ignores groups. at the end.
 def op_grot(z, a, state):
-    phi = np.exp(1j * 2.0 * np.pi * a[0].real)
-    z *= phi
+    z *=  np.exp(1j * 2.0 * np.pi * a[0].real)
     return z
 ALLOWED["grot"] = op_grot
 
 def op_rth(z, a, state):
-    """
-    Radius-from-imag (with exponent), angle-from-real:
-      r  = sign(Im(z)) * |Im(z)|^dth
-      th = exp(i * 2π * Re(z))
-      z_tail := r * th
-    Only applies to the unfrozen tail (points without sizes yet).
-    """
-    mult = state.get(K_MULT)
-    k = 0 if (mult is None) else mult.size
-
+    k = _frozen_len(state)
     if k < z.size:
         dth = float(a[0].real) if a.size > 0 else 0.5
         tail = z[k:]
@@ -1236,12 +1810,9 @@ def op_toline(z, a, state):
       z_tail := i * (1 + z_tail) / (1 - z_tail)
     Only applies to the unfrozen tail (points without sizes yet).
     """
-    mult = state.get(K_MULT)
-    k = 0 if (mult is None) else mult.size
-
+    k = _frozen_len(state)
     if k < z.size:
-        tail = z[k:]
-        z[k:] = 1j * (1.0 + tail) / (1.0 - tail)
+        z[k:] = 1j * (1.0 + z[k:]) / (1.0 - z[k:])
         # (optional) protect exact pole at z=1:
         # denom = (1.0 - tail)
         # denom = np.where(denom == 0, 1e-15 + 0j, denom)
@@ -1251,11 +1822,9 @@ def op_toline(z, a, state):
 ALLOWED["toline"] = op_toline
 
 def op_csum(z, a, state):
-    mult = state.get(K_MULT)
-    k = 0 if (mult is None) else mult.size
+    k = _frozen_len(state)
     if k < z.size:
-        tail = z[k:]
-        z[k:] = np.cumsum(tail)
+        z[k:] = np.cumsum(z[k:])
     return z
 
 ALLOWED["csum"] = op_csum
@@ -1591,6 +2160,7 @@ ALLOWED["gpixsq"] = op_gpixsq
 
 # GRADual PIXELization (stochastic): gradpix
 def op_gpixdsk(z, a, state):
+    if a[0].real==0:return z
     if z.size < 1: return z
     k = _frozen_len(state)
     if k >= z.size: return z
@@ -2036,8 +2606,6 @@ def op_nsink(z, a, state):
 
 ALLOWED["nsink"] = op_nsink
 
-
-
 def op_gsink(z, a, state):
     """
     a[0]=C (complex), a[1]=alpha (real), a[2]=eps (real, small >=0)
@@ -2057,6 +2625,7 @@ ALLOWED["gsink"] = op_gsink
 # Size/mult ops (write to state)
 # ==================================================
 
+# add dots to state
 def _dot_add(z,state,sizes):
     if z.size<1: return
     k = _frozen_len(state)
@@ -2072,54 +2641,87 @@ def _dot_add(z,state,sizes):
         state[K_MULT] = np.concatenate((prev_dots, new_dots))
     return
 
+# get mask for a gid
 def _dot_gid(state,gid):
     dots = state[K_MULT]
     mask = ( (dots.imag).astype(np.int64) == int(gid) )
     return mask
 
-def _dot_set(z,state,mask,sizes,gid):
+# set gid to sizes
+def _dot_set(z,state,mask,sizes):
     masked = np.sum(mask)
     if masked<1: return
     if sizes.size != masked: return
     dots = state[K_MULT]
-    dots[mask] = sizes + 1j * int(gid)
+    dots[mask] = sizes + 1j * int(dots[mask][0].imag)
     state[K_MULT] = dots 
     return z
 
+#
+# densities here
+#
 
-def op_ldot(z, a, state):
-    if z.size<1: return z
-    k = _frozen_len(state)
-    if k>=z.size: return z
-    head, tail = z[:k], z[k:]
+# constant
+def _const(a,length):
+    dot_sizes = np.full(length, a[0].real * a[1].real , dtype=np.float64)
+    return dot_sizes
+
+# lognormal
+def _lognormal(a,length):
     loc   = a[0].real or 0.5
     scale = a[1].real or 1.25
     drt   = a[2].real or 100.0
-    zeta = RNG.normal(loc=loc, scale=scale, size=tail.size)
-    mult_tail_real = np.exp(zeta).astype(np.float64)
-    np.clip(mult_tail_real, 1.0, drt, out=mult_tail_real)
-    _dot_add(z,state,mult_tail_real)
-    return z
-ALLOWED["ldot"] = op_ldot
+    zeta = RNG.normal(loc=loc, scale=scale, size=length)
+    dot_sizes = np.exp(zeta).astype(np.float64)
+    np.clip(dot_sizes, 1.0, drt, out=dot_sizes)
+    return dot_sizes
 
+#
+# dots to new group
+#
+
+# constant dot
 def op_dot(z, a, state):
     if z.size<1: return z
     k = _frozen_len(state)
     if k>=z.size: return z
     head, tail = z[:k], z[k:]
-    val = float(a[0].real) or 1.0
-    mul = float(a[1].real) or 1.0
-    sizes = np.full(tail.size, val*mul, dtype=np.float64)
-    _dot_add(z,state,sizes)
+    _dot_add(z,state,_const(a,tail.size))
     return z
 ALLOWED["dot"] = op_dot
+
+# lognormal dot
+def op_ldot(z, a, state):
+    if z.size<1: return z
+    k = _frozen_len(state)
+    if k>=z.size: return z
+    head, tail = z[:k], z[k:]
+    _dot_add(z,state,_lognormal(a,tail.size))
+    return z
+ALLOWED["ldot"] = op_ldot
+
+#
+# modify group dot sized
+#
+
+# dot set
+def op_dotset(z, a, state):
+    gid = _current_gid(state)
+    if gid == 1: return z # no previous gid
+    mask = _dot_gid(state,gid-1)
+    _dot_set(z,state,mask, _const(a,sum(mask)))
+    return z
+ALLOWED["dotset"] = op_dotset
+
+# dot region set 
+# FIXME: generalize
+# FIXME: optimize to nested
 
 def op_dotrhset(z, a, state):
     gid = _current_gid(state)
     if gid == 1: return z # no previous gid
     mask = ( z.real >0 ) & _dot_gid(state,gid-1)
-    new_size = a[0].real * a[1].real or 1
-    _dot_set(z,state,mask, new_size, gid-1)
+    _dot_set(z,state,mask, _const(a,sum(mask)))
     return z
 ALLOWED["dotrhset"] = op_dotrhset
 
@@ -2127,8 +2729,7 @@ def op_dotulset(z, a, state):
     gid = _current_gid(state)
     if gid == 1: return z # no previous gid
     mask =  ( z.real >0 ) & ( z.imag >0 ) & _dot_gid(state,gid-1)
-    new_size = a[0].real * a[1].real or 1
-    _dot_set(z,state, mask,new_size, gid-1)
+    _dot_set(z,state, mask,_const(a,sum(mask)))
     return z
 ALLOWED["dotulset"] = op_dotulset
 
@@ -2136,8 +2737,7 @@ def op_dotlrset(z, a, state):
     gid = _current_gid(state)
     if gid == 1: return z # no previous gid
     mask = ( z.real <0 ) & ( z.imag <0 )  & _dot_gid(state,gid-1)
-    new_size = a[0].real * a[1].real or 1
-    _dot_set(z,state, mask,new_size,gid-1)
+    _dot_set(z,state, mask,_const(a,sum(mask)))
     return z
 ALLOWED["dotlrset"] = op_dotlrset
 
@@ -2147,13 +2747,7 @@ def op_doturln(z, a, state):
     mask = ( z.real >0 ) & ( z.imag >0 )  & _dot_gid(state,gid-1)
     masked = sum(mask)
     if masked<1: return z
-    loc   = a[0].real or 0.5
-    scale = a[1].real or 1.25
-    drt   = a[2].real or 100.0
-    zeta = RNG.normal(loc=loc, scale=scale, size=masked)
-    new_size = np.exp(zeta).astype(np.float64)
-    np.clip(new_size, 1.0, drt, out=new_size)
-    _dot_set(z,state,mask, new_size, gid-1)
+    _dot_set(z,state,mask,_lognormal(a,masked))
     return z
 ALLOWED["doturln"] = op_doturln
 
@@ -2163,17 +2757,11 @@ def op_dotllln(z, a, state):
     mask = ( z.real <0 ) & ( z.imag <0 )  & _dot_gid(state,gid-1)
     masked = np.sum(mask)
     if masked<1: return z # nothing to do
-    loc   = a[0].real or 0.5
-    scale = a[1].real or 1.25
-    drt   = a[2].real or 100.0
-    zeta = RNG.normal(loc=loc, scale=scale, size=masked)
-    new_size = np.exp(zeta).astype(np.float64)
-    np.clip(new_size, 1.0, drt, out=new_size)
-    _dot_set(z,state,mask, new_size, gid-1)
+    _dot_set(z,state,mask, _lognormal(a,masked))
     return z
 ALLOWED["dotllln"] = op_dotllln
 
-
+# copy 
 def op_dot_copy(z, a, state):
     k = _frozen_len(state)
     tail_len = max(z.size - k, 0)
@@ -2194,6 +2782,7 @@ def op_dot_copy(z, a, state):
     return z
 ALLOWED["dcopy"] = op_dot_copy
 
+# negate
 def op_dneg(z, a, state):
     mult = state.get(K_MULT)
     if mult is None or mult.size == 0: return z
@@ -2321,6 +2910,7 @@ ALLOWED["barred"] = op_barred
 # ==================================================
 # build_logo from spec 
 # ==================================================
+
 def build_logo_from_chain(spec: str) -> tuple[np.ndarray, np.ndarray]:
     state = Dict.empty(key_type=types.int8, value_type=types.complex128[:])
     z0 = np.empty(0, dtype=np.complex128)

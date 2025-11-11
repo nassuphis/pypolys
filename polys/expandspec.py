@@ -248,7 +248,7 @@ def _expand_single_brace(token: str, *, trim_for_items: bool = False) -> List[st
             if int_pad_width <= 1:
                 return str(xi)
             return ("-" if xi < 0 else "") + f"{abs(xi):0{int_pad_width}d}"
-        return f"{float(x):.3g}"
+        return f"{float(x):.18g}"
 
     # Generate
     out: List[str] = []
