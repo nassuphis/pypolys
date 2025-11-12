@@ -64,6 +64,12 @@ def real_max(x,y):
 def real_min(x,y):
     return min(x.real,y.real)
 
+def lerp(start,end,i,n):
+    x=np.linspace(start,end,n)
+    return x[i-1]
+
+
+
 FUNCS = {
     # pick only what you truly need
     "sin": cmath.sin, 
@@ -74,7 +80,8 @@ FUNCS = {
     "exp": cmath.exp,
     "abs": abs,
     "min": real_min, 
-    "max": real_max
+    "max": real_max,
+    "lerp": lerp,
 }
 
 def simple_eval_number(expr: str) -> complex:

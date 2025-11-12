@@ -112,11 +112,16 @@ import json
 import sys
 from itertools import product
 from typing import List, Tuple, Union, Iterable, Optional, Dict
+import operator as op
+import ast
+from simpleeval import SimpleEval
+import numpy as np
 
 # =========================
 # Tokenization regexes
 # =========================
 
+_fcall_simple_re = re.compile(r"^(?P<prefix>.*)\$\{(?P<body>[^{}]+)\}(?P<suffix>.*)$")
 _brace_re = re.compile(r"^(?P<prefix>.*)\{(?P<body>[^{}]+)\}(?P<suffix>.*)$")
 _int_re = re.compile(r"^[+-]?\d+$")
 _dictsel_re = re.compile(r"^@\{(.+)\}$")              # whole-token @{...}
@@ -248,7 +253,7 @@ def _expand_single_brace(token: str, *, trim_for_items: bool = False) -> List[st
             if int_pad_width <= 1:
                 return str(xi)
             return ("-" if xi < 0 else "") + f"{abs(xi):0{int_pad_width}d}"
-        return f"{float(x):.18g}"
+        return f"{float(x):.15g}"
 
     # Generate
     out: List[str] = []
@@ -339,6 +344,16 @@ def _tokenize_parts(spec: str):
                         k += 1
                     j = k
                     continue
+                # skip ${...} inside list  <-- ADD THIS BLOCK
+                if cj == '$' and j + 1 < n and spec[j + 1] == '{':
+                    k = j + 2
+                    d = 1
+                    while k < n and d > 0:
+                        if spec[k] == '{': d += 1
+                        elif spec[k] == '}': d -= 1
+                        k += 1
+                    j = k
+                    continue
                 # skip { ... } inside list
                 if cj == '{':
                     k = j + 1
@@ -374,7 +389,22 @@ def _tokenize_parts(spec: str):
             parts.append(("text", spec[i:j]))
             i = j
             continue
-
+        # ${ ... } simpleeval block → single text chunk (balanced)
+        if ch == '$' and i + 1 < n and spec[i + 1] == '{':
+            flush_text()
+            j = i + 2
+            depth = 1
+            while j < n and depth > 0:
+                cj = spec[j]
+                # skip nested { } properly
+                if cj == '{':
+                    depth += 1
+                elif cj == '}':
+                    depth -= 1
+                j += 1
+            parts.append(("text", spec[i:j]))  # include entire ${...}
+            i = j
+            continue
         # { ... } numeric range → single text chunk (NO post-name support)
         if ch == '{':
             flush_text()
@@ -401,6 +431,16 @@ def _tokenize_parts(spec: str):
                 cj = spec[j]
                 # skip @{...} inside list
                 if cj == '@' and j + 1 < n and spec[j + 1] == '{':
+                    k = j + 2
+                    d = 1
+                    while k < n and d > 0:
+                        if spec[k] == '{': d += 1
+                        elif spec[k] == '}': d -= 1
+                        k += 1
+                    j = k
+                    continue
+                # skip ${...} inside list  <-- ADD THIS
+                if cj == '$' and j + 1 < n and spec[j + 1] == '{':
                     k = j + 2
                     d = 1
                     while k < n and d > 0:
@@ -471,6 +511,61 @@ class _Ref(_Seg):
 # Split text into [Lit/Ref] segments
 # =========================
 
+def _split_list_items(s: str) -> List[str]:
+    """
+    Split the inner of [ ... ] on top-level commas only.
+    Ignores commas inside {...}, ${...}, @{...}.
+    """
+    out, buf = [], []
+    depth = 0  # braces depth for {...}, @{...}, ${...}
+    i, n = 0, len(s)
+    while i < n:
+        ch = s[i]
+        if ch == '{':
+            depth += 1
+            buf.append(ch)
+        elif ch == '}':
+            if depth > 0:
+                depth -= 1
+            buf.append(ch)
+        elif ch == ',' and depth == 0:
+            item = "".join(buf).strip()
+            if item:
+                out.append(item)
+            buf = []
+        else:
+            buf.append(ch)
+        i += 1
+    item = "".join(buf).strip()
+    if item:
+        out.append(item)
+    return out
+
+def _split_fcall(text: str):
+    """
+    Return (pre, body, suf) for the FIRST balanced ${...} in text, or None.
+    Scans braces so inner lists/dicts don't confuse it.
+    """
+    i = text.find("${")
+    if i < 0:
+        return None
+    j = i + 2
+    n = len(text)
+    depth = 1
+    while j < n and depth > 0:
+        ch = text[j]
+        if ch == '{':
+            depth += 1
+        elif ch == '}':
+            depth -= 1
+        j += 1
+    if depth != 0:
+        return None
+    pre = text[:i]
+    body = text[i+2:j-1]
+    suf = text[j:]
+    return pre, body, suf
+
 def _split_text_with_refs(text: str) -> List[_Seg]:
     segs: List[_Seg] = []
     idx = 0
@@ -485,6 +580,87 @@ def _split_text_with_refs(text: str) -> List[_Seg]:
         segs.append(_Lit(""))
     return segs
 
+
+
+ALLOWED_OPS = {
+    ast.Add: op.add, 
+    ast.Sub: op.sub, 
+    ast.Mult: op.mul, 
+    ast.Div: op.truediv,
+    ast.Pow: op.pow, 
+    ast.USub: op.neg, 
+    ast.UAdd: op.pos,
+    ast.FloorDiv: op.floordiv, 
+    ast.Mod: op.mod
+}
+
+NAMES = {
+    "zero": ["0"],
+    "one": ["1"],
+}
+
+def seq(start,end,num):
+    vec = np.linspace(start,end,num)
+    out=[f"{x}" for x in vec]
+    return out
+
+FUNCS = {
+    # pick only what you truly need
+    "seq": seq, 
+}
+
+def _eval_fcall_body(expr: str) -> Optional[list[str]]:
+    """
+    Evaluate a ${...} body using simpleeval with module-level NAMES/FUNCS/ALLOWED_OPS.
+    Falls back to ast.literal_eval for pure-literal structures.
+    Returns list[str] on success, or None on failure.
+    """
+    s = expr.strip()
+    # 1) try simpleeval
+    try:
+        se = SimpleEval(names=NAMES, functions=FUNCS, operators=ALLOWED_OPS)
+        v = se.eval(s)
+        if isinstance(v, str):
+            return [v]
+        try:
+            return [str(x) for x in v]
+        except TypeError:
+            # Not iterable -> coerce single scalar
+            return [str(v)]
+    except Exception:
+        pass
+
+    # 2) fallback: literal-only expressions like ["A","B"]
+    try:
+        v = ast.literal_eval(s)
+        if isinstance(v, str):
+            return [v]
+        try:
+            return [str(x) for x in v]
+        except TypeError:
+            return [str(v)]
+    except Exception:
+        return None
+
+def _expand_single_fcall(token: str, *, trim_for_items: bool = False) -> list[str]:
+    """
+    Expand one ${...} (with optional prefix/suffix) using the balanced splitter.
+    If not a valid ${...} or evaluation fails, return [token] unchanged.
+    """
+    tok_input = token.strip() if trim_for_items else token
+
+    # Use the same balanced finder used at top level
+    found = _split_fcall(tok_input)
+    if not found:
+        return [tok_input]
+    pre, body, suf = found
+
+    vals = _eval_fcall_body(body)
+    if not vals:
+        return [tok_input]
+
+    return [f"{pre}{v}{suf}" for v in vals]
+    
 # =========================
 # Expand list blocks (cartesian or zip) into strings
 # =========================
@@ -494,14 +670,23 @@ def _expand_list_block(block_text: str, names: List[str]) -> List[str]:
     Expand [a,b,c{1:3},@{regex}] into a flat list (union).
     References inside list items are treated literally by design.
     """
-    items = [t.strip() for t in block_text.split(",") if t.strip()]
+    items = _split_list_items(block_text)
     out: List[str] = []
     for it in items:
+
         sel = _expand_dict_selector(it, names, trim_for_items=True)
         if sel is not None:
             out.extend(sel)
             continue
+
+         # NEW: ${...} simpleeval in list items
+        fvals = _expand_single_fcall(it, trim_for_items=True)
+        if not (len(fvals) == 1 and fvals[0] == it):
+            out.extend(fvals)
+            continue
+
         out.extend(_expand_single_brace(it, trim_for_items=True))
+
     return out
 
 def _expand_progressive_list(block_text: str, names: List[str]) -> List[str]:
@@ -533,6 +718,24 @@ def _parse_plain_to_segments(text: str, names: List[str], ordinal_start: int) ->
     sel = _expand_dict_selector(text, names, trim_for_items=False)
     if sel is not None:
         return ([_ListChoices(sel)], ordinal_start)
+    
+    # --- ${ ... } via simpleeval (balanced; works embedded or standalone) ---
+    fsplit = _split_fcall(text)
+    if fsplit is not None:
+        pre_text, body_expr, suf_text = fsplit
+        core_vals = _eval_fcall_body(body_expr)
+        if not core_vals:
+            return (_split_text_with_refs(text), ordinal_start)
+
+        pid = str(ordinal_start)
+        next_ord = ordinal_start + 1
+
+        segs: List[_Seg] = []
+        segs.extend(_split_text_with_refs(pre_text))
+        segs.append(_Producer(pid, core_vals))   # evaluates to list-like unit
+        segs.extend(_split_text_with_refs(suf_text))
+        return (segs, next_ord)
+
 
     # embedded { ... } numeric producer (no @name support)
     m = _brace_re.match(text)
@@ -834,6 +1037,42 @@ def _selftest(verbose: bool = False) -> int:
     # ---------- NEW: Progressive list ----------
     run(">[a,b,c,d]", ["a","a,b","a,b,c","a,b,c,d"], msg="progressive list")
     run("X>[p,o]Y", ["XpY","Xp,oY"], msg="progressive list inside text, 2 items")
+
+    # ---------- NEW: ${...} simpleeval calls ----------
+
+    # Top-level literal list
+    run('${["A","B"]}', ["A", "B"], msg="${...} top-level literal list")
+
+    # Embedded in text
+    run('n:1e5,${["A","B"]},w:20',
+        ["n:1e5,A,w:20", "n:1e5,B,w:20"],
+        msg="${...} embedded in text")
+
+    # Inside cartesian list
+    run('[${["A","B"]}]', ["A", "B"], msg="${...} inside [ ... ] list")
+
+    # Progressive list containing ${...}
+    run('>[${["a","b"]},x]', ["a", "a,b", "a,b,x"], msg="progressive list with ${...}")
+
+    # Prefix/suffix around ${...}
+    run('pre${["u","v"]}suf', ["preusuf", "prevsuf"], msg="prefix/suffix with ${...}")
+
+    # Cartesian with another producer
+    run('A${["x","y"]}B{1:2}',
+        ["AxB1", "AxB2", "AyB1", "AyB2"],
+        msg="${...} cartesian with numeric {..}")
+
+    # Reference to ${...} (it is a list-like unit)
+    run('${["p","q"]}::#{1}', ["p::p", "q::q"], msg="reference mirrors ${...} selection")
+
+    # Comma inside elements must not split list items
+    run('[${["A,B","C"]}]', ["A,B", "C"], msg="commas inside ${...} items are preserved")
+
+    # Call a registered function via FUNCS (seq is defined above)
+    run('${seq(0,1,3)}', ["0.0", "0.5", "1.0"], msg="${seq(...)} via FUNCS")
+
+    # Invalid expression -> left literal
+    run('${not_defined}', ['${not_defined}'], msg="invalid ${...} remains literal")
 
     if verbose:
         print(f"\nPassed: {passed}, Failed: {fails}")

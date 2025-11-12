@@ -201,8 +201,9 @@ def bucket_by_radius_parallel(r_px: np.ndarray, r_min: int, r_max: int):
 
 
 def project_to_canvas(z: np.ndarray, pix: int, margin_frac: float):
-    if z.size<1: return np.empty(dtype=np.int32), np.empty(dtype=np.int32)
+    if z.size<1: return np.empty(0,dtype=np.int32), np.empty(0,dtype=np.int32)
     half  = np.max(np.abs(z)) * (1.0 + 2.0 * margin_frac)
+    #half = (0.5*max(np.ptp(z.real),np.ptp(z.imag))) * (1.0 + 2.0 * margin_frac)
     span  = 2.0 * half
     if span<1e-10: span=1
     px_per = (int(pix) - 1) / span
@@ -212,9 +213,21 @@ def project_to_canvas(z: np.ndarray, pix: int, margin_frac: float):
     py = np.clip(py, 0, int(pix)-1)
     return px, py
 
+def render_to_canvas(z: np.ndarray, pix: int, margin_frac: float):
+    canvas = np.zeros((int(pix), int(pix)), np.uint8)
+    px, py = project_to_canvas(z,pix,margin_frac)
+    canvas[px,py] = 255
+    return canvas
+
 # ========================================
 # image output
 # ========================================
+
+def np_to_vips_gray_u8(arr: np.ndarray) -> vips.Image:
+    if arr.dtype != np.uint8:
+        arr = arr.astype(np.uint8, copy=False)
+    H, W = arr.shape
+    return vips.Image.new_from_memory(arr.data, W, H, 1, "uchar")
 
 def add_footer_label(
     base: vips.Image,
@@ -281,7 +294,7 @@ def add_footer_label(
 
     return base  # fallback: unchanged
 
-import pyvips as vips
+
 
 def add_rounded_passepartout_bilevel_pct(
     img: vips.Image,
@@ -406,12 +419,6 @@ def save_png_bilevel(
         bitdepth=1,
     )
 
-
-def np_to_vips_gray_u8(arr: np.ndarray) -> vips.Image:
-    if arr.dtype != np.uint8:
-        arr = arr.astype(np.uint8, copy=False)
-    H, W = arr.shape
-    return vips.Image.new_from_memory(arr.data, W, H, 1, "uchar")
 
 def pad_to_square(im: vips.Image, px: int) -> vips.Image:
     dx = max(0, (px - im.width) // 2)

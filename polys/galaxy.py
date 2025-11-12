@@ -1212,7 +1212,7 @@ def julia_escape_vec(z0, c, eqn, max_iter, bailout2):
     n = z0.size
     out = np.empty(n, np.int32)
     for i in prange(n):
-        out[i] = _julia_escape_single(z0[i], c, max_iter, bailout2)
+        out[i] = _julia_escape_single(z0[i], c, eqn, max_iter, bailout2)
     return out
 
 @njit("complex128[:](int64,float64,complex128)",fastmath=True, cache=True)
@@ -1273,7 +1273,7 @@ def julia(N: int, c: np.complex128= -0.8 + 0.156j,maxi:int=200,w:float=1.5,eqn:i
     while kept < N:
         rounds += 1
         need = (N - kept)
-        s = julia_sample(np.int64(draw), np.complex128(c), np.float64(w),np.complex128(center), np.int32(300))
+        s = julia_sample(np.int64(draw), np.complex128(c), np.float64(w),np.complex128(center), np.int32(300),int(eqn))
         take = min(s.size, need)
         if take:
             out[kept:kept + take] = s[:take]
