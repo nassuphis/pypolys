@@ -594,29 +594,35 @@ ALLOWED_OPS = {
     ast.Mod: op.mod
 }
 
-NAMES = {
-    "zero": ["0"],
-    "one": ["1"],
-}
+NAMES = {}
+
+def set_const(name: str, value: complex | float) -> None:
+    NAMES[name.strip().lower()] = complex(value)
 
 def seq(start,end,num):
     vec = np.linspace(start,end,num)
     out=[f"{x}" for x in vec]
     return out
 
+def ctoi(z):
+    return int(z.real)
+
+def rv(z):
+    return z.real
+
 FUNCS = {
     # pick only what you truly need
     "seq": seq, 
+    "ctoi": ctoi,
+    "rv": rv,
 }
 
+# in expandspec.py, near top
+DEBUG_EVAL = True  # flip to True temporarily
+
+# replace _eval_fcall_body with same body + debug prints
 def _eval_fcall_body(expr: str) -> Optional[list[str]]:
-    """
-    Evaluate a ${...} body using simpleeval with module-level NAMES/FUNCS/ALLOWED_OPS.
-    Falls back to ast.literal_eval for pure-literal structures.
-    Returns list[str] on success, or None on failure.
-    """
     s = expr.strip()
-    # 1) try simpleeval
     try:
         se = SimpleEval(names=NAMES, functions=FUNCS, operators=ALLOWED_OPS)
         v = se.eval(s)
@@ -625,12 +631,10 @@ def _eval_fcall_body(expr: str) -> Optional[list[str]]:
         try:
             return [str(x) for x in v]
         except TypeError:
-            # Not iterable -> coerce single scalar
-            return [str(v)]
-    except Exception:
-        pass
-
-    # 2) fallback: literal-only expressions like ["A","B"]
+            return str(v)
+    except Exception as e:
+        if DEBUG_EVAL:
+            print(f"[expandspec] simpleeval failed for '{s}': {type(e).__name__}: {e}", file=sys.stderr)
     try:
         v = ast.literal_eval(s)
         if isinstance(v, str):
@@ -638,8 +642,10 @@ def _eval_fcall_body(expr: str) -> Optional[list[str]]:
         try:
             return [str(x) for x in v]
         except TypeError:
-            return [str(v)]
-    except Exception:
+            return str(v)
+    except Exception as e2:
+        if DEBUG_EVAL:
+            print(f"[expandspec] literal_eval failed for '{s}': {type(e2).__name__}: {e2}", file=sys.stderr)
         return None
 
 def _expand_single_fcall(token: str, *, trim_for_items: bool = False) -> list[str]:
@@ -1073,6 +1079,24 @@ def _selftest(verbose: bool = False) -> int:
 
     # Invalid expression -> left literal
     run('${not_defined}', ['${not_defined}'], msg="invalid ${...} remains literal")
+
+    # ---- Inject a deterministic jsample and test single- and two-digit bounds ----
+    _FUNCS_SAVE = dict(FUNCS)
+    try:
+        def _jsample(a, b):
+            # inclusive numeric strings like your julia spec expects
+            return [f"{k}" for k in range(int(a), int(b) + 1)]
+        FUNCS["jsample"] = _jsample
+
+        run('${jsample(9,9)}',  ["9"], msg="jsample single value")
+        run('${jsample(9,10)}', ["9", "10"], msg="jsample two-digit upper bound")
+
+        run('n:5e6,eqn:10,c:${jsample(9,10)},w:2',
+            ["n:5e6,eqn:10,c:9,w:2", "n:5e6,eqn:10,c:10,w:2"],
+            msg="embedded jsample(9,10) in full spec")
+    finally:
+        FUNCS.clear(); FUNCS.update(_FUNCS_SAVE)
+
 
     if verbose:
         print(f"\nPassed: {passed}, Failed: {fails}")

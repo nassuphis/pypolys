@@ -1,14 +1,15 @@
 #!/usr/bin/env python
 # galaxy_cli.py — chain-driven swirly galaxy renderer (single or mosaic)
 
+import sys
+sys.path.insert(0, "/Users/nicknassuphis")
 import argparse, math, time
 import numpy as np
 import math
-import expandspec
-import specparser
 import galaxy
 import galaxy_raster
-
+from specparser import specparser
+from specparser import expandspec
 from numba import njit, prange
 
 BUCKET_METHOD = "parallel"

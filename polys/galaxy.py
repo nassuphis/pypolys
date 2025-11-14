@@ -1,8 +1,11 @@
+import sys
+sys.path.insert(0, "/Users/nicknassuphis")
 import math
 import numpy as np
 from numba import njit, prange, types, complex128, int32, float64
 from numba.typed import Dict
-import specparser
+from specparser import specparser
+from specparser import expandspec
 
 # ===== random number generator =====
 

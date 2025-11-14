@@ -68,6 +68,10 @@ cover/
 *.toc
 test.tex
 galaxy.tex
+*.dvi 
+*.fdb_latexmk
+*.fls 
+julia.tex
 # Translations
 *.mo
 *.pot

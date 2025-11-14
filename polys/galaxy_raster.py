@@ -202,8 +202,8 @@ def bucket_by_radius_parallel(r_px: np.ndarray, r_min: int, r_max: int):
 
 def project_to_canvas(z: np.ndarray, pix: int, margin_frac: float):
     if z.size<1: return np.empty(0,dtype=np.int32), np.empty(0,dtype=np.int32)
-    half  = np.max(np.abs(z)) * (1.0 + 2.0 * margin_frac)
-    #half = (0.5*max(np.ptp(z.real),np.ptp(z.imag))) * (1.0 + 2.0 * margin_frac)
+    #half  = np.max(np.abs(z)) * (1.0 + 2.0 * margin_frac)
+    half = (0.5*max(np.ptp(z.real),np.ptp(z.imag))) * (1.0 + 2.0 * margin_frac)
     span  = 2.0 * half
     if span<1e-10: span=1
     px_per = (int(pix) - 1) / span
