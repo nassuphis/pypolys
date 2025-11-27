@@ -7,7 +7,7 @@ import argparse, math, time
 import numpy as np
 import math
 import galaxy
-import galaxy_raster
+from rasterizer import raster
 from specparser import specparser
 from specparser import expandspec
 from numba import njit, prange
@@ -37,7 +37,7 @@ def render_chain_tile(
         if verbose: print(f"[render] z.size<0")
         return canvas
     
-    px,py = galaxy_raster.project_to_canvas(z,pix,margin_frac)
+    px,py = raster.project_to_canvas(z,pix,margin_frac)
 
     r_px = np.rint(mult * fos * (int(pix) - 1)).astype(np.int32)
     keep = r_px >= rmin
@@ -186,7 +186,7 @@ def main():
 
     if len(tiles) == 1:
         footer = args.chain if args.footer else None
-        galaxy_raster.save_png_bilevel(
+        raster.save_png_bilevel(
             tiles[0], args.out, args.invert,
             footer_text=footer,
             footer_pad_lr_px=args.footer_pad,
@@ -207,7 +207,7 @@ def main():
     else: 
         cols = max(1, int(round(math.sqrt(n))))
     titles = specs if args.footer else None  # per-tile footer = spec line
-    galaxy_raster.save_mosaic_png_bilevel(
+    raster.save_mosaic_png_bilevel(
         tiles, titles,
         cols=cols, gap=args.gap,
         out_path=args.out, invert=args.invert,

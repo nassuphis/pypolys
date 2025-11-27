@@ -1,5 +1,5 @@
 import sys
-sys.path.insert(0, "/Users/nicknassuphis/specparser")
+sys.path.insert(0, "/Users/nicknassuphis")
 import math
 import numpy as np
 from numba import njit, prange, types, complex128, int32, float64
